@@ -68,8 +68,8 @@ tag_hints:
 defaults:
   max_bullets_per_role: 5      # matches latex_resume.MAX_ROLE_BULLETS
   max_bullets_per_project: 3   # matches latex_resume.MAX_PROJECT_BULLETS; floor is 2
-  # Every project below appears on the resume — the two page fitter trims
-  # bullets, never whole projects.
+  # Projects are picked per job by relevance to the posting: most relevant
+  # first, irrelevant ones dropped, never fewer than two on the resume.
 
 experience:
   - id: exp_bangopure

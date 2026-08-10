@@ -35,9 +35,10 @@ PROFILE_PATH = CV_DATA / "profile.yaml"
 # may not cross: a role reduced to one line reads as a job the candidate barely
 # held, and a project with one bullet reads as filler.
 #
-# The document is a two pager. Every project from the profile appears — the
-# fitter trims bullets to their floors to fit the page budget, but it never
-# deletes a project outright.
+# The document is a two pager. Projects are chosen by relevance to the posting:
+# the tailor ranks them against the job description, drops the ones that score
+# nothing when enough relevant ones remain, and the page fitter sheds the least
+# relevant first — but the document always keeps at least MIN_PROJECTS.
 #
 # Defined here rather than beside the fitter because `tailor()` uses
 # MAX_ROLE_BULLETS as a default argument, which Python evaluates at import.
@@ -45,6 +46,7 @@ MIN_ROLE_BULLETS = 3
 MAX_ROLE_BULLETS = 5
 MIN_PROJECT_BULLETS = 2
 MAX_PROJECT_BULLETS = 3
+MIN_PROJECTS = 2
 MAX_PAGES = 2
 
 # Custom delimiters so LaTeX braces pass through Jinja untouched.
@@ -262,6 +264,24 @@ def active_tags(jd_text: str, raw_profile: dict[str, Any] | None) -> set[str]:
     return hits
 
 
+def select_projects(projects: list[Block],
+                    max_projects: int | None = None) -> list[Block]:
+    """
+    Which projects this resume shows, in relevance order.
+
+    Ranked by their bullets' scores against the posting. A project that scores
+    nothing is dropped — showing a trading platform to a design studio dilutes
+    the relevant work — but only when at least MIN_PROJECTS relevant ones
+    remain. A generic posting that triggers nothing keeps every project, in
+    profile order, because a zero signal is not evidence of irrelevance.
+    """
+    ranked = sorted([p for p in projects if p.bullets],
+                    key=lambda p: -sum(b.score for b in p.bullets))
+    relevant = [p for p in ranked if sum(b.score for b in p.bullets) > 0]
+    picked = relevant if len(relevant) >= MIN_PROJECTS else ranked
+    return picked[:max_projects] if max_projects is not None else picked
+
+
 def pick_summary(content: ResumeContent, jd_text: str,
                  raw_profile: dict[str, Any] | None) -> str:
     """Swap in an alternate summary when the posting leans AI or design."""
@@ -337,19 +357,19 @@ def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
         block.bullets.sort(key=lambda b: -b.score)
         block.bullets = block.bullets[:max_bullets]
 
-    # Every project stays in; scoring only decides the order and which bullets
-    # survive the per-project cap. `max_projects` exists for parsed uploads
-    # whose project lists can run long — the curated profile passes None.
+    # Projects are the tailored part of the document: scored against the
+    # posting, ordered most relevant first, and the irrelevant ones dropped.
     for block in content.projects:
         for b in block.bullets:
             b.score = score_bullet(b, jd, hint_tags)
         block.bullets.sort(key=lambda b: -b.score)
         block.bullets = block.bullets[:MAX_PROJECT_BULLETS]
-    content.projects.sort(
-        key=lambda p: -sum(b.score for b in p.bullets))
-    content.projects = [p for p in content.projects if p.bullets]
-    if max_projects is not None:
-        content.projects = content.projects[:max_projects]
+        # The tech line is relevance evidence too: "React, Node.js, MongoDB"
+        # should pull a project up for a Node role even when its bullets talk
+        # about the product rather than the stack.
+        if block.tech and block.bullets:
+            block.bullets[0].score += 0.5 * score_bullet(Bullet(block.tech), jd, hint_tags)
+    content.projects = select_projects(content.projects, max_projects)
 
     if content.skills and hint_tags and raw:
         tagged = {s["line"]: [str(t).lower() for t in (s.get("tags") or [])]
@@ -579,9 +599,8 @@ def trim_to_budget(content: ResumeContent, *,
     Pre-trim obviously surplus content before the measured fitting loop runs.
 
     Experience bullets are not touched here: they are the substance of the
-    document and the floor is enforced. Projects are never deleted — every one
-    from the profile appears on the resume; only their bullet counts flex
-    between MIN_ and MAX_PROJECT_BULLETS during fitting.
+    document and the floor is enforced. Project selection already happened in
+    `tailor()`; here only their bullet counts are clamped to the cap.
     """
     clamp_role_bullets(content, log=log)
     content.awards = content.awards[:max_awards]
@@ -600,10 +619,11 @@ def _drop_weakest(content: ResumeContent) -> bool:
 
     Order matters more than it looks. Cutting an Experience bullet costs real
     evidence, so everything cheaper goes first: languages, then surplus project
-    bullets, then surplus awards and certifications. Two floors are absolute:
-    no role goes below MIN_ROLE_BULLETS, no project below MIN_PROJECT_BULLETS —
-    and no project is ever deleted. A resume that cannot fit the page budget
-    with everything at its floor stays long, and the log says so.
+    bullets, then surplus credentials, then whole low-relevance projects.
+    Floors are absolute: no role below MIN_ROLE_BULLETS, no project below
+    MIN_PROJECT_BULLETS, never fewer than MIN_PROJECTS projects. A resume that
+    cannot fit the page budget with everything at its floor stays long, and
+    the log says so.
     """
     # Cheap lines first: the languages bullet, then the coursework line.
     if content.languages:
@@ -632,6 +652,14 @@ def _drop_weakest(content: ResumeContent) -> bool:
         content.certifications.pop()
         return True
 
+    # Whole projects go least-relevant first, but never below MIN_PROJECTS:
+    # a still-overflowing page sheds the trading platform before it sheds a
+    # line of real work experience.
+    if len(content.projects) > MIN_PROJECTS:
+        content.projects.remove(
+            min(content.projects, key=lambda p: sum(b.score for b in p.bullets)))
+        return True
+
     # Only roles above the floor can give a bullet up, weakest line first.
     candidates = [(blk, b) for blk in content.experience
                   if len(blk.bullets) > MIN_ROLE_BULLETS for b in blk.bullets[1:]]
@@ -640,8 +668,7 @@ def _drop_weakest(content: ResumeContent) -> bool:
         blk.bullets.remove(bullet)
         return True
 
-    # Last resorts, in increasing order of pain. Projects are not on this
-    # list: the document keeps all of them by design.
+    # Last resorts, in increasing order of pain.
     if content.awards:
         content.awards.pop()
         return True

@@ -1,5 +1,6 @@
-"""The two-page fitter: every project survives, floors hold, and (when a LaTeX
-engine is installed) the compiled PDF passes the house audit."""
+"""The two-page fitter and relevance-driven project selection: relevant
+projects lead, floors hold, and (when a LaTeX engine is installed) the
+compiled PDF passes the house audit."""
 
 from __future__ import annotations
 
@@ -12,7 +13,11 @@ def _content():
     return L.from_profile()
 
 
-def test_profile_has_all_projects_with_bullet_floors():
+def _score(p):
+    return sum(b.score for b in p.bullets)
+
+
+def test_profile_has_projects_with_bullet_floors():
     content = _content()
     assert len(content.projects) >= 4
     for p in content.projects:
@@ -20,28 +25,54 @@ def test_profile_has_all_projects_with_bullet_floors():
             f"{p.name} has {len(p.bullets)} bullet(s), floor is {L.MIN_PROJECT_BULLETS}"
 
 
-def test_tailor_keeps_every_project():
+def test_tailor_orders_projects_by_relevance():
     content = _content()
-    names_before = {p.name for p in content.projects}
-    jd_text = "Backend Engineer. Node.js, MongoDB, REST APIs, 2 years experience."
+    jd_text = ("UI/UX Designer. Figma wireframes, user research, usability "
+               "testing, design systems, prototyping.")
     from api.ats import analyze_jd
     L.tailor(content, jd_text, analyze_jd(jd_text), use_llm=False)
-    assert {p.name for p in content.projects} == names_before
+    scores = [_score(p) for p in content.projects]
+    assert scores == sorted(scores, reverse=True), "most relevant project must lead"
+    assert len(content.projects) >= L.MIN_PROJECTS
     for p in content.projects:
         assert len(p.bullets) <= L.MAX_PROJECT_BULLETS
 
 
-def test_drop_weakest_never_deletes_a_project():
+def test_select_projects_drops_irrelevant_keeps_floor():
+    from api.latex_resume import Block, Bullet, select_projects
+
+    def proj(name, score):
+        return Block(name=name, bullets=[Bullet(f"{name} work", score=score)])
+
+    picked = select_projects([proj("A", 0.0), proj("B", 3.0), proj("C", 1.0)])
+    assert [p.name for p in picked] == ["B", "C"], "zero-score project is dropped"
+
+    # Only one relevant project: the floor wins over strict relevance.
+    picked = select_projects([proj("A", 0.0), proj("B", 3.0)])
+    assert [p.name for p in picked] == ["B", "A"]
+
+    # Nothing scored: a generic posting keeps everything.
+    picked = select_projects([proj("A", 0.0), proj("B", 0.0), proj("C", 0.0)])
+    assert len(picked) == 3
+
+
+def test_drop_weakest_sheds_least_relevant_project_first():
     content = _content()
-    for b in [b for blk in content.experience + content.projects for b in blk.bullets]:
-        b.score = 1.0
-    names = {p.name for p in content.projects}
+    # Give every bullet a score so relevance ordering is deterministic.
+    for i, p in enumerate(content.projects):
+        for b in p.bullets:
+            b.score = float(len(content.projects) - i)
+    for blk in content.experience:
+        for b in blk.bullets:
+            b.score = 10.0
+    strongest = content.projects[0].name
     # Exhaust the fitter completely.
     while L._drop_weakest(content):
         pass
-    assert {p.name for p in content.projects} == names
-    for p in content.projects:
-        assert len(p.bullets) >= min(L.MIN_PROJECT_BULLETS, len(p.bullets))
+    assert len(content.projects) == L.MIN_PROJECTS, \
+        "fitter must stop at the project floor"
+    assert content.projects[0].name == strongest, \
+        "the most relevant project must be the last standing"
     for blk in content.experience:
         assert len(blk.bullets) >= L.MIN_ROLE_BULLETS
 
