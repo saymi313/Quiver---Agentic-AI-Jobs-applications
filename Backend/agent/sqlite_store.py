@@ -1,0 +1,781 @@
+"""
+SQLite backend for the agent store.
+
+Selected by agent/store.py when MongoDB is not configured or not reachable.
+
+The CSV pipeline stays exactly as it is — this is a separate database for
+everything the agent discovers, so the two can run side by side without
+fighting over one file.
+
+Tables
+------
+companies    startups discovered from YC / HN / ATS boards / directories
+jobs         open roles pulled from a company's job board
+people       founders and recruiters, with verified contact addresses
+applications one row per role the apply agent attempted
+outreach     one row per cold email the outreach agent sent
+runs         one row per agent run, for the history view
+settings     key/value store for profile + agent configuration
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+import time
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Iterable, Iterator
+
+from api.config import BASE_DIR
+
+from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
+                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now,
+                     with_job_defaults)
+
+DB_PATH = BASE_DIR / "agent_data.sqlite3"
+
+SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+
+CREATE TABLE IF NOT EXISTS companies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    domain          TEXT,
+    website         TEXT,
+    source          TEXT NOT NULL,          -- yc | hn | ats | directory | manual
+    source_ref      TEXT,                   -- batch, thread id, board token…
+    description     TEXT,
+    industry        TEXT,
+    location        TEXT,
+    region          TEXT,                   -- us | eu | remote | pk | other
+    team_size       TEXT,
+    founded         TEXT,
+    ats_platform    TEXT,                   -- greenhouse | lever | ashby | …
+    ats_token       TEXT,                   -- board identifier for the API
+    careers_url     TEXT,
+    tags            TEXT,                   -- JSON array
+    discovered_at   TEXT NOT NULL,
+    last_scanned_at TEXT,
+    UNIQUE(name, source)
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id      INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    external_id     TEXT,
+    title           TEXT NOT NULL,
+    location        TEXT,
+    remote          INTEGER DEFAULT 0,
+    url             TEXT NOT NULL,
+    apply_url       TEXT,
+    description     TEXT,
+    department      TEXT,
+    employment_type TEXT,
+    source          TEXT NOT NULL,
+    posted_at       TEXT,
+    posted_ts       INTEGER,                -- normalised UTC epoch, for freshness
+    dedupe_hash     TEXT,                   -- company+title+location identity
+    discovered_at   TEXT NOT NULL,
+    fit_score       REAL,                   -- 0-100 from the ATS matcher
+    fit_reason      TEXT,
+    status          TEXT NOT NULL DEFAULT 'new',
+        -- new | matched | skipped | queued | applied | failed | closed | stale | duplicate
+    UNIQUE(url)
+);
+
+CREATE TABLE IF NOT EXISTS people (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id      INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    full_name       TEXT,
+    role            TEXT,                   -- founder | recruiter | engineer | unknown
+    title           TEXT,
+    email           TEXT,
+    email_source    TEXT,                   -- site | hn | github | pattern | manual
+    email_status    TEXT DEFAULT 'unknown', -- valid | risky | invalid | unknown
+    email_score     REAL,                   -- 0-1 confidence
+    verify_detail   TEXT,
+    linkedin        TEXT,
+    github          TEXT,
+    discovered_at   TEXT NOT NULL,
+    verified_at     TEXT,
+    UNIQUE(company_id, email)
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER REFERENCES jobs(id) ON DELETE CASCADE,
+    company_id      INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    job_hash        TEXT,                   -- same identity as jobs.dedupe_hash
+    status          TEXT NOT NULL,          -- pending | filled | submitted | failed | skipped
+    resume_path     TEXT,
+    cover_letter    TEXT,
+    fields_filled   TEXT,                   -- JSON of what went into the form
+    unanswered      TEXT,                   -- JSON of questions it could not answer
+    screenshot      TEXT,
+    error           TEXT,
+    dry_run         INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    submitted_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS outreach (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id       INTEGER REFERENCES people(id) ON DELETE CASCADE,
+    company_id      INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    to_email        TEXT NOT NULL,
+    subject         TEXT,
+    body            TEXT,
+    research_notes  TEXT,
+    status          TEXT NOT NULL,          -- drafted | sent | failed | bounced | replied
+    error           TEXT,
+    dry_run         INTEGER DEFAULT 0,
+    sequence_step   INTEGER DEFAULT 1,
+    created_at      TEXT NOT NULL,
+    sent_at         TEXT,
+    replied_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode            TEXT NOT NULL,          -- discover | apply | outreach
+    status          TEXT NOT NULL,          -- running | finished | failed | stopped
+    options         TEXT,
+    stats           TEXT,
+    error           TEXT,
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key             TEXT PRIMARY KEY,
+    value           TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+"""
+
+# Indexes are created after migrations, so they can reference columns
+# that were added to an already-existing database.
+INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_companies_domain ON companies(domain);
+CREATE INDEX IF NOT EXISTS idx_companies_ats    ON companies(ats_platform);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_fit    ON jobs(fit_score DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_posted ON jobs(posted_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_hash   ON jobs(dedupe_hash);
+CREATE INDEX IF NOT EXISTS idx_people_status ON people(email_status);
+CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach(status);
+CREATE INDEX IF NOT EXISTS idx_app_hash ON applications(job_hash);
+"""
+
+# Columns added after the first release, applied to existing databases on open.
+MIGRATIONS: list[tuple[str, str]] = [
+    ("jobs", "posted_ts INTEGER"),
+    ("jobs", "dedupe_hash TEXT"),
+    ("applications", "job_hash TEXT"),
+    # Tracking columns for the job-application agent.
+    ("jobs", "role_category TEXT"),
+    ("jobs", "recruiter_email TEXT"),
+    ("jobs", "recruiter_name TEXT"),
+    ("jobs", "description_source TEXT"),
+    ("jobs", "resume_path TEXT"),
+    ("jobs", "resume_version TEXT"),
+    ("jobs", "resume_built_at TEXT"),
+    ("jobs", "applied_at TEXT"),
+    ("jobs", "failure_reason TEXT"),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column_def in MIGRATIONS:
+        column = column_def.split()[0]
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    conn.commit()
+
+_local = threading.local()
+
+
+def _conn() -> sqlite3.Connection:
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = sqlite3.connect(str(DB_PATH), timeout=30, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(SCHEMA)
+        _migrate(conn)
+        conn.executescript(INDEXES)
+        _local.conn = conn
+    return conn
+
+
+@contextmanager
+def tx() -> Iterator[sqlite3.Connection]:
+    conn = _conn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+
+
+def init() -> None:
+    _conn()
+
+
+def _row(r: sqlite3.Row | None) -> dict[str, Any] | None:
+    return dict(r) if r is not None else None
+
+
+def _rows(rs: Iterable[sqlite3.Row]) -> list[dict[str, Any]]:
+    return [dict(r) for r in rs]
+
+
+def _job_rows(rs: Iterable[sqlite3.Row]) -> list[dict[str, Any]]:
+    """Job reads get the tracking columns filled in, so the shape is stable."""
+    return [with_job_defaults(dict(r)) for r in rs]
+
+
+# --------------------------------------------------------------------------
+# Settings
+# --------------------------------------------------------------------------
+
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    fallback = DEFAULT_SETTINGS.get(key, default)
+    row = _conn().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    if row is None:
+        return fallback
+    try:
+        stored = json.loads(row["value"])
+    except json.JSONDecodeError:
+        return fallback
+    # Same layering as the Mongo backend: newer defaults must reach older rows.
+    if isinstance(fallback, dict) and isinstance(stored, dict):
+        return {**fallback, **stored}
+    return stored
+
+
+def set_setting(key: str, value: Any) -> None:
+    with tx() as c:
+        c.execute(
+            "INSERT INTO settings(key, value, updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, json.dumps(value), now()),
+        )
+
+
+def all_settings() -> dict[str, Any]:
+    stored = {r["key"]: json.loads(r["value"]) for r in _conn().execute("SELECT key, value FROM settings")}
+    return merge_settings(stored)
+
+
+# --------------------------------------------------------------------------
+# Companies
+# --------------------------------------------------------------------------
+
+
+
+def upsert_company(data: dict[str, Any]) -> int:
+    payload = {k: data.get(k) for k in COMPANY_FIELDS}
+    if isinstance(payload.get("tags"), (list, tuple)):
+        payload["tags"] = json.dumps(list(payload["tags"]))
+    payload["discovered_at"] = now()
+
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    updates = ", ".join(
+        f"{k}=COALESCE(excluded.{k}, {k})" for k in payload if k not in ("name", "source", "discovered_at")
+    )
+    with tx() as c:
+        c.execute(
+            f"INSERT INTO companies ({cols}) VALUES ({marks}) "
+            f"ON CONFLICT(name, source) DO UPDATE SET {updates}",
+            tuple(payload.values()),
+        )
+        # Always look the id up by the unique key. `cursor.lastrowid` is NOT
+        # reset when ON CONFLICT takes the UPDATE branch — it still holds the
+        # previous successful INSERT's rowid, which would silently attach this
+        # company's jobs to whichever company was inserted last.
+        row = c.execute(
+            "SELECT id FROM companies WHERE name = ? AND source = ?",
+            (payload["name"], payload["source"]),
+        ).fetchone()
+        return int(row["id"])
+
+
+def list_companies(limit: int = 200, source: str | None = None,
+                   with_ats: bool = False) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM companies"
+    where, args = [], []
+    if source:
+        where.append("source = ?")
+        args.append(source)
+    if with_ats:
+        where.append("ats_platform IS NOT NULL AND ats_token IS NOT NULL")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY discovered_at DESC LIMIT ?"
+    args.append(limit)
+    return _rows(_conn().execute(sql, args))
+
+
+def company(company_id: int) -> dict[str, Any] | None:
+    return _row(_conn().execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone())
+
+
+def mark_company_scanned(company_id: int) -> None:
+    with tx() as c:
+        c.execute("UPDATE companies SET last_scanned_at = ? WHERE id = ?", (now(), company_id))
+
+
+# --------------------------------------------------------------------------
+# Jobs
+# --------------------------------------------------------------------------
+
+
+
+def upsert_job(data: dict[str, Any], *, company_name: str = "") -> int | None:
+    if not data.get("url") or not data.get("title"):
+        return None
+
+    from . import sources  # imported here to keep store dependency-free at import time
+
+    payload = {k: data.get(k) for k in JOB_FIELDS}
+    payload["remote"] = 1 if payload.get("remote") else 0
+
+    if payload.get("posted_ts") is None:
+        payload["posted_ts"] = sources.parse_posted_at(payload.get("posted_at"))
+    if not payload.get("dedupe_hash"):
+        name = company_name
+        if not name and payload.get("company_id"):
+            row = _conn().execute("SELECT name FROM companies WHERE id = ?",
+                                  (payload["company_id"],)).fetchone()
+            name = row["name"] if row else ""
+        payload["dedupe_hash"] = sources.dedupe_hash(
+            name, payload.get("title") or "", payload.get("location") or "",
+            url=payload.get("url") or "")
+
+    payload["discovered_at"] = now()
+
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    updates = ", ".join(
+        f"{k}=COALESCE(excluded.{k}, {k})" for k in payload if k not in ("url", "discovered_at")
+    )
+    with tx() as c:
+        c.execute(
+            f"INSERT INTO jobs ({cols}) VALUES ({marks}) "
+            f"ON CONFLICT(url) DO UPDATE SET {updates}",
+            tuple(payload.values()),
+        )
+        row = c.execute("SELECT id FROM jobs WHERE url = ?", (payload["url"],)).fetchone()
+        return int(row["id"]) if row else None
+
+
+def set_job_fit(job_id: int, score: float, reason: str, status: str) -> None:
+    with tx() as c:
+        c.execute(
+            "UPDATE jobs SET fit_score = ?, fit_reason = ?, status = ? WHERE id = ?",
+            (score, reason, status, job_id),
+        )
+
+
+def set_job_status(job_id: int, status: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET status = ? WHERE id = ?", (status, job_id))
+
+
+def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any]:
+    """
+    Delete jobs discovered more than `days` ago.
+
+    A posting older than the freshness window can never be applied to, so
+    keeping it only makes the table harder to read. Deleting it also frees the
+    dedupe hash, which is correct: if the same role is re-posted later it should
+    be treated as new.
+
+    `keep_applied` protects rows you actually applied to. Deleting those would
+    erase your own record of where you applied — the double-apply guard itself
+    survives either way, because it reads the applications table rather than
+    this one, but the history would be gone from the UI.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max(0, int(days)))).isoformat()
+    sql = "SELECT id, resume_path FROM jobs WHERE discovered_at < ?"
+    args: list[Any] = [cutoff]
+    if keep_applied:
+        sql += " AND status != 'applied'"
+    doomed = _rows(_conn().execute(sql, args))
+    resumes = [d["resume_path"] for d in doomed if d.get("resume_path")]
+    if doomed:
+        marks = ",".join("?" * len(doomed))
+        with tx() as c:
+            c.execute(f"DELETE FROM jobs WHERE id IN ({marks})", [d["id"] for d in doomed])
+    return {"deleted": len(doomed), "resumes": resumes, "cutoff": cutoff}
+
+
+def known_hashes() -> set[str]:
+    """
+    Every job already in the table, by dedupe hash.
+
+    Discovery checks this before fetching a description or building a resume, so
+    a job seen on a previous run costs nothing on this one.
+    """
+    rows = _conn().execute(
+        "SELECT DISTINCT dedupe_hash FROM jobs WHERE dedupe_hash IS NOT NULL")
+    return {r["dedupe_hash"] for r in rows if r["dedupe_hash"]}
+
+
+def set_job_category(job_id: int, category: str | None) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET role_category = ? WHERE id = ?", (category, job_id))
+
+
+def set_job_description(job_id: int, description: str, source: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET description = ?, description_source = ? WHERE id = ?",
+                  (description, source, job_id))
+
+
+def set_job_recruiter(job_id: int, email: str, name: str = "") -> None:
+    """Only ever called with an address that was actually found."""
+    if not email:
+        return
+    with tx() as c:
+        c.execute("UPDATE jobs SET recruiter_email = ?, recruiter_name = ? WHERE id = ?",
+                  (email, name or "", job_id))
+
+
+def set_job_resume(job_id: int, path: str, version: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET resume_path = ?, resume_version = ?, "
+                  "resume_built_at = ? WHERE id = ?", (path, version, now(), job_id))
+
+
+def set_job_applied(job_id: int, *, resume_version: str = "") -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET status = 'applied', applied_at = ?, "
+                  "resume_version = COALESCE(NULLIF(?, ''), resume_version), "
+                  "failure_reason = NULL WHERE id = ?", (now(), resume_version, job_id))
+
+
+def mark_job_failed(job_id: int, reason: str) -> None:
+    """A form that could not be completed is recorded, never skipped silently."""
+    with tx() as c:
+        c.execute("UPDATE jobs SET status = 'failed', failure_reason = ? WHERE id = ?",
+                  ((reason or "")[:400], job_id))
+
+
+def job(job_id: int) -> dict[str, Any] | None:
+    row = _row(_conn().execute(
+        "SELECT j.*, c.name AS company_name, c.domain, c.region, c.ats_platform FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id WHERE j.id = ?", (job_id,)).fetchone())
+    return with_job_defaults(row) if row else None
+
+
+def jobs_by_ids(job_ids: list[int]) -> list[dict[str, Any]]:
+    ids = [int(i) for i in job_ids]
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    rows = _job_rows(_conn().execute(
+        f"SELECT j.*, c.name AS company_name, c.domain, c.region, c.ats_platform FROM jobs j "
+        f"LEFT JOIN companies c ON c.id = j.company_id WHERE j.id IN ({marks})", ids))
+    order = {j: i for i, j in enumerate(ids)}
+    return sorted(rows, key=lambda r: order.get(int(r["id"]), 1 << 30))
+
+
+def jobs_needing_scoring(limit: int = 200) -> list[dict[str, Any]]:
+    return _job_rows(_conn().execute(
+        "SELECT j.*, c.name AS company_name, c.domain FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id "
+        "WHERE j.status = 'new' ORDER BY j.discovered_at DESC LIMIT ?", (limit,)))
+
+
+def applied_hashes() -> set[str]:
+    """Identities already acted on, so a role is never applied to twice."""
+    rows = _conn().execute(
+        "SELECT DISTINCT job_hash FROM applications "
+        "WHERE job_hash IS NOT NULL AND status IN ('submitted','filled') AND dry_run = 0")
+    return {r["job_hash"] for r in rows if r["job_hash"]}
+
+
+def jobs_to_apply(limit: int = 20, min_score: float = 55.0, *,
+                  max_age_days: int | None = 3, require_posted_date: bool = True,
+                  order: str = "recent") -> dict[str, Any]:
+    """
+    The apply queue.
+
+    Freshness is a hard gate — a role posted a week ago has usually already
+    collected hundreds of applicants. Ordering then favours the newest, because
+    being early matters more than being a marginally better match.
+
+    Returns the rows plus the counts excluded at each gate, so the runner can
+    say *why* a job did not make the cut instead of silently dropping it.
+    """
+    cutoff = None
+    if max_age_days is not None and max_age_days > 0:
+        cutoff = int(time.time() - max_age_days * 86400)
+
+    base = ("SELECT j.*, c.name AS company_name, c.domain, c.ats_platform FROM jobs j "
+            "LEFT JOIN companies c ON c.id = j.company_id "
+            "WHERE j.status IN ('matched','queued') AND COALESCE(j.fit_score,0) >= ?")
+    candidates = _job_rows(_conn().execute(base + " ORDER BY j.fit_score DESC", (min_score,)))
+
+    seen = applied_hashes()
+    fresh, stale, undated, duplicate = [], 0, 0, 0
+
+    for job in candidates:
+        if job.get("dedupe_hash") and job["dedupe_hash"] in seen:
+            duplicate += 1
+            continue
+        ts = job.get("posted_ts")
+        if cutoff is not None:
+            if ts is None:
+                if require_posted_date:
+                    undated += 1
+                    continue
+            elif ts < cutoff:
+                stale += 1
+                continue
+        job["age_days"] = round((time.time() - ts) / 86400.0, 1) if ts else None
+        fresh.append(job)
+
+    if order == "recent":
+        # Newest first; undated (only present when allowed) fall to the back.
+        fresh.sort(key=lambda j: (-(j.get("posted_ts") or 0), -(j.get("fit_score") or 0)))
+    else:
+        fresh.sort(key=lambda j: (-(j.get("fit_score") or 0), -(j.get("posted_ts") or 0)))
+
+    # Never apply twice to the same role inside one run either.
+    picked, batch_seen = [], set()
+    for job in fresh:
+        h = job.get("dedupe_hash")
+        if h and h in batch_seen:
+            duplicate += 1
+            continue
+        if h:
+            batch_seen.add(h)
+        picked.append(job)
+        if len(picked) >= limit:
+            break
+
+    return {
+        "jobs": picked,
+        "excluded": {"stale": stale, "undated": undated, "duplicate": duplicate,
+                     "eligible": len(fresh), "considered": len(candidates)},
+    }
+
+
+def list_jobs(limit: int = 100, status: str | None = None, *,
+              category: str | None = None, source: str | None = None,
+              q: str | None = None) -> list[dict[str, Any]]:
+    sql = ("SELECT j.*, c.name AS company_name, c.region, c.ats_platform FROM jobs j "
+           "LEFT JOIN companies c ON c.id = j.company_id")
+    where: list[str] = []
+    args: list[Any] = []
+    if status == "not_applied":
+        # Open AND actionable: a role the experience gate rejected is not
+        # something the user can apply to, so it stays out of the default view.
+        where.append("j.status NOT IN ('applied','failed','skipped','duplicate')")
+    elif status:
+        where.append("j.status = ?")
+        args.append(status)
+    if category:
+        where.append("j.role_category = ?")
+        args.append(category)
+    if source:
+        where.append("j.source = ?")
+        args.append(source)
+    if q:
+        where.append("(j.title LIKE ? OR j.location LIKE ? OR j.description LIKE ?)")
+        args += [f"%{q}%"] * 3
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY COALESCE(j.posted_ts, 0) DESC, COALESCE(j.fit_score, -1) DESC LIMIT ?"
+    args.append(limit)
+    rows = _job_rows(_conn().execute(sql, args))
+    applied = applied_hashes()
+    for r in rows:
+        ts = r.get("posted_ts")
+        r["age_days"] = round((time.time() - ts) / 86400.0, 1) if ts else None
+        r["already_applied"] = bool(r.get("dedupe_hash") and r["dedupe_hash"] in applied)
+    return rows
+
+
+# --------------------------------------------------------------------------
+# People
+# --------------------------------------------------------------------------
+
+def upsert_person(data: dict[str, Any]) -> int | None:
+    fields = PERSON_FIELDS
+    payload = {k: data.get(k) for k in fields}
+    if not payload.get("email"):
+        return None
+    payload["email"] = payload["email"].strip().lower()
+    payload["discovered_at"] = now()
+
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    updates = ", ".join(
+        f"{k}=COALESCE(excluded.{k}, {k})" for k in payload
+        if k not in ("company_id", "email", "discovered_at")
+    )
+    with tx() as c:
+        c.execute(
+            f"INSERT INTO people ({cols}) VALUES ({marks}) "
+            f"ON CONFLICT(company_id, email) DO UPDATE SET {updates}",
+            tuple(payload.values()),
+        )
+        row = c.execute(
+            "SELECT id FROM people WHERE company_id IS ? AND email = ?",
+            (payload["company_id"], payload["email"]),
+        ).fetchone()
+        return int(row["id"]) if row else None
+
+
+def set_person_verification(person_id: int, status: str, score: float, detail: str) -> None:
+    with tx() as c:
+        c.execute(
+            "UPDATE people SET email_status = ?, email_score = ?, verify_detail = ?, verified_at = ? "
+            "WHERE id = ?",
+            (status, score, detail, now(), person_id),
+        )
+
+
+def people_needing_verification(limit: int = 100) -> list[dict[str, Any]]:
+    return _rows(_conn().execute(
+        "SELECT * FROM people WHERE email_status = 'unknown' ORDER BY discovered_at LIMIT ?", (limit,)))
+
+
+def people_to_email(limit: int = 20) -> list[dict[str, Any]]:
+    return _rows(_conn().execute(
+        "SELECT p.*, c.name AS company_name, c.domain, c.description, c.website, c.industry, c.region "
+        "FROM people p LEFT JOIN companies c ON c.id = p.company_id "
+        "WHERE p.email_status IN ('valid','risky') "
+        "AND NOT EXISTS (SELECT 1 FROM outreach o WHERE o.person_id = p.id AND o.status IN ('sent','replied')) "
+        "ORDER BY CASE p.email_status WHEN 'valid' THEN 0 ELSE 1 END, "
+        "CASE p.role WHEN 'founder' THEN 0 WHEN 'recruiter' THEN 1 ELSE 2 END, "
+        "COALESCE(p.email_score,0) DESC LIMIT ?", (limit,)))
+
+
+def list_people(limit: int = 200, status: str | None = None) -> list[dict[str, Any]]:
+    sql = ("SELECT p.*, c.name AS company_name, c.region FROM people p "
+           "LEFT JOIN companies c ON c.id = p.company_id")
+    args: list[Any] = []
+    if status:
+        sql += " WHERE p.email_status = ?"
+        args.append(status)
+    sql += " ORDER BY p.discovered_at DESC LIMIT ?"
+    args.append(limit)
+    return _rows(_conn().execute(sql, args))
+
+
+# --------------------------------------------------------------------------
+# Applications & outreach
+# --------------------------------------------------------------------------
+
+def record_application(data: dict[str, Any]) -> int:
+    fields = APPLICATION_FIELDS
+    payload = {k: data.get(k) for k in fields}
+    for key in ("fields_filled", "unanswered"):
+        if isinstance(payload.get(key), (dict, list)):
+            payload[key] = json.dumps(payload[key])
+    payload["dry_run"] = 1 if payload.get("dry_run") else 0
+    payload["created_at"] = now()
+    payload["submitted_at"] = now() if payload.get("status") == "submitted" else None
+
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    with tx() as c:
+        cur = c.execute(f"INSERT INTO applications ({cols}) VALUES ({marks})", tuple(payload.values()))
+        return int(cur.lastrowid)
+
+
+def record_outreach(data: dict[str, Any]) -> int:
+    fields = OUTREACH_FIELDS
+    payload = {k: data.get(k) for k in fields}
+    payload["dry_run"] = 1 if payload.get("dry_run") else 0
+    payload["sequence_step"] = payload.get("sequence_step") or 1
+    payload["created_at"] = now()
+    payload["sent_at"] = now() if payload.get("status") == "sent" else None
+
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    with tx() as c:
+        cur = c.execute(f"INSERT INTO outreach ({cols}) VALUES ({marks})", tuple(payload.values()))
+        return int(cur.lastrowid)
+
+
+def list_applications(limit: int = 100) -> list[dict[str, Any]]:
+    return _rows(_conn().execute(
+        "SELECT a.*, j.title, j.url, c.name AS company_name FROM applications a "
+        "LEFT JOIN jobs j ON j.id = a.job_id "
+        "LEFT JOIN companies c ON c.id = a.company_id "
+        "ORDER BY a.created_at DESC LIMIT ?", (limit,)))
+
+
+def list_outreach(limit: int = 100) -> list[dict[str, Any]]:
+    return _rows(_conn().execute(
+        "SELECT o.*, p.full_name, p.role, c.name AS company_name FROM outreach o "
+        "LEFT JOIN people p ON p.id = o.person_id "
+        "LEFT JOIN companies c ON c.id = o.company_id "
+        "ORDER BY o.created_at DESC LIMIT ?", (limit,)))
+
+
+# --------------------------------------------------------------------------
+# Runs & stats
+# --------------------------------------------------------------------------
+
+def start_run(mode: str, options: dict[str, Any]) -> int:
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO runs (mode, status, options, started_at) VALUES (?,?,?,?)",
+            (mode, "running", json.dumps(options), now()),
+        )
+        return int(cur.lastrowid)
+
+
+def finish_run(run_id: int, status: str, stats: dict[str, Any], error: str | None = None) -> None:
+    with tx() as c:
+        c.execute(
+            "UPDATE runs SET status = ?, stats = ?, error = ?, finished_at = ? WHERE id = ?",
+            (status, json.dumps(stats), error, now(), run_id),
+        )
+
+
+def list_runs(limit: int = 20) -> list[dict[str, Any]]:
+    return _rows(_conn().execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)))
+
+
+def stats() -> dict[str, Any]:
+    c = _conn()
+
+    def scalar(sql: str, args: tuple = ()) -> int:
+        row = c.execute(sql, args).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def group(sql: str) -> dict[str, int]:
+        return {str(r[0]): int(r[1]) for r in c.execute(sql)}
+
+    return {
+        "companies": scalar("SELECT COUNT(*) FROM companies"),
+        "companiesBySource": group("SELECT source, COUNT(*) FROM companies GROUP BY source"),
+        "companiesWithAts": scalar("SELECT COUNT(*) FROM companies WHERE ats_token IS NOT NULL"),
+        "jobs": scalar("SELECT COUNT(*) FROM jobs"),
+        "jobsByStatus": group("SELECT status, COUNT(*) FROM jobs GROUP BY status"),
+        "matchedJobs": scalar("SELECT COUNT(*) FROM jobs WHERE status IN ('matched','queued')"),
+        "people": scalar("SELECT COUNT(*) FROM people"),
+        "peopleByStatus": group("SELECT email_status, COUNT(*) FROM people GROUP BY email_status"),
+        "applications": scalar("SELECT COUNT(*) FROM applications"),
+        "applicationsSubmitted": scalar("SELECT COUNT(*) FROM applications WHERE status='submitted'"),
+        "outreachSent": scalar("SELECT COUNT(*) FROM outreach WHERE status='sent'"),
+        "outreachReplied": scalar("SELECT COUNT(*) FROM outreach WHERE status='replied'"),
+    }

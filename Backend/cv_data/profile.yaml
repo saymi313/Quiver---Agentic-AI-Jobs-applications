@@ -1,0 +1,219 @@
+# Source of truth for the LaTeX resume.
+#
+# Rebuilt 2026-08 from the resumes in cv_data/:
+#   Usairam_Saeed_Full_Stack_Resume.pdf
+#   Usairam_Saeed_SWE_AI_Engineer_Resume.pdf
+#   Usairam_Saeed_UIUX_Resume.pdf
+#
+# Every bullet below is taken from one of those files. `src` records which one,
+# so nothing here is invented and you can trace any line back to a document you
+# wrote. Bullets carry `tags`; the tailor scores them against the job
+# description and keeps the highest-scoring ones per role.
+#
+# Editing rules: add facts, never invent metrics. If a number is not in a resume
+# you actually sent, it does not belong here.
+
+candidate:
+  name: "Usairam Saeed"
+  title: "Full Stack Developer"
+  email: "saeed.usairam@gmail.com"
+  phone: "+92 301 8165385"
+  location: "Mansehra, Pakistan"
+  links:
+    - { label: "LinkedIn", url: "https://www.linkedin.com/in/usairam-saeed-148044285/" }
+    - { label: "GitHub", url: "https://github.com/saymi313" }
+    - { label: "Portfolio", url: "https://usairam-saeed.vercel.app/" }
+
+  # Two lines, and they lead with years and impact rather than a stack list.
+  # The stack belongs in Skills, where a parser expects to find it.
+  summary: >
+    Software Developer and Frontend Team Lead with 2+ years shipping production web
+    applications in React, Node.js and MongoDB.
+    Leads a team of 10 and owns delivery across payments, real time systems and REST APIs.
+
+# Alternate summaries the tailor swaps in when the job description leans a
+# particular way. Keyword triggers live in `modes_triggers`.
+modes:
+  ai_summary: >
+    AI Software Engineer with 2+ years building production web applications and
+    AI powered systems. Works across machine learning, NLP, real time systems, REST API
+    design and scalable backend architecture.
+  ux_summary: >
+    UI/UX Designer and Frontend Team Lead with 2+ years shipping production interfaces.
+    Runs the work end to end: user research, wireframes and prototypes in Figma, then the
+    React front end that implements them.
+
+modes_triggers:
+  ai_summary: [ai, machine learning, ml, nlp, deep learning, data science, llm, computer vision]
+  ux_summary: [ux, ui/ux, user experience, product design, figma, wireframe, usability, design system]
+
+# Lowercase substrings matched against the job description. A hit boosts every
+# bullet carrying that tag.
+tag_hints:
+  react: [react, react.js, frontend, front-end, javascript, typescript, spa]
+  leadership: [mentor, mentoring, team lead, lead, code review, sprint, agile, scrum]
+  node: [node, node.js, express, backend, rest, api, microservice]
+  mongo: [mongo, mongodb, nosql, database, schema]
+  payments: [payment, stripe, billing, checkout, transaction, fintech, wallet]
+  realtime: [real-time, real time, socket, websocket, chat, live]
+  ai: [ai, machine learning, ml, nlp, deep learning, sentiment, model]
+  cv: [computer vision, facial recognition, face detection, opencv, image]
+  blockchain: [blockchain, web3, smart contract, solidity, tokenization, ethereum]
+  cloud: [aws, cloud, docker, kubernetes, jenkins, ci/cd, devops, deployment]
+  ux: [ux, ui/ux, figma, wireframe, prototype, usability, user research, design]
+  performance: [performance, optimization, load time, scalability, concurrent]
+  saas: [saas, b2b, platform, multi-tenant, subscription]
+  trading: [trading, finance, backtest, portfolio, market data, algorithmic]
+
+defaults:
+  max_bullets_per_role: 5   # matches latex_resume.MAX_ROLE_BULLETS
+  max_bullets_per_project: 2
+  max_projects: 3
+
+experience:
+  - id: exp_bangopure
+    company: "BangoPure Limited"
+    role: "Software Developer"
+    period: "March 2026 to Present"
+    location: "Remote, United Kingdom"
+    website: "https://bangopure.com/"
+    tags: [react, node, saas, ux]
+    bullets:
+      # Three bullets split out of the two facts supplied for this role. Nothing
+      # here is inferred: the split separates the build work from the lead work
+      # from the review cadence, all of which were stated.
+      - text: "Build scalable digital platforms for GreenTech and EdTech clients across Europe and Africa, supporting sustainable innovation and digital learning."
+        tags: [react, node, saas]
+        src: current_role
+      - text: "Lead the frontend team after promotion to Frontend Team Lead, mentoring 10 developers and owning delivery of the frontend codebase."
+        tags: [react, ux, leadership]
+        src: current_role
+      - text: "Run structured code reviews and sprint planning across the team, keeping collaborative project delivery on schedule."
+        tags: [leadership, react]
+        src: current_role
+
+  - id: exp_scholars_avenue
+    company: "Scholars Avenue (Scholarslee)"
+    role: "Full Stack Developer"
+    period: "September 2025 to March 2026"
+    location: "Remote, Germany"
+    tags: [react, node, mongo, saas]
+    bullets:
+      - text: "Led full stack development of Scholarslee, a study abroad mentorship platform connecting students with mentors worldwide."
+        tags: [react, node, saas, mongo]
+        src: full_stack
+      - text: "Implemented Stripe payment processing, real time chat via Socket.io, and calendar scheduling to streamline the booking experience."
+        tags: [payments, realtime, node, saas]
+        src: full_stack
+      - text: "Architected scalable REST APIs with Node.js, Express, and MongoDB ensuring reliability under concurrent user loads."
+        tags: [node, mongo, performance, api]
+        src: full_stack
+      - text: "Built mentor review and rating system with quality controls, maintaining high platform trust and user satisfaction."
+        tags: [node, mongo, saas]
+        src: full_stack
+      - text: "Owned end to end design and development: conducted user research, built wireframes and prototypes in Figma, then implemented them in React."
+        tags: [ux, react]
+        src: uiux
+
+  - id: exp_rubrixcode
+    company: "RubrixCode"
+    role: "Full Stack Developer"
+    period: "August 2024 to August 2025"
+    location: "Hybrid, Islamabad"
+    tags: [react, node, mongo]
+    bullets:
+      - text: "Built Sweden Relocators Portal for a Swedish client, a relocation platform covering housing, visa, job search and settlement services."
+        tags: [react, node, saas, mongo]
+        src: full_stack
+      - text: "Designed and implemented responsive UI components, RESTful APIs, and database schemas, delivering full client satisfaction."
+        tags: [react, node, mongo, api, ux]
+        src: full_stack
+      - text: "Optimized frontend performance achieving fast page load times across all devices and screen sizes."
+        tags: [performance, react, ux]
+        src: full_stack
+
+projects:
+  - id: proj_casabelle
+    name: "CasaBelle"
+    tech: "React, Node.js, Blockchain, AI"
+    tags: [blockchain, react, ai]
+    bullets:
+      - text: "Developed responsive frontend interfaces and UI/UX workflows for a blockchain powered real estate and fractional property investment platform."
+        tags: [blockchain, react, ux]
+        src: full_stack
+      - text: "Integrated secure authentication, automated email services, and AI sentiment analysis for property review verification."
+        tags: [ai, node, security]
+        src: full_stack
+      - text: "Contributed to property tokenization, fractional ownership management, and smart contract based rent distribution."
+        tags: [blockchain]
+        src: full_stack
+
+  - id: proj_neuromark
+    name: "Neuro Mark"
+    tech: "React, Node.js, Express, MongoDB, Deep Learning"
+    tags: [ai, cv, saas]
+    bullets:
+      - text: "AI driven HR SaaS with facial recognition attendance deployed for multiple corporate clients."
+        tags: [ai, cv, saas]
+        src: full_stack
+      - text: "Automated core HR workflows using deep learning models, eliminating manual tracking processes at scale."
+        tags: [ai, saas]
+        src: full_stack
+
+  - id: proj_algodinero
+    name: "Algodinero"
+    tech: "React, Node.js, Market Data APIs"
+    tags: [trading, react, node]
+    bullets:
+      - text: "Built a full stack algorithmic trading platform where users design, backtest and deploy automated strategies with real time market data and portfolio analytics."
+        tags: [trading, realtime, node, react]
+        src: swe_ai
+
+  - id: proj_relocators
+    name: "Sweden Relocators Portal"
+    tech: "React, Node.js, Express, MongoDB, Material UI"
+    tags: [react, node, ux]
+    bullets:
+      - text: "Responsive relocation platform for a Swedish client covering end to end relocation and embassy related services."
+        tags: [react, node, saas]
+        src: full_stack
+      - text: "Improved UX through usability testing iterations and optimized frontend performance across all devices."
+        tags: [ux, performance]
+        src: full_stack
+
+# Structured so the template can set the institution bold with the dates flush
+# right and the degree in italics beneath — the reference resume's layout.
+# `line` entries still work for content parsed from an uploaded file.
+education:
+  - institution: "FAST NUCES"
+    location: "Mansehra, Pakistan"
+    degree: "Bachelor of Science in Software Engineering"
+    period: "August 2022 to July 2026"
+    courses: "Software Engineering, DSA, Operating Systems, DBMS, HCI, DevOps, AI/ML, NLP"
+
+skills:
+  - line: "Languages: JavaScript (ES6+), C++, SQL, NoSQL (MongoDB)"
+    tags: [react, node, mongo]
+  - line: "Frameworks and Libraries: React.js, Node.js, Express.js, Tailwind CSS, Material UI, Socket.io"
+    tags: [react, node, realtime]
+  - line: "AI and Machine Learning: Machine Learning, NLP, AI Integration, Sentiment Analysis"
+    tags: [ai]
+  - line: "Cloud and DevOps: AWS, Docker, Kubernetes, Jenkins, Git, Postman"
+    tags: [cloud]
+  - line: "Design: Figma, Adobe XD"
+    tags: [ux]
+
+awards:
+  - line: "Gold Medalist, top scorer in ETEA 2022"
+  - line: "1st Place, UI/UX Design Competition, Soventure'25"
+  - line: "1st Place, Web Design Competition, Deenfest 2024"
+  - line: "3rd Place, UI/UX Design Competition, NASCON'24"
+
+certifications:
+  - line: "IBM Agile Development and Scrum (2025)"
+  - line: "Stanford Machine Learning (2025)"
+  - line: "IBM Frontend Development with React"
+  - line: "Essential UI/UX Design with Figma"
+
+languages:
+  - line: "English (Fluent), Urdu (Native), German (A1)"

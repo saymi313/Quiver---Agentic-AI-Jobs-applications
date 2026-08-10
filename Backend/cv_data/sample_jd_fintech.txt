@@ -1,0 +1,4 @@
+We are hiring a Full Stack Engineer for our digital wallet and payments platform.
+You will work with React, Node.js, and REST APIs on high-scale fintech systems.
+Experience with Stripe integrations, real-time transaction processing, and MongoDB
+is highly desirable. Strong UI/UX sensibility and SaaS product delivery are a plus.

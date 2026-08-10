@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/*
+  Design tokens — three layers: primitive → semantic → component.
+
+  Rules this system holds to:
+    * No gradients, no glow, no backdrop blur. Depth comes from a single
+      hairline border and a one-step surface lift, nothing else.
+    * One radius scale (4 / 6 / 8 / 10px). Nothing is a pill except the
+      switch knob and the live dot.
+    * Neutrals are opaque hex, not white-with-alpha. Stacked alpha was
+      producing a dozen near-identical greys that never lined up.
+    * One accent. It marks the primary action and the current selection —
+      never decoration.
+*/
+
+@theme {
+  /* ---------- primitive: neutrals ---------- */
+  --color-n-950: #0c0d10;
+  --color-n-900: #111317;
+  --color-n-850: #16181d;
+  --color-n-800: #1b1e24;
+  --color-n-700: #262a32;
+  --color-n-600: #363b45;
+  --color-n-500: #6b7280;
+  --color-n-400: #8b929e;
+  --color-n-300: #aeb4bf;
+  --color-n-200: #d3d7de;
+  --color-n-100: #eceef1;
+
+  /* ---------- primitive: accent + status ---------- */
+  --color-brand-500: #26a37f;
+  --color-brand-400: #34c397;
+  --color-brand-300: #6bd6b5;
+  --color-ok-400: #35c08a;
+  --color-warn-400: #d9a441;
+  --color-bad-400: #e0655f;
+  --color-info-400: #5b9bd8;
+
+  /* ---------- semantic ---------- */
+  --color-canvas: var(--color-n-950);
+  --color-surface: var(--color-n-900);
+  --color-raised: var(--color-n-850);
+  --color-sunken: #090a0c;
+  --color-line: #23262d;
+  --color-line-strong: #30343d;
+
+  --color-fg: var(--color-n-100);
+  --color-fg-muted: var(--color-n-400);
+  --color-fg-subtle: var(--color-n-500);
+
+  --color-accent: var(--color-brand-500);
+  --color-accent-hover: var(--color-brand-400);
+
+  /* ---------- radius ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  /* ---------- type ---------- */
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
+  --text-tiny: 12px;
+  --text-tiny--line-height: 18px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 22px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 26px;
+  --text-2xl--line-height: 32px;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* Flat. The old build had two radial gradients here. */
+  background: var(--color-canvas);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* One focus treatment for the whole app, keyboard only. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-n-700);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-n-600);
+  background-clip: content-box;
+}
+
+/* The only animation in the system: the "running" dot. Everything else
+   resolves instantly, because motion on a data tool is noise. */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

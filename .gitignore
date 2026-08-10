@@ -1,0 +1,76 @@
+# ---------------------------------------------------------------------------
+# Secrets — never commit these
+# ---------------------------------------------------------------------------
+Backend/.env
+Backend/credentials.json
+Backend/token.json
+*.pem
+*.key
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Backend generated output
+# ---------------------------------------------------------------------------
+Backend/outputs/
+Backend/cv_data/_build_*/
+
+# Local LaTeX engine (20 MB binary, fetched by tools/install_tex.py)
+Backend/tools/tectonic*
+Backend/tools/*.exe
+
+# Local agent database (fallback when MongoDB is unreachable; contains
+# discovered contacts and your saved profile)
+Backend/agent_data.sqlite3
+Backend/agent_data.sqlite3-*
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+Frontend/node_modules/
+Frontend/dist/
+Frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Run data — uncomment if you would rather keep your pipeline state private.
+# These are tracked by default so the dataset and audit trail live with the repo.
+# ---------------------------------------------------------------------------
+# Backend/companies_dataset.csv
+# Backend/send_log.jsonl
+# Backend/applications.jsonl
+# Backend/*.xlsx
