@@ -11,6 +11,7 @@ import {
   Empty,
   Field,
   Input,
+  Metric,
   Note,
   PageHead,
   Section,
@@ -127,6 +128,8 @@ export default function JobsTab() {
         </Note>
       ) : null}
 
+      <Pipeline stats={overview.stats} retentionDays={overview.settings.limits?.retention_days ?? 3} />
+
       <Disclosure
         title="Search"
         description={`${sources.length} source${sources.length === 1 ? '' : 's'} · depth ${depth} · roles posted in the last ${targeting.max_age_days ?? 3} days, asking ${targeting.min_years_experience ?? 1} to ${targeting.max_years_experience ?? 3} years`}
@@ -203,6 +206,42 @@ export default function JobsTab() {
 
       <ApplicationLog refreshKey={refreshKey} />
     </div>
+  )
+}
+
+/* ---------------------------------------------------------------- summary */
+
+/**
+ * Where the pipeline stands, as one row of figures.
+ *
+ * Deliberately the four numbers that describe a state you can act on —
+ * fetched, ready, applied, failed — rather than every count the database can
+ * produce. Contact and company totals belong on Outreach, where they are
+ * actionable.
+ */
+function Pipeline({ stats, retentionDays }) {
+  const byStatus = stats.jobsByStatus || {}
+  const ready = stats.matchedJobs || 0
+  const applied = byStatus.applied || 0
+  const failed = byStatus.failed || 0
+
+  return (
+    <Section>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+        <Metric
+          label="Fetched"
+          value={stats.jobs}
+          hint={`kept for ${retentionDays} day${retentionDays === 1 ? '' : 's'}`}
+        />
+        <Metric label="Ready to apply" value={ready} hint="passed every gate" />
+        <Metric
+          label="Applied"
+          value={applied}
+          hint={`${stats.applications || 0} attempt${stats.applications === 1 ? '' : 's'}`}
+        />
+        <Metric label="Failed" value={failed} hint={failed ? 'see the reason on the row' : 'none'} />
+      </dl>
+    </Section>
   )
 }
 

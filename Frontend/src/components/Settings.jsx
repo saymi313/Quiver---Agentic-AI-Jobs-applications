@@ -47,6 +47,7 @@ const asText = (v) => (Array.isArray(v) ? v.join(', ') : v || '')
 export default function Settings({ overview, onSaved, open, onToggle }) {
   const [profile, setProfile] = useState(overview.settings.profile)
   const [targeting, setTargeting] = useState(overview.settings.targeting)
+  const [limits, setLimits] = useState(overview.settings.limits || {})
   const [provider, setProvider] = useState(overview.llm.provider || 'gemini')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -82,6 +83,11 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
           max_age_days: Number(targeting.max_age_days) || 3,
           require_posted_date: targeting.require_posted_date !== false,
           apply_order: targeting.apply_order || 'recent',
+        },
+        limits: {
+          ...limits,
+          retention_days: Math.max(0, Number(limits.retention_days ?? 3) || 0),
+          purge_keeps_applied: limits.purge_keeps_applied !== false,
         },
         llm: { provider, ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}) },
       })
@@ -287,6 +293,33 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
               onChange={(v) => setTargeting({ ...targeting, require_posted_date: v })}
               label="Skip roles with no posting date"
               hint="Some boards publish no date, so freshness cannot be proven. On means those are never applied to."
+            />
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- housekeeping */}
+        <div>
+          <p className={group}>Housekeeping</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Keep jobs for"
+              hint="Days. Anything fetched longer ago than this is deleted at the start of the next search, along with its tailored resume."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={limits.retention_days ?? 3}
+                onChange={(e) => setLimits({ ...limits, retention_days: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Checkbox
+              checked={limits.purge_keeps_applied !== false}
+              onChange={(v) => setLimits({ ...limits, purge_keeps_applied: v })}
+              label="Never delete jobs I applied to"
+              hint="On by default. Turning this off removes your own record of where you applied; the double-apply guard still holds either way, because it reads the applications log rather than this table."
             />
           </div>
         </div>
