@@ -205,6 +205,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
             },
             { label: 'Role' },
             { label: 'Company' },
+            { label: 'Location' },
             { label: 'Category' },
             { label: 'Portal' },
             { label: 'Status' },
@@ -271,6 +272,16 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                 {/* Some boards put a whole paragraph in the company field. */}
                 <Td className="max-w-[11rem] truncate text-n-400" title={r.company_name || ''}>
                   {r.company_name || '—'}
+                </Td>
+
+                {/* Boards write location as anything from "Remote" to a list
+                    of nine countries, so it truncates with the full text on
+                    hover rather than wrapping the row to three lines. */}
+                <Td className="max-w-[13rem] text-n-400" title={r.location || ''}>
+                  <span className="block truncate">{r.location || (r.remote ? 'Remote' : '—')}</span>
+                  {r.remote && r.location ? (
+                    <span className="text-micro text-n-600">Remote</span>
+                  ) : null}
                 </Td>
                 <Td>
                   {r.role_category ? (

@@ -40,7 +40,11 @@ FIELD_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\blinked\s*-?in", re.I), "linkedin"),
     (re.compile(r"\bgit\s*hub", re.I), "github"),
     (re.compile(r"\bportfolio|personal\s*(web)?site|\bwebsite\b|\burl\b", re.I), "portfolio"),
-    (re.compile(r"\blocation|\bcity|where.*based|current.*residence", re.I), "location"),
+    # More specific than the general location rule, so they must precede it:
+    # `_match_rule` returns the first pattern that hits.
+    (re.compile(r"\bcountry\b|country\s*of\s*residence", re.I), "_country"),
+    (re.compile(r"\bcity\b|\btown\b|location\s*\(city\)", re.I), "_city"),
+    (re.compile(r"\blocation|where.*based|current.*residence", re.I), "location"),
     (re.compile(r"current\s*(job\s*)?title|current\s*role|\boccupation", re.I), "current_title"),
     (re.compile(r"current\s*(company|employer)|present\s*employer|where.*work\s*now", re.I), "current_company"),
     (re.compile(r"years.*experience|experience.*years", re.I), "years_experience"),
@@ -71,31 +75,38 @@ def _visible_captcha(page) -> bool:
 
     Presence of a recaptcha script or frame is NOT enough: Ashby (and many
     Greenhouse boards) load an *invisible* reCAPTCHA badge on every form, and
-    treating that as a wall rejects forms that fill and submit fine. Only a
-    rendered challenge counts — the "I'm not a robot" checkbox widget or an
-    hCaptcha/Turnstile box, which are sizeable visible elements. The invisible
-    badge is ~60px and anchored off in a corner.
+    treating that as a wall rejects forms that fill and submit fine.
+
+    Measured on Greenhouse, 2026-08: the invisible badge is an
+    `enterprise/anchor` iframe of exactly 256x60 sitting inside a
+    `.grecaptcha-badge` wrapper — wide enough and tall enough to clear naive
+    size thresholds, which is how it once failed a perfectly fillable form.
+    The wrapper is the reliable tell, so the badge is excluded by ancestry
+    first and by height second. A real "I'm not a robot" checkbox widget is
+    ~300x78 and sits in the form flow, not in a fixed corner.
     """
-    probes = (
-        'iframe[src*="recaptcha"][src*="anchor"]',   # the checkbox widget frame
-        'iframe[src*="hcaptcha"]',
-        'iframe[src*="turnstile"]',
-        ".h-captcha iframe", ".cf-turnstile iframe",
-    )
-    for sel in probes:
-        try:
-            loc = page.locator(sel)
-            for i in range(min(loc.count(), 4)):
-                el = loc.nth(i)
-                if not el.is_visible():
-                    continue
-                box = el.bounding_box()
-                # The invisible badge is ~60x60 and tucked at the viewport edge;
-                # a real challenge widget is a ~300px-wide box in the form flow.
-                if box and box["width"] >= 200 and box["height"] >= 60:
-                    return True
-        except Exception:
-            continue
+    try:
+        if page.evaluate(
+            """() => {
+              const frames = Array.from(document.querySelectorAll(
+                'iframe[src*="recaptcha"][src*="anchor"], iframe[src*="hcaptcha"],'
+                + ' iframe[src*="turnstile"], .h-captcha iframe, .cf-turnstile iframe'));
+              return frames.some(f => {
+                // Google's invisible badge: never a challenge the user solves.
+                if (f.closest('.grecaptcha-badge')) return false;
+                if (/size=invisible/i.test(f.src || '')) return false;
+                const r = f.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return false;
+                const style = getComputedStyle(f);
+                if (style.visibility === 'hidden' || style.display === 'none') return false;
+                // A challenge widget is taller than the 60px badge.
+                return r.width >= 200 && r.height > 65;
+              });
+            }"""
+        ):
+            return True
+    except Exception:
+        pass
     try:
         challenge = page.get_by_text(re.compile(
             r"(verify (?:that )?you are (?:a )?human|i'?m not a robot|"
@@ -278,6 +289,13 @@ def _profile_values() -> dict[str, str]:
     bits = name.split()
     p["_first_name"] = bits[0] if bits else ""
     p["_last_name"] = " ".join(bits[1:]) if len(bits) > 1 else ""
+
+    # Forms routinely split what the profile stores as one line: "Mansehra,
+    # Pakistan" has to answer a City box and a Country dropdown separately.
+    # Derived, not invented — both halves come from the address the user wrote.
+    parts = [x.strip() for x in (p.get("location") or "").split(",") if x.strip()]
+    p["_city"] = parts[0] if parts else ""
+    p["_country"] = parts[-1] if len(parts) > 1 else ""
     return {k: str(v or "") for k, v in p.items()}
 
 
@@ -328,16 +346,55 @@ def cover_letter(job: dict[str, Any], *, log: Callable[[str], None] = print) -> 
 # --------------------------------------------------------------------------
 
 def _collect_fields(page) -> list[dict[str, Any]]:
-    """Every visible, fillable control on the page with its best-guess label."""
+    """
+    Every visible, fillable control on the page with its best-guess label.
+
+    Controls belonging to a newsletter signup, a site search or a login box are
+    skipped. A job board's listing page carries all three, and an agent that
+    treats the "subscribe to weekly jobs" input as an application field will
+    type the candidate's address into it and press Subscribe.
+    """
     return page.evaluate(
         """() => {
           const out = [];
+          const NOT_APPLICATION = new RegExp([
+            'newsletter', 'subscribe', 'subscription', 'mailing.?list',
+            'search', 'filter', 'query', 'log.?in', 'sign.?in', 'password',
+            'promo', 'coupon', 'cookie', 'consent', 'chat', 'feedback',
+            'survey', 'donat',
+          ].join('|'), 'i');
+
+          const inNonApplicationRegion = (el) => {
+            // Walk up to the nearest form/section and judge that container by
+            // its own text and attributes rather than the input alone: the
+            // input in a newsletter box is often just name="email".
+            let n = el;
+            for (let hops = 0; n && hops < 6; hops++, n = n.parentElement) {
+              const tag = (n.tagName || '').toLowerCase();
+              const attrs = [n.id || '', n.className || '', n.getAttribute?.('name') || '',
+                             n.getAttribute?.('action') || '', n.getAttribute?.('role') || ''
+                            ].join(' ');
+              if (NOT_APPLICATION.test(attrs)) return true;
+              if (tag === 'form' || tag === 'footer' || tag === 'nav' || tag === 'header') {
+                const text = (n.innerText || '').slice(0, 400);
+                return NOT_APPLICATION.test(text);
+              }
+            }
+            return false;
+          };
+
           const nodes = document.querySelectorAll('input, textarea, select');
           nodes.forEach((el, i) => {
             const type = (el.type || el.tagName).toLowerCase();
-            if (['hidden','submit','button','image','reset'].includes(type)) return;
+            if (['hidden','submit','button','image','reset','search'].includes(type)) return;
             const r = el.getBoundingClientRect();
             if (type !== 'file' && (r.width === 0 || r.height === 0)) return;
+            if (type !== 'file' && inNonApplicationRegion(el)) return;
+            // A widget's own internal control is not an application question:
+            // the phone box ships a country picker whose search input would
+            // otherwise be offered up as a field to answer.
+            if (NOT_APPLICATION.test([el.id || '', el.name || '',
+                                      el.placeholder || ''].join(' '))) return;
 
             let label = '';
             if (el.id) {
@@ -376,6 +433,107 @@ def _collect_fields(page) -> list[dict[str, Any]]:
 
 def _handle(page, idx: int):
     return page.locator("input, textarea, select").nth(idx)
+
+
+# --------------------------------------------------------------------------
+# "Is this actually an application form?"
+# --------------------------------------------------------------------------
+#
+# Aggregator boards (arbeitnow, RemoteOK, WeWorkRemotely, Landing.jobs…)
+# publish a description page and put the real form one click away on the
+# employer's own site. Landing on one of those and filling whatever inputs it
+# happens to carry is how the agent typed the candidate's address into a
+# "subscribe to weekly jobs" box and tried to press Subscribe.
+
+APPLICATION_HINT = re.compile(
+    r"first name|last name|full name|resume|cv\b|cover letter|linkedin|portfolio|"
+    r"phone|work authorisation|work authorization|sponsorship|notice period|"
+    r"salary|why do you|tell us about", re.I)
+
+APPLY_LINK_TEXT = re.compile(
+    r"^\s*(apply(\s+(now|here|for this (job|role|position)|on .{0,30})?)?|"
+    r"i'?m interested|submit application|go to application)\s*$", re.I)
+
+
+def looks_like_application(fields: list[dict[str, Any]]) -> bool:
+    """
+    Whether this set of fields plausibly belongs to a job application.
+
+    A file upload settles it. Otherwise the form needs either a recognisably
+    application-shaped question, or enough fields that it cannot be a search
+    or signup box. A lone email input never qualifies, however tempting.
+    """
+    if not fields:
+        return False
+    if any(f["type"] == "file" for f in fields):
+        return True
+    labelled = [f"{f.get('label') or ''} {f.get('name') or ''}" for f in fields]
+    if any(APPLICATION_HINT.search(text) for text in labelled):
+        return True
+    return len(fields) >= 4
+
+
+def follow_apply_link(page, context, *, log: Callable[[str], None] = print):
+    """
+    Click through to the real application and return the page showing it.
+
+    Handles the three shapes these links take: a same-tab navigation, a
+    `target=_blank` popup, and an anchor whose href is the employer's site.
+    Returns the original page unchanged when there is nothing to follow.
+    """
+    for role in ("link", "button"):
+        candidates = page.get_by_role(role, name=APPLY_LINK_TEXT)
+        count = candidates.count()
+        for i in range(min(count, 3)):
+            item = candidates.nth(i)
+            try:
+                if not item.is_visible():
+                    continue
+            except Exception:
+                continue
+
+            before = page.url
+            try:
+                with context.expect_page(timeout=8000) as popup:
+                    item.click(timeout=8000)
+                new_page = popup.value
+                new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+                new_page.wait_for_timeout(2000)
+                log(f"[apply]   followed Apply into a new tab: {new_page.url[:90]}")
+                return new_page
+            except Exception:
+                # No popup appeared — either it navigated in place or the
+                # click did nothing at all.
+                pass
+
+            try:
+                page.wait_for_timeout(2500)
+                if page.url != before:
+                    log(f"[apply]   followed Apply to {page.url[:90]}")
+                    return page
+            except Exception:
+                pass
+
+    # Nothing clickable: fall back to the href of an apply-ish anchor.
+    try:
+        href = page.evaluate(
+            """(pattern) => {
+              const re = new RegExp(pattern, 'i');
+              const a = Array.from(document.querySelectorAll('a[href]'))
+                .find(x => re.test((x.innerText || '').trim()));
+              return a ? a.href : '';
+            }""", APPLY_LINK_TEXT.pattern)
+    except Exception:
+        href = ""
+    if href and href != page.url:
+        try:
+            page.goto(href, wait_until="domcontentloaded", timeout=25000)
+            page.wait_for_timeout(2000)
+            log(f"[apply]   followed Apply link to {page.url[:90]}")
+            return page
+        except Exception:
+            pass
+    return page
 
 
 def _unfilled_required(page) -> list[dict[str, Any]]:
@@ -425,7 +583,29 @@ def _unfilled_required(page) -> list[dict[str, Any]]:
               if (!el.files || el.files.length === 0) out.push({ label, type });
               return;
             }
-            if (!String(el.value || '').trim()) out.push({ label, type });
+            if (String(el.value || '').trim()) return;
+
+            // A react-select combobox empties its own text input once a
+            // suggestion is chosen — the choice is rendered as a sibling
+            // element and stored out of sight. Reading `.value` alone calls
+            // an answered Country or Location box empty and aborts an
+            // application that was, in fact, complete.
+            const shell = el.closest('[class*="select__control"], [class*="-control"], ' +
+                                     '[class*="select-shell"], [data-testid*="select"]');
+            if (shell) {
+              const chosen = shell.querySelector(
+                '[class*="singleValue"], [class*="single-value"], ' +
+                '[class*="multiValue"], [class*="multi-value"]');
+              if (chosen && (chosen.innerText || '').trim()) return;
+            }
+            // Same idea for the phone widget: it keeps the number on a
+            // sibling hidden input rather than the box that was typed into.
+            const form = el.form || el.closest('form');
+            if (form && el.id) {
+              const twin = form.querySelector(`input[type=hidden][name="${CSS.escape(el.id)}"]`);
+              if (twin && String(twin.value || '').trim()) return;
+            }
+            out.push({ label, type });
           });
           Object.values(groups).forEach((g) => {
             if (!g.answered) out.push({ label: g.label, type: 'choice' });
@@ -443,33 +623,182 @@ def _fill_text(page, idx: int, value: str) -> bool:
     programmatic value set — they only commit when the user types and picks a
     suggestion. So: fill, read back, and if it did not stick, type it for real
     and accept the first suggestion.
+
+    A typeahead is detected up front rather than inferred from the read-back,
+    because `fill()` on Greenhouse's location box *does* leave the text visible
+    while the component's own state stays empty. Reading the value back sees
+    the text, declares success, and the form then rejects the field as
+    required-but-empty — which is exactly how a completed-looking application
+    failed on "Location (City)".
     """
     field = _handle(page, idx)
     try:
-        field.fill(value, timeout=8000)
-        if (field.input_value(timeout=2000) or "").strip():
-            return True
+        # Measured against Greenhouse's own markup. Two distinct behaviours:
+        #
+        #   picks_suggestion  Country and Location are `role=combobox` with
+        #                     `aria-autocomplete=list`; they commit only when
+        #                     an option from their own list is clicked.
+        #   must_type         the phone box is a plain `type=tel` that an
+        #                     intl-tel-input widget owns. `fill()` sets the
+        #                     value and the widget immediately wipes it, so
+        #                     the field has to be typed into like a person.
+        kind = field.evaluate(
+            """(el) => ({
+                 picks: el.getAttribute('role') === 'combobox'
+                        || !!el.getAttribute('aria-autocomplete'),
+                 tel: (el.type || '').toLowerCase() === 'tel',
+               })"""
+        )
     except Exception:
-        pass
+        kind = {"picks": False, "tel": False}
+    picks_suggestion = bool(kind.get("picks"))
+    must_type = picks_suggestion or bool(kind.get("tel"))
+
+    if kind.get("tel"):
+        # intl-tel-input parses as it goes and drops what it cannot read.
+        # "+92 301 8165385" loses its spaces or the whole entry; the compact
+        # E.164 form is what it accepts, and the plus keeps the country right.
+        digits = re.sub(r"[^\d+]", "", value or "")
+        value = digits if digits else value
+
+    if not must_type:
+        try:
+            field.fill(value, timeout=8000)
+            if (field.input_value(timeout=2000) or "").strip():
+                return True
+        except Exception:
+            pass
 
     try:
         field.click(timeout=5000)
         field.type(value, delay=35, timeout=15000)
         page.wait_for_timeout(1200)
-        # Accept a suggestion if the widget opened one.
-        for selector in ("[role=option]", ".dropdown-item", "li[class*=suggestion]",
-                         "[class*=autocomplete] li"):
-            options = page.locator(selector)
-            if options.count() and options.first.is_visible():
-                options.first.click(timeout=4000)
-                page.wait_for_timeout(400)
-                break
-        else:
+        if picks_suggestion:
+            if _pick_suggestion(page, field, value):
+                return True
+            # Enter accepts the highlighted option in a combobox. It is not
+            # pressed on ordinary fields, where it would submit the form.
             field.press("Enter", timeout=4000)
             page.wait_for_timeout(400)
-        return bool((field.input_value(timeout=2000) or "").strip())
+        if (field.input_value(timeout=2000) or "").strip():
+            return True
+        # A widget that stores its value out of sight (the phone box does)
+        # reads back empty even when the form is perfectly happy. Ask the
+        # form, not the input.
+        return _field_satisfied(field)
     except Exception:
         return False
+
+
+def _field_satisfied(field) -> bool:
+    """
+    Whether the form itself now considers this control answered.
+
+    Deliberately not `checkValidity()`: the browser's constraint validation
+    knows nothing about `aria-required`, so it cheerfully passes an empty
+    field that the page will still reject — reporting a fill as successful
+    when it was not. The same value/widget checks `_unfilled_required` uses
+    are applied here, to one element.
+    """
+    try:
+        return bool(field.evaluate(
+            """(el) => {
+              if (String(el.value || '').trim()) return true;
+              const required = el.required || el.getAttribute('aria-required') === 'true';
+              if (!required) return true;
+              const shell = el.closest('[class*="select__control"], [class*="-control"]');
+              const chosen = shell && shell.querySelector(
+                '[class*="singleValue"], [class*="single-value"]');
+              return !!(chosen && (chosen.innerText || '').trim());
+            }"""))
+    except Exception:
+        return False
+
+
+def _pick_suggestion(page, field, value: str) -> bool:
+    """
+    Choose the suggestion matching `value` from the list this field opened.
+
+    Scoping is the whole job. A page-wide `[role=option]` lookup matched 245
+    elements on a real Greenhouse form — every option of every native select on
+    the page — so clicking "the first visible option" picked something from an
+    unrelated dropdown and left the field empty. The combobox names its own
+    listbox in `aria-controls`; that is the list to read, and the option whose
+    text matches what was typed is the one to click.
+    """
+    scopes: list[str] = []
+    try:
+        controls = (field.get_attribute("aria-controls") or "").strip()
+        if controls and re.fullmatch(r"[\w-]+", controls):
+            scopes.append(f"#{controls}")
+    except Exception:
+        pass
+    scopes += ["[role=listbox]", ".select__menu", "[class*='autocomplete']",
+               "[class*='dropdown']", "[class*='suggestion']"]
+
+    # A location box queries a geocoder before it can offer anything, so the
+    # list is polled rather than checked once.
+    for _ in range(8):
+        try:
+            if page.locator("[role=listbox], .select__menu").count():
+                break
+        except Exception:
+            break
+        page.wait_for_timeout(400)
+
+    want = (value or "").strip().lower()
+    for scope in scopes:
+        try:
+            options = page.locator(f"{scope} [role=option], {scope} li, {scope} [class*='option']")
+            count = options.count()
+        except Exception:
+            continue
+        if not count:
+            continue
+
+        fallback = None
+        for i in range(min(count, 25)):
+            option = options.nth(i)
+            try:
+                if not option.is_visible():
+                    continue
+                text = (option.inner_text() or "").strip().lower()
+            except Exception:
+                continue
+            if not text:
+                continue
+            if want and (text.startswith(want) or want in text):
+                try:
+                    option.click(timeout=4000)
+                    _close_menu(page, field)
+                    return True
+                except Exception:
+                    return False
+            if fallback is None:
+                fallback = option
+        # Only settle for "the first thing in the right list" — never the
+        # first option on the page.
+        if fallback is not None and scopes.index(scope) == 0:
+            try:
+                fallback.click(timeout=4000)
+                _close_menu(page, field)
+                return True
+            except Exception:
+                return False
+    return False
+
+
+def _close_menu(page, field) -> None:
+    """Dismiss an open suggestion list before moving to the next field.
+
+    A menu left open floats over the fields below it, so the following click
+    lands on the overlay instead of the input — which is how filling Country
+    first could make Phone and Location fail."""
+    try:
+        field.press("Escape", timeout=2000)
+    except Exception:
+        pass
+    page.wait_for_timeout(400)
 
 
 def _fill_select(page, idx: int, want: str, options: list[str]) -> str | None:
@@ -616,13 +945,43 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 return result
 
             fields = _collect_fields(page)
+
+            # An aggregator listing page is not an application form. Follow its
+            # Apply link to the employer's site and look again before filling
+            # anything — the alternative is typing into whatever inputs the
+            # listing happens to carry.
+            if not looks_like_application(fields):
+                log(f"[apply]   {len(fields)} field(s) here do not look like an "
+                    f"application form — looking for the real one")
+                moved = follow_apply_link(page, context, log=log)
+                if moved is not page or moved.url != url:
+                    page = moved
+                    page.set_default_timeout(timeout_ms)
+                    wall = diagnose_wall(page)
+                    if wall:
+                        result["error"] = wall
+                        log(f"[apply]   FAILED — {wall}")
+                        try:
+                            shot = SHOT_DIR / f"job{job.get('id')}_blocked.png"
+                            page.screenshot(path=str(shot), full_page=True)
+                            result["screenshot"] = shot.name
+                        except Exception:
+                            pass
+                        return result
+                    fields = _collect_fields(page)
+
             log(f"[apply]   {len(fields)} form field(s) detected")
-            if not fields:
-                result["error"] = ("no form fields found — the posting is closed, or the "
-                                   "application lives on a site the agent cannot read")
+            if not fields or not looks_like_application(fields):
+                result["error"] = (
+                    "no application form found — this listing sends applicants to an "
+                    "external site the agent could not reach. Open the link and apply "
+                    "by hand." if fields else
+                    "no form fields found — the posting is closed, or the application "
+                    "lives on a site the agent cannot read")
                 shot = SHOT_DIR / f"job{job.get('id')}_noform.png"
                 page.screenshot(path=str(shot), full_page=True)
                 result["screenshot"] = shot.name
+                log(f"[apply]   FAILED — {result['error']}")
                 return result
 
             filled: dict[str, str] = {}
@@ -757,18 +1116,33 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 log(f"[apply]   DRY RUN — form complete, not submitted ({shot.name})")
                 return result
 
+            # Short timeouts on purpose. A wrong guess used to sit on the
+            # default 45 seconds waiting for a hidden element to become
+            # clickable; trying the next candidate is far more useful than
+            # waiting, and every one of these is visible or it is not the
+            # button. `:visible` matters — count() alone happily counts the
+            # hidden submit input of a site search form.
             submitted = False
-            for name in ("Submit application", "Submit Application", "Submit", "Send application", "Apply"):
-                btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
-                if btn.count() and btn.first.is_enabled():
-                    btn.first.click()
-                    submitted = True
-                    break
+            for name in ("Submit application", "Submit Application", "Submit",
+                         "Send application", "Apply"):
+                btn = page.get_by_role(
+                    "button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
+                try:
+                    if btn.count() and btn.first.is_visible() and btn.first.is_enabled():
+                        btn.first.click(timeout=8000)
+                        submitted = True
+                        break
+                except Exception as exc:
+                    log(f"[apply]   '{name}' was not clickable ({type(exc).__name__}); "
+                        f"trying the next candidate")
             if not submitted:
-                inp = page.locator("input[type=submit]")
-                if inp.count():
-                    inp.first.click()
-                    submitted = True
+                inp = page.locator("input[type=submit]:visible")
+                try:
+                    if inp.count():
+                        inp.first.click(timeout=8000)
+                        submitted = True
+                except Exception as exc:
+                    log(f"[apply]   submit input was not clickable ({type(exc).__name__})")
 
             if not submitted:
                 result["status"] = "filled"
