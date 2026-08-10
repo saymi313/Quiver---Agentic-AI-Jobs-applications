@@ -35,7 +35,10 @@ from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_F
                      OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now, retry_policy,
                      with_job_defaults)
 
-DB_PATH = BASE_DIR / "agent_data.sqlite3"
+# Overridable so the test suite can point the store at a throwaway file.
+import os as _os
+
+DB_PATH = Path(_os.environ.get("JOBSCRIPT_DB_PATH") or BASE_DIR / "agent_data.sqlite3")
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -171,6 +174,19 @@ CREATE TABLE IF NOT EXISTS settings (
     key             TEXT PRIMARY KEY,
     value           TEXT NOT NULL,
     updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS llm_usage (
+    day             TEXT NOT NULL,          -- UTC date, YYYY-MM-DD
+    purpose         TEXT NOT NULL,          -- apply | classify | tailor | ...
+    calls           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, purpose)
+);
+
+CREATE TABLE IF NOT EXISTS llm_cache (
+    key             TEXT PRIMARY KEY,       -- sha1 of provider+model+prompt+schema
+    value           TEXT NOT NULL,
+    created_at      TEXT NOT NULL
 );
 """
 
@@ -514,6 +530,52 @@ def fail_task(task_id: int, error: str) -> str:
 def task_stats() -> dict[str, int]:
     return {str(r[0]): int(r[1]) for r in
             _conn().execute("SELECT status, COUNT(*) FROM tasks GROUP BY status")}
+
+
+# --------------------------------------------------------------------------
+# LLM budget + cache
+# --------------------------------------------------------------------------
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def llm_spend(purpose: str) -> None:
+    """Count one real provider call against today's budget."""
+    with tx() as c:
+        c.execute(
+            "INSERT INTO llm_usage(day, purpose, calls) VALUES(?,?,1) "
+            "ON CONFLICT(day, purpose) DO UPDATE SET calls = calls + 1",
+            (_today(), purpose))
+
+
+def llm_spent_today() -> dict[str, int]:
+    """Calls made today, by purpose, plus a 'total'."""
+    rows = _conn().execute(
+        "SELECT purpose, calls FROM llm_usage WHERE day=?", (_today(),)).fetchall()
+    out = {str(r[0]): int(r[1]) for r in rows}
+    out["total"] = sum(out.values())
+    return out
+
+
+def llm_cache_get(key: str, max_age_days: int = 14) -> str | None:
+    row = _conn().execute("SELECT value, created_at FROM llm_cache WHERE key=?",
+                          (key,)).fetchone()
+    if row is None:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    if (row["created_at"] or "") < cutoff:
+        return None
+    return str(row["value"])
+
+
+def llm_cache_put(key: str, value: str) -> None:
+    with tx() as c:
+        c.execute("INSERT OR REPLACE INTO llm_cache(key, value, created_at) VALUES(?,?,?)",
+                  (key, value, now()))
+        # Keep the cache bounded; oldest rows go first.
+        c.execute("DELETE FROM llm_cache WHERE key NOT IN "
+                  "(SELECT key FROM llm_cache ORDER BY created_at DESC LIMIT 2000)")
 
 
 def known_hashes() -> set[str]:

@@ -66,9 +66,10 @@ tag_hints:
   trading: [trading, finance, backtest, portfolio, market data, algorithmic]
 
 defaults:
-  max_bullets_per_role: 5   # matches latex_resume.MAX_ROLE_BULLETS
-  max_bullets_per_project: 2
-  max_projects: 3
+  max_bullets_per_role: 5      # matches latex_resume.MAX_ROLE_BULLETS
+  max_bullets_per_project: 3   # matches latex_resume.MAX_PROJECT_BULLETS; floor is 2
+  # Every project below appears on the resume — the two page fitter trims
+  # bullets, never whole projects.
 
 experience:
   - id: exp_bangopure
@@ -153,11 +154,15 @@ projects:
     tech: "React, Node.js, Express, MongoDB, Deep Learning"
     tags: [ai, cv, saas]
     bullets:
-      - text: "AI driven HR SaaS with facial recognition attendance deployed for multiple corporate clients."
+      # Split from the original two dense lines; every fact was already stated.
+      - text: "Built an AI driven HR SaaS platform with facial recognition based attendance tracking."
         tags: [ai, cv, saas]
         src: full_stack
       - text: "Automated core HR workflows using deep learning models, eliminating manual tracking processes at scale."
         tags: [ai, saas]
+        src: full_stack
+      - text: "Deployed the platform for multiple corporate clients running attendance and HR operations on it."
+        tags: [saas, cloud]
         src: full_stack
 
   - id: proj_algodinero
@@ -165,8 +170,15 @@ projects:
     tech: "React, Node.js, Market Data APIs"
     tags: [trading, react, node]
     bullets:
-      - text: "Built a full stack algorithmic trading platform where users design, backtest and deploy automated strategies with real time market data and portfolio analytics."
-        tags: [trading, realtime, node, react]
+      # Split from the original single line; every fact was already stated.
+      - text: "Built a full stack algorithmic trading platform where users design, backtest and deploy automated trading strategies."
+        tags: [trading, node, react]
+        src: swe_ai
+      - text: "Integrated real time market data feeds powering live strategy execution across the platform."
+        tags: [trading, realtime, node]
+        src: swe_ai
+      - text: "Developed portfolio analytics so users track the performance of their deployed strategies."
+        tags: [trading, react]
         src: swe_ai
 
   - id: proj_relocators
@@ -174,11 +186,15 @@ projects:
     tech: "React, Node.js, Express, MongoDB, Material UI"
     tags: [react, node, ux]
     bullets:
-      - text: "Responsive relocation platform for a Swedish client covering end to end relocation and embassy related services."
+      # Third bullet split out of the former second line; nothing new was added.
+      - text: "Built a responsive relocation platform for a Swedish client covering end to end relocation and embassy related services."
         tags: [react, node, saas]
         src: full_stack
-      - text: "Improved UX through usability testing iterations and optimized frontend performance across all devices."
-        tags: [ux, performance]
+      - text: "Improved UX through repeated usability testing iterations with the client."
+        tags: [ux]
+        src: full_stack
+      - text: "Optimized frontend performance for fast load times across all devices and screen sizes."
+        tags: [performance, react]
         src: full_stack
 
 # Structured so the template can set the institution bold with the dates flush

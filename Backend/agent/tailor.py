@@ -5,8 +5,10 @@ already uses.
 This module is deliberately thin. It does not know how to lay out a resume — it
 loads the curated profile, hands the job description to `api/latex_resume.py`,
 and files the result. Every house style rule (Times, no hyphens, three to five
-bullets per role, one page) therefore applies here exactly as it does in the
-Resume Tailor tab, because it is the same `build()` call. Nothing bypasses it.
+bullets per role, two pages with every project) therefore applies here exactly
+as it does in the Resume Tailor tab, because it is the same `build()` call.
+Nothing bypasses it — and the compiled PDF must pass the house audit before it
+is recorded against the job.
 
 Resumes live in `Backend/outputs/agent_resumes/` as a `.tex` and a `.pdf` per
 job. The version recorded against the job is the file stem plus a short content
@@ -28,6 +30,20 @@ RESUME_DIR = OUTPUTS_DIR / "agent_resumes"
 # A description this short is a teaser. Tailoring against it would reorder
 # bullets on noise, so the master resume is used unchanged instead.
 MIN_JD_CHARS = 220
+
+
+def _audit(pdf: Path, *, log: Callable[[str], None]) -> list[str]:
+    """House-style failures in the compiled PDF; [] means it passes.
+
+    An auditor that cannot run (pdfplumber missing, unreadable file) reports
+    that as a failure rather than waving the document through — an unaudited
+    resume is not a passing one."""
+    try:
+        from api import resume_audit
+        return resume_audit.audit_pdf(pdf)
+    except Exception as exc:
+        log(f"[resume]   audit could not run: {type(exc).__name__}: {exc}")
+        return [f"audit could not run: {type(exc).__name__}"]
 
 
 def stem_for(job: dict[str, Any]) -> str:
@@ -101,7 +117,7 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
             log(f"[resume]   description is {len(description)} chars — "
                 f"building the master resume rather than tailoring to a teaser")
 
-        out = latex_resume.build(content, RESUME_DIR, stem, one_page=True,
+        out = latex_resume.build(content, RESUME_DIR, stem,
                                  log=lambda m: log(f"[resume]   {m}"))
     except Exception as exc:
         result["reason"] = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -112,6 +128,33 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
         result["tex"] = out.get("tex")
         result["reason"] = out.get("message") or "no LaTeX engine — only the .tex was written"
         log(f"[resume] {company} — {title[:40]}: {result['reason']}")
+        return result
+
+    # ---- Hard gate: the house-style audit ---------------------------------
+    # The auditor reads the compiled PDF the way an ATS parser will. A resume
+    # that fails it is never recorded against the job — a bad document sent to
+    # a real employer costs more than a missing one. First failure gets one
+    # retry without the LLM (rewrites are the usual culprit); a second failure
+    # is loud, and the retry queue picks it up later.
+    fails = _audit(out["pdf"], log=log)
+    if fails and use_llm:
+        log(f"[resume]   audit failed ({fails[0]}) — rebuilding without the LLM rewrite")
+        try:
+            content = latex_resume.from_profile()
+            if len(description) >= MIN_JD_CHARS:
+                latex_resume.tailor(content, jd_text, jd, use_llm=False,
+                                    log=lambda m: log(f"[resume]   {m}"))
+            out = latex_resume.build(content, RESUME_DIR, stem,
+                                     log=lambda m: log(f"[resume]   {m}"))
+            fails = _audit(out["pdf"], log=log) if out.get("pdf") else fails
+        except Exception as exc:
+            result["reason"] = f"audit retry failed: {type(exc).__name__}: {str(exc)[:160]}"
+            log(f"[resume] FAILED {company} — {title[:40]}: {result['reason']}")
+            return result
+    if fails:
+        result["tex"] = out.get("tex")
+        result["reason"] = "failed the house style audit: " + "; ".join(fails[:3])
+        log(f"[resume] REJECTED {company} — {title[:40]}: {result['reason']}")
         return result
 
     # Version identifies the content, not just the file, so a rebuild after the
@@ -130,7 +173,7 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
         "behuman": behuman.report(body),
     })
     log(f"[resume] {company} — {title[:44]} -> {out['pdf'].name} "
-        f"({out.get('pages')} page, {result['behuman']})")
+        f"({out.get('pages')} page(s), {result['behuman']})")
     return result
 
 

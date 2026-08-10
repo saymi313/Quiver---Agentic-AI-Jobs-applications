@@ -166,6 +166,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "model": "gemini-flash-latest",
         "api_key": "",
         "base_url": "",
+        # Real provider calls allowed per UTC day, across every purpose.
+        # Gemini's free tier is ~1,500/day; 1,200 leaves headroom for manual
+        # use of the same key elsewhere.
+        "daily_budget": 1200,
     },
     # The scheduler. Off by default: turning on unattended runs is a decision,
     # not a side effect of an upgrade. When on, it fires discovery and the

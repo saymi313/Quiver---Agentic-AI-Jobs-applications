@@ -155,6 +155,7 @@ def people_from_llm(company: dict[str, Any], pages: dict[str, str], *,
     )
     try:
         data = llm.complete_json(prompt, PEOPLE_SCHEMA, default={"people": []},
+                                 purpose="extract", cacheable=True,
                                  system="You extract structured facts from web pages. "
                                         "You never invent names or email addresses.")
     except llm.LLMError as exc:

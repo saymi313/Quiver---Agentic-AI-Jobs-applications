@@ -407,6 +407,52 @@ def task_stats() -> dict[str, int]:
     return out
 
 
+# --------------------------------------------------------------------------
+# LLM budget + cache — mirrors sqlite_store function for function
+# --------------------------------------------------------------------------
+
+def _llm_today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def llm_spend(purpose: str) -> None:
+    """Count one real provider call against today's budget."""
+    _connect().llm_usage.update_one(
+        {"day": _llm_today(), "purpose": purpose},
+        {"$inc": {"calls": 1}}, upsert=True)
+
+
+def llm_spent_today() -> dict[str, int]:
+    """Calls made today, by purpose, plus a 'total'."""
+    out: dict[str, int] = {}
+    for doc in _connect().llm_usage.find({"day": _llm_today()}):
+        out[str(doc["purpose"])] = int(doc.get("calls") or 0)
+    out["total"] = sum(out.values())
+    return out
+
+
+def llm_cache_get(key: str, max_age_days: int = 14) -> str | None:
+    doc = _connect().llm_cache.find_one({"key": key})
+    if not doc:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    if (doc.get("created_at") or "") < cutoff:
+        return None
+    return str(doc.get("value") or "")
+
+
+def llm_cache_put(key: str, value: str) -> None:
+    db = _connect()
+    db.llm_cache.update_one(
+        {"key": key},
+        {"$set": {"value": value, "created_at": now()}}, upsert=True)
+    # Keep the cache bounded on the free cluster; oldest rows go first.
+    excess = db.llm_cache.count_documents({}) - 2000
+    if excess > 0:
+        for doc in db.llm_cache.find({}, {"_id": 1}).sort("created_at", 1).limit(excess):
+            db.llm_cache.delete_one({"_id": doc["_id"]})
+
+
 def known_hashes() -> set[str]:
     """
     Every job already in the table, by dedupe hash.

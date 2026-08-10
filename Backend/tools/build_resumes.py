@@ -78,7 +78,7 @@ def build(variant: str, *, log=print) -> dict:
                   for s in (raw.get("skills") or []) if s.get("line")}
         content.skills.sort(key=lambda l: -len(focus.intersection(tagged.get(l, []))))
 
-    out = L.build(content, CV_DATA, spec["file"], one_page=True, log=log)
+    out = L.build(content, CV_DATA, spec["file"], log=log)
     text = " ".join([content.summary] +
                     [b.text for blk in content.experience + content.projects for b in blk.bullets])
     out["behuman"] = behuman.report(text)

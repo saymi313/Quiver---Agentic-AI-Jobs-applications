@@ -130,14 +130,34 @@ def phone(text: str) -> str:
     return lead + re.sub(r"\s{2,}", " ", re.sub(rf"[{DASHES}\-.()]", " ", body)).strip()
 
 
+# A URL or email inside prose. Hyphens in these are part of the address, so
+# they are shielded from `dehyphenate` and restored untouched.
+_ADDRESS = re.compile(
+    r"\S*(?:https?://|www\.)\S+|[\w.+-]+@[\w-]+\.[\w.-]+|"
+    r"\b[\w-]+(?:\.[\w-]+)*\.(?:com|io|dev|app|net|org|pk|co|ai)(?:/\S*)?", re.I)
+
+
 def enforce(text: str) -> str:
-    """Apply every rule that can be applied without judgement."""
+    """Apply every rule that can be applied without judgement.
+
+    URLs and email addresses pass through byte-identical: a hyphen inside
+    `usairam-saeed.vercel.app` is part of the address, not punctuation."""
     if not text:
         return ""
-    out = EMOJI.sub("", str(text))
+    shielded: list[str] = []
+
+    def shield(m: re.Match) -> str:
+        shielded.append(m.group(0))
+        return f"\x02{len(shielded) - 1}\x03"
+
+    out = _ADDRESS.sub(shield, str(text))
+    out = EMOJI.sub("", out)
     out = date_range(out)
     out = dehyphenate(out)
-    return re.sub(r"\s{2,}", " ", out).strip()
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    for i, original in enumerate(shielded):
+        out = out.replace(f"\x02{i}\x03", original)
+    return out
 
 
 def lint(text: str, *, where: str = "") -> list[str]:
@@ -152,7 +172,7 @@ def lint(text: str, *, where: str = "") -> list[str]:
         if hit:
             problems.append(f"{tag}{label} — {hit.group(0).strip()!r}")
 
-    if re.search(rf"[{DASHES}-]", text or ""):
+    if re.search(rf"[{DASHES}-]", _ADDRESS.sub(" ", text or "")):
         problems.append(f"{tag}hyphen or dash survived enforcement")
     if EMOJI.search(text or ""):
         problems.append(f"{tag}emoji")

@@ -167,7 +167,8 @@ def classify(title: str, description: str = "", *, use_llm: bool = False,
             return None
         prompt = f"Job title: {title}\n\n{(description or '')[:600]}"
         data = llm.complete_json(prompt, CLASSIFY_SCHEMA, system=CLASSIFY_SYSTEM,
-                                 default={"category": "none"})
+                                 default={"category": "none"},
+                                 purpose="classify", cacheable=True)
         guess = (data.get("category") or "none").strip()
         if guess in CATEGORIES:
             if log:

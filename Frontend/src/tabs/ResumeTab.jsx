@@ -44,7 +44,7 @@ export default function ResumeTab({ aiStatus }) {
   const [useAi, setUseAi] = useState(true)
   const [useLatex, setUseLatex] = useState(true)
   const [contentSource, setContentSource] = useState('profile')
-  const [onePage, setOnePage] = useState(true)
+  const [onePage, setOnePage] = useState(false)
   const [reorder, setReorder] = useState(true)
   const [building, setBuilding] = useState(false)
   const [built, setBuilt] = useState(null)
@@ -251,7 +251,12 @@ export default function ResumeTab({ aiStatus }) {
                     label="LaTeX"
                     hint="Compiles a real .tex. Falls back to the plain builder with no engine installed."
                   />
-                  <Checkbox checked={onePage} onChange={setOnePage} label="Force one page" />
+                  <Checkbox
+                    checked={onePage}
+                    onChange={setOnePage}
+                    label="Force one page"
+                    hint="Off by default: the standard document is two pages with every project on it."
+                  />
                   <Checkbox checked={reorder} onChange={setReorder} label="Reorder bullets by relevance" />
                   <Checkbox
                     checked={useAi}

@@ -112,7 +112,7 @@ def draft_email(person: dict[str, Any], *, log: Callable[[str], None] = print) -
         f"Write the cold email."
     )
     try:
-        data = llm.complete_json(prompt, EMAIL_SCHEMA, system=SYSTEM)
+        data = llm.complete_json(prompt, EMAIL_SCHEMA, system=SYSTEM, purpose="outreach")
         subject = behuman.scrub((data.get("subject") or "").strip())[:120]
         body = behuman.scrub((data.get("body") or "").strip())
         if len(body) < 60:

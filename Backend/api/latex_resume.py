@@ -30,15 +30,22 @@ from .resume_parse import ParsedResume
 TEMPLATE_NAME = "template.tex.j2"
 PROFILE_PATH = CV_DATA / "profile.yaml"
 
-# The house style requires 3 to 5 bullets under every Experience entry. The
-# fitter treats the lower bound as a floor it may not cross: a role reduced to
-# one line reads as a job the candidate barely held. If the page still overflows
-# with every role at its floor, the resume runs to two pages instead.
+# The house style requires 3 to 5 bullets under every Experience entry and
+# 2 to 3 under every project. The fitter treats the lower bounds as floors it
+# may not cross: a role reduced to one line reads as a job the candidate barely
+# held, and a project with one bullet reads as filler.
+#
+# The document is a two pager. Every project from the profile appears — the
+# fitter trims bullets to their floors to fit the page budget, but it never
+# deletes a project outright.
 #
 # Defined here rather than beside the fitter because `tailor()` uses
 # MAX_ROLE_BULLETS as a default argument, which Python evaluates at import.
 MIN_ROLE_BULLETS = 3
 MAX_ROLE_BULLETS = 5
+MIN_PROJECT_BULLETS = 2
+MAX_PROJECT_BULLETS = 3
+MAX_PAGES = 2
 
 # Custom delimiters so LaTeX braces pass through Jinja untouched.
 JINJA_KW = dict(
@@ -296,6 +303,7 @@ Hard constraints:
 - Keep each bullet to one line, roughly 15 to 28 words.
 - Open each bullet with a past-tense action verb (or present tense for a current role).
 - Use the posting's own vocabulary only where the underlying work genuinely matches.
+- The summary must fit two lines: 220 characters at most.
 
 Return only bullets you actually improved. `original` must be a byte-exact copy of the input.
 """ + """
@@ -312,7 +320,8 @@ House style, enforced on every line you return:
 
 
 def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
-           use_llm: bool = True, max_bullets: int = MAX_ROLE_BULLETS, max_projects: int = 3,
+           use_llm: bool = True, max_bullets: int = MAX_ROLE_BULLETS,
+           max_projects: int | None = None,
            log: Callable[[str], None] = print) -> dict[str, Any]:
     """Select, order and (optionally) rewrite content for this posting."""
     raw = getattr(content, "_raw", None)
@@ -328,14 +337,19 @@ def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
         block.bullets.sort(key=lambda b: -b.score)
         block.bullets = block.bullets[:max_bullets]
 
+    # Every project stays in; scoring only decides the order and which bullets
+    # survive the per-project cap. `max_projects` exists for parsed uploads
+    # whose project lists can run long — the curated profile passes None.
     for block in content.projects:
         for b in block.bullets:
             b.score = score_bullet(b, jd, hint_tags)
         block.bullets.sort(key=lambda b: -b.score)
-        block.bullets = block.bullets[:2]
+        block.bullets = block.bullets[:MAX_PROJECT_BULLETS]
     content.projects.sort(
         key=lambda p: -sum(b.score for b in p.bullets))
-    content.projects = [p for p in content.projects if p.bullets][:max_projects]
+    content.projects = [p for p in content.projects if p.bullets]
+    if max_projects is not None:
+        content.projects = content.projects[:max_projects]
 
     if content.skills and hint_tags and raw:
         tagged = {s["line"]: [str(t).lower() for t in (s.get("tags") or [])]
@@ -388,7 +402,8 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *,
     )
     try:
         data = provider.complete_json(prompt, REWRITE_SCHEMA, system=REWRITE_SYSTEM,
-                                      default={"summary": "", "bullets": []})
+                                      default={"summary": "", "bullets": []},
+                                      purpose="tailor")
     except Exception as exc:
         log(f"[latex] LLM pass failed: {type(exc).__name__}: {exc}")
         return {"llm": {"ok": False, "error": str(exc)[:200]}}
@@ -415,8 +430,12 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *,
             b.text = revised
             changed += 1
 
+    # The house style caps the summary at two rendered lines (~230 chars in
+    # 10.5pt Times across 7.5in). A longer rewrite is rejected outright: the
+    # curated summary already fits, and the audit gate would bounce the PDF.
     new_summary = (data.get("summary") or "").strip()
-    if len(new_summary) > 40 and not resume_style.lint(resume_style.enforce(new_summary)):
+    if (40 < len(new_summary) <= 230
+            and not resume_style.lint(resume_style.enforce(new_summary))):
         content.summary = new_summary
 
     log(f"[latex] LLM rewrote {changed} bullet(s) and the summary "
@@ -554,27 +573,25 @@ def clamp_role_bullets(content: ResumeContent, *, log: Callable[[str], None] = p
             f"— add bullets in profile.yaml")
 
 
-def trim_to_budget(content: ResumeContent, *, max_bullets: int = 18,
+def trim_to_budget(content: ResumeContent, *,
                    max_awards: int = 4, log: Callable[[str], None] = print) -> None:
     """
     Pre-trim obviously surplus content before the measured fitting loop runs.
 
     Experience bullets are not touched here: they are the substance of the
-    document and the floor is enforced. Projects are the flexible part, and are
-    not in the house section order at all, so they absorb the cut first.
+    document and the floor is enforced. Projects are never deleted — every one
+    from the profile appears on the resume; only their bullet counts flex
+    between MIN_ and MAX_PROJECT_BULLETS during fitting.
     """
     clamp_role_bullets(content, log=log)
     content.awards = content.awards[:max_awards]
-
-    total = sum(len(b.bullets) for b in content.experience + content.projects)
-    dropped = 0
-    while total > max_bullets and content.projects:
-        weakest = min(content.projects, key=lambda p: sum(b.score for b in p.bullets))
-        total -= len(weakest.bullets)
-        content.projects.remove(weakest)
-        dropped += 1
-    if dropped:
-        log(f"[latex] dropped {dropped} project(s) to make room for the experience bullets")
+    for proj in content.projects:
+        if len(proj.bullets) > MAX_PROJECT_BULLETS:
+            proj.bullets[:] = proj.bullets[:MAX_PROJECT_BULLETS]
+    thin = [p.name for p in content.projects if len(p.bullets) < MIN_PROJECT_BULLETS]
+    if thin:
+        log(f"[latex] project(s) below the {MIN_PROJECT_BULLETS}-bullet floor: "
+            f"{', '.join(thin)} — add bullets in profile.yaml")
 
 
 def _drop_weakest(content: ResumeContent) -> bool:
@@ -582,10 +599,11 @@ def _drop_weakest(content: ResumeContent) -> bool:
     Remove the single least valuable element. Returns False when nothing is left.
 
     Order matters more than it looks. Cutting an Experience bullet costs real
-    evidence, so everything cheaper goes first: languages, then projects, then
-    surplus awards and certifications. Only after all of that are bullets
-    touched, and never below MIN_ROLE_BULLETS. Getting this order backwards
-    strips a resume to one bullet per role to save a two-line Languages block.
+    evidence, so everything cheaper goes first: languages, then surplus project
+    bullets, then surplus awards and certifications. Two floors are absolute:
+    no role goes below MIN_ROLE_BULLETS, no project below MIN_PROJECT_BULLETS —
+    and no project is ever deleted. A resume that cannot fit the page budget
+    with everything at its floor stays long, and the log says so.
     """
     # Cheap lines first: the languages bullet, then the coursework line.
     if content.languages:
@@ -599,19 +617,12 @@ def _drop_weakest(content: ResumeContent) -> bool:
         content.education.pop()
         return True
 
-    # Projects slim down before any disappears: every project drops to its
-    # single strongest bullet first. Whole projects then go weakest-first, but
-    # the best one is protected until almost nothing else remains — the
-    # reference layout has a Projects section, and the old order deleted all of
-    # them while a coursework line survived.
+    # Projects give up bullets down to their floor, weakest project first.
+    # The project itself always survives.
     for proj in sorted(content.projects, key=lambda p: sum(b.score for b in p.bullets)):
-        if len(proj.bullets) > 1:
+        if len(proj.bullets) > MIN_PROJECT_BULLETS:
             proj.bullets.remove(min(proj.bullets[1:], key=lambda b: b.score))
             return True
-    if len(content.projects) > 1:
-        content.projects.remove(min(content.projects,
-                                    key=lambda p: sum(b.score for b in p.bullets)))
-        return True
 
     # Surplus credentials, weakest (stored last) first.
     if len(content.awards) > 2:
@@ -629,10 +640,8 @@ def _drop_weakest(content: ResumeContent) -> bool:
         blk.bullets.remove(bullet)
         return True
 
-    # Last resorts, in increasing order of pain.
-    if content.projects:
-        content.projects.clear()
-        return True
+    # Last resorts, in increasing order of pain. Projects are not on this
+    # list: the document keeps all of them by design.
     if content.awards:
         content.awards.pop()
         return True
@@ -643,19 +652,19 @@ def _drop_weakest(content: ResumeContent) -> bool:
 
 
 def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
-          one_page: bool = True, max_passes: int = 24,
+          max_pages: int = MAX_PAGES, max_passes: int = 24,
           log: Callable[[str], None] = print) -> dict[str, Any]:
     """
     Render the .tex and compile it.
 
-    With `one_page`, the real page count from the compiled PDF drives trimming:
-    render, compile, and if it spilled onto a second page drop the lowest-scoring
-    line and try again. Measuring beats guessing a bullet budget, because how much
-    fits depends on how long the lines actually are.
+    The real page count from the compiled PDF drives trimming: render, compile,
+    and if it spilled past `max_pages` drop the lowest-scoring line and try
+    again. Measuring beats guessing a bullet budget, because how much fits
+    depends on how long the lines actually are. The default budget is two
+    pages — enough for every role and every project at healthy bullet counts.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    if one_page:
-        trim_to_budget(content, log=log)
+    trim_to_budget(content, log=log)
 
     tex_path = out_dir / f"{stem}.tex"
     tex_source = render_tex(content)
@@ -664,7 +673,7 @@ def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
     pdf, message = compile_pdf(tex_path, log=log)
     pages = _page_count(pdf) if pdf else None
 
-    if one_page and pdf and pages and pages > 1:
+    if pdf and pages and pages > max_pages:
         for _ in range(max_passes):
             if not _drop_weakest(content):
                 break
@@ -672,14 +681,15 @@ def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
             tex_path.write_text(tex_source, encoding="utf-8")
             pdf, message = compile_pdf(tex_path, log=lambda _: None)
             pages = _page_count(pdf) if pdf else pages
-            if pages == 1:
+            if pages <= max_pages:
                 break
-        if pages == 1:
-            log("[latex] trimmed to fit: 1 page")
+        if pages and pages <= max_pages:
+            log(f"[latex] trimmed to fit: {pages} page(s)")
         else:
-            log(f"[latex] {pages} pages, and every role is at the {MIN_ROLE_BULLETS}-bullet "
-                f"floor — the house style keeps the bullets rather than cutting to one "
-                f"page. Shorten skills or education in profile.yaml to recover a page.")
+            log(f"[latex] {pages} pages against a budget of {max_pages}, with every "
+                f"role and project at its bullet floor — the house style keeps the "
+                f"content rather than cutting further. Shorten skills or education "
+                f"in profile.yaml to recover space.")
 
     log(f"[latex] {tex_path.name} ({len(tex_source)} chars)"
         + (f", {pages} page(s)" if pages else ""))

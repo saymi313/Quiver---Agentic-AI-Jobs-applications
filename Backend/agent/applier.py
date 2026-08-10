@@ -310,7 +310,7 @@ def cover_letter(job: dict[str, Any], *, log: Callable[[str], None] = print) -> 
     )
     try:
         text = llm.complete(
-            prompt,
+            prompt, purpose="apply",
             system="You write concise, factual job application notes.\n\n" + behuman.RULES)
         cleaned = behuman.scrub(re.sub(r"\n{3,}", "\n\n", (text or "").strip()))
         tells = behuman.report(cleaned)
@@ -523,7 +523,7 @@ def _llm_answers(page_fields: list[dict[str, Any]], job: dict[str, Any],
     )
     try:
         data = llm.complete_json(
-            prompt, ANSWER_SCHEMA, default={"answers": []},
+            prompt, ANSWER_SCHEMA, default={"answers": []}, purpose="apply",
             system="You fill forms strictly from a provided profile. You never fabricate facts "
                    "about a person's eligibility, education or experience.")
     except llm.LLMError as exc:

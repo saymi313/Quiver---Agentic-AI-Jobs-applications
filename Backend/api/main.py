@@ -100,8 +100,10 @@ def health() -> dict[str, Any]:
         agent_ok, agent_why = agent_llm.available()
         agent_model = agent_llm.config().get("model", "")
         provider = agent_llm.config().get("provider", "")
+        budget = agent_llm.budget_status()
     except Exception as exc:
         agent_ok, agent_why, agent_model, provider = False, f"agent unavailable: {exc}", "", ""
+        budget = {}
 
     return {
         "ok": True,
@@ -111,6 +113,7 @@ def health() -> dict[str, Any]:
             "reason": agent_why,
             "model": agent_model,
             "provider": provider,
+            "budget": budget,
         },
         "latex": {"engine": _latex_engine()},
     }
@@ -220,7 +223,9 @@ class BuildRequest(BaseModel):
     # LaTeX is the primary output: a real .tex plus a compiled PDF.
     useLatex: bool = True
     contentSource: str = "upload"      # upload | profile
-    onePage: bool = True
+    # The house standard is a two pager with every project on it. Turning this
+    # on squeezes to one page instead.
+    onePage: bool = False
 
 
 @app.post("/api/ats/build")
@@ -296,7 +301,8 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
                 log=lambda m: tailor_notes.append(m))
             latex_out = latex_resume.build(
                 content, session_dir, stem,
-                one_page=req.onePage, log=lambda m: tailor_notes.append(m))
+                max_pages=1 if req.onePage else latex_resume.MAX_PAGES,
+                log=lambda m: tailor_notes.append(m))
 
             files["tex"] = latex_out["tex"].name
 
@@ -327,6 +333,23 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
                 files["pdf"] = latex_out["pdf"].name
                 errors.pop("pdf", None)
 
+            # The same hard audit the agent applies before recording a resume.
+            # Here the files still download — this is an interactive tool and
+            # the user may be iterating — but the failures are front and centre.
+            audit_fails: list[str] = []
+            if latex_out.get("pdf"):
+                from . import resume_audit
+
+                try:
+                    audit_fails = resume_audit.audit_pdf(latex_out["pdf"])
+                except Exception as exc:
+                    audit_fails = [f"audit could not run: {type(exc).__name__}"]
+                if audit_fails:
+                    tailor_notes.append(
+                        "[audit] FAILED house style: " + "; ".join(audit_fails[:4]))
+                else:
+                    tailor_notes.append("[audit] passes every house style rule")
+
             latex_info = {
                 "engine": latex_out["engine"],
                 "pages": latex_out["pages"],
@@ -336,6 +359,7 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
                 "llm": tailored.get("llm"),
                 "rewritten": tailored.get("rewritten", 0),
                 "lint": tailored.get("lint", []),
+                "audit": audit_fails,
                 "log": tailor_notes,
             }
         except Exception as exc:
@@ -698,7 +722,8 @@ def agent_llm_test() -> dict[str, Any]:
     if not ok:
         return {"ok": False, "error": reason}
     try:
-        reply = agent_llm.complete("Reply with exactly: READY", system="You follow instructions literally.")
+        reply = agent_llm.complete("Reply with exactly: READY", purpose="test",
+                                   system="You follow instructions literally.")
         return {"ok": True, "reply": (reply or "").strip()[:120], "model": agent_llm.config().get("model")}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:400]}

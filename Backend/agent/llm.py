@@ -19,9 +19,11 @@ raising into the agent loop.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import threading
 import time
 from typing import Any
 
@@ -32,6 +34,91 @@ from api.config import BASE_DIR
 from . import env, store
 
 TIMEOUT = 90
+
+# --------------------------------------------------------------------------
+# Budget, cache, throttle
+# --------------------------------------------------------------------------
+#
+# The free tiers this runs on are quota-bound (~1,500 requests/day on Gemini),
+# and the scheduler can now spend that quota unattended overnight. Three
+# defences, all here so no call site can forget them:
+#
+#   throttle  a minimum interval between real provider calls, so a burst of
+#             tailoring does not trip the per-minute limit and die on 429s.
+#   budget    a daily call ceiling with per-purpose reservations. Cheap bulk
+#             purposes (classification) cut out first; answering questions on
+#             a live application form is allowed up to the full cap, because
+#             failing mid-submit costs the most.
+#   cache     classification and JD analysis are pure functions of their
+#             input — the same title asked twice should cost one call.
+#
+# A budget refusal raises LLMError like any other failure; every caller
+# already treats LLMError as "work without the model".
+
+DAILY_BUDGET_DEFAULT = 1200
+MIN_INTERVAL_S = 5.0
+
+# Fraction of the daily budget a purpose may spend up to. Purposes not listed
+# use the default. apply is 1.0 by design: it is the last thing to starve.
+PURPOSE_CEILINGS: dict[str, float] = {
+    "apply": 1.0,
+    "tailor": 0.85,
+    "outreach": 0.85,
+    "classify": 0.60,
+    "extract": 0.60,
+}
+DEFAULT_CEILING = 0.90
+
+_throttle_lock = threading.Lock()
+_last_call_at = 0.0
+
+
+def _daily_budget() -> int:
+    cfg = store.get_setting("llm", {}) or {}
+    try:
+        return max(1, int(cfg.get("daily_budget") or DAILY_BUDGET_DEFAULT))
+    except (TypeError, ValueError):
+        return DAILY_BUDGET_DEFAULT
+
+
+def budget_status() -> dict[str, Any]:
+    """Spend so far today against the cap — surfaced in /api/health."""
+    try:
+        spent = store.llm_spent_today()
+    except Exception:
+        spent = {"total": 0}
+    cap = _daily_budget()
+    return {"cap": cap, "spent": spent.get("total", 0),
+            "remaining": max(0, cap - spent.get("total", 0)),
+            "byPurpose": {k: v for k, v in spent.items() if k != "total"}}
+
+
+def _check_budget(purpose: str) -> None:
+    spent = store.llm_spent_today().get("total", 0)
+    cap = _daily_budget()
+    ceiling = int(cap * PURPOSE_CEILINGS.get(purpose, DEFAULT_CEILING))
+    if spent >= ceiling:
+        raise LLMError(
+            f"Daily LLM budget reached for '{purpose}' ({spent}/{cap} calls, "
+            f"ceiling {ceiling}). Resets at midnight UTC; raise llm.daily_budget "
+            f"in Settings if the quota allows it.")
+
+
+def _throttle() -> None:
+    """At most one real provider call per MIN_INTERVAL_S, process-wide."""
+    global _last_call_at
+    with _throttle_lock:
+        wait = _last_call_at + MIN_INTERVAL_S - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_call_at = time.monotonic()
+
+
+def _cache_key(provider: str, model: str, prompt: str, system: str,
+               schema: dict | None) -> str:
+    blob = "\x1f".join([provider, model, system, prompt,
+                        json.dumps(schema, sort_keys=True) if schema else ""])
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -228,7 +315,17 @@ def _ollama(prompt: str, system: str, schema: dict | None, model: str) -> str:
 # --------------------------------------------------------------------------
 
 def complete(prompt: str, *, system: str = "", schema: dict | None = None,
-             retries: int = 2) -> str:
+             retries: int = 2, purpose: str = "general",
+             cacheable: bool = False) -> str:
+    """
+    One model call, with the quota defences applied in order: cache lookup
+    (free), budget check (may refuse), throttle (may wait), provider call
+    (spends), cache store.
+
+    `purpose` names what the call is for — it decides the budget ceiling and
+    shows up in /api/health. `cacheable` is for calls that are pure functions
+    of their prompt (classification, JD analysis), never for creative ones.
+    """
     cfg = config()
     provider = cfg.get("provider", "gemini")
     model = cfg.get("model") or ""
@@ -238,22 +335,52 @@ def complete(prompt: str, *, system: str = "", schema: dict | None = None,
     if not ok:
         raise LLMError(reason)
 
+    cache_key = ""
+    if cacheable:
+        cache_key = _cache_key(provider, model, prompt, system, schema)
+        try:
+            hit = store.llm_cache_get(cache_key)
+        except Exception:
+            hit = None
+        if hit is not None:
+            return hit
+
+    # Ollama is local and free — no budget, no throttle.
+    if provider != "ollama":
+        _check_budget(purpose)
+
     last: Exception | None = None
     for attempt in range(retries + 1):
         try:
             if provider == "gemini":
-                return _gemini(prompt, system, schema, model or GEMINI_FALLBACKS[0], key)
-            if provider == "groq":
-                return _openai_compatible(GROQ_URL, prompt, system, schema,
-                                          model or GROQ_FALLBACKS[0], key, GROQ_FALLBACKS)
-            if provider == "openrouter":
-                return _openai_compatible(
+                _throttle()
+                out = _gemini(prompt, system, schema, model or GEMINI_FALLBACKS[0], key)
+            elif provider == "groq":
+                _throttle()
+                out = _openai_compatible(GROQ_URL, prompt, system, schema,
+                                         model or GROQ_FALLBACKS[0], key, GROQ_FALLBACKS)
+            elif provider == "openrouter":
+                _throttle()
+                out = _openai_compatible(
                     OPENROUTER_URL, prompt, system, schema,
                     model or OPENROUTER_FALLBACKS[0], key, OPENROUTER_FALLBACKS,
                     {"HTTP-Referer": "http://localhost", "X-Title": "Quiver"})
-            if provider == "ollama":
-                return _ollama(prompt, system, schema, model)
-            raise LLMError(f"Unknown provider '{provider}'.")
+            elif provider == "ollama":
+                out = _ollama(prompt, system, schema, model)
+            else:
+                raise LLMError(f"Unknown provider '{provider}'.")
+
+            if provider != "ollama":
+                try:
+                    store.llm_spend(purpose)
+                except Exception:
+                    pass          # a failed usage write must not fail the answer
+            if cacheable and cache_key and out.strip():
+                try:
+                    store.llm_cache_put(cache_key, out)
+                except Exception:
+                    pass
+            return out
         except LLMError as exc:
             last = exc
             if "rate limit" in str(exc).lower() and attempt < retries:
@@ -270,10 +397,12 @@ def complete(prompt: str, *, system: str = "", schema: dict | None = None,
 
 
 def complete_json(prompt: str, schema: dict, *, system: str = "",
-                  default: Any = None) -> Any:
+                  default: Any = None, purpose: str = "general",
+                  cacheable: bool = False) -> Any:
     """Schema-constrained call. Returns `default` instead of raising on a bad shape."""
     try:
-        raw = complete(prompt, system=system, schema=schema)
+        raw = complete(prompt, system=system, schema=schema,
+                       purpose=purpose, cacheable=cacheable)
     except LLMError:
         if default is not None:
             return default
