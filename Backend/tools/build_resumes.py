@@ -71,7 +71,9 @@ def build(variant: str, *, log=print) -> dict:
             b.score = 10.0 * len(focus.intersection(b.tags)) + (1.0 if any(
                 ch.isdigit() for ch in b.text) else 0.0)
         block.bullets.sort(key=lambda b: -b.score)
-    content.projects.sort(key=lambda p: -sum(b.score for b in p.bullets))
+    # Same selection rule as the per-job tailor: the variant's most relevant
+    # projects, at most MAX_PROJECTS_SHOWN, never fewer than MIN_PROJECTS.
+    content.projects = L.select_projects(content.projects)
 
     if content.skills:
         tagged = {s["line"]: [str(t).lower() for t in (s.get("tags") or [])]

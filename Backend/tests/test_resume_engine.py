@@ -51,9 +51,14 @@ def test_select_projects_drops_irrelevant_keeps_floor():
     picked = select_projects([proj("A", 0.0), proj("B", 3.0)])
     assert [p.name for p in picked] == ["B", "A"]
 
-    # Nothing scored: a generic posting keeps everything.
+    # Nothing scored: a generic posting keeps profile order, up to the cap.
     picked = select_projects([proj("A", 0.0), proj("B", 0.0), proj("C", 0.0)])
     assert len(picked) == 3
+
+    # The section never runs past MAX_PROJECTS_SHOWN, however many score.
+    many = [proj(f"P{i}", float(10 - i)) for i in range(8)]
+    picked = select_projects(many)
+    assert [p.name for p in picked] == ["P0", "P1", "P2", "P3"]
 
 
 def test_drop_weakest_sheds_least_relevant_project_first():

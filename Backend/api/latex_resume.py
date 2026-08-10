@@ -47,6 +47,10 @@ MAX_ROLE_BULLETS = 5
 MIN_PROJECT_BULLETS = 2
 MAX_PROJECT_BULLETS = 3
 MIN_PROJECTS = 2
+# The profile carries every project the candidate has; the resume shows the
+# few that fit this posting. Four keeps the section substantial without
+# burying the relevant work under weak matches.
+MAX_PROJECTS_SHOWN = 4
 MAX_PAGES = 2
 
 # Custom delimiters so LaTeX braces pass through Jinja untouched.
@@ -269,17 +273,18 @@ def select_projects(projects: list[Block],
     """
     Which projects this resume shows, in relevance order.
 
-    Ranked by their bullets' scores against the posting. A project that scores
-    nothing is dropped — showing a trading platform to a design studio dilutes
-    the relevant work — but only when at least MIN_PROJECTS relevant ones
-    remain. A generic posting that triggers nothing keeps every project, in
-    profile order, because a zero signal is not evidence of irrelevance.
+    Ranked by their bullets' scores against the posting, capped at the
+    MAX_PROJECTS_SHOWN best. A project that scores nothing is dropped —
+    showing a trading platform to a design studio dilutes the relevant work —
+    but only when at least MIN_PROJECTS relevant ones remain. A generic
+    posting that triggers nothing keeps the profile's order, because a zero
+    signal is not evidence of irrelevance.
     """
     ranked = sorted([p for p in projects if p.bullets],
                     key=lambda p: -sum(b.score for b in p.bullets))
     relevant = [p for p in ranked if sum(b.score for b in p.bullets) > 0]
     picked = relevant if len(relevant) >= MIN_PROJECTS else ranked
-    return picked[:max_projects] if max_projects is not None else picked
+    return picked[:max_projects if max_projects is not None else MAX_PROJECTS_SHOWN]
 
 
 def pick_summary(content: ResumeContent, jd_text: str,

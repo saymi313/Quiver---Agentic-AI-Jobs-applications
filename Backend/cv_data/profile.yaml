@@ -60,7 +60,10 @@ tag_hints:
   cv: [computer vision, facial recognition, face detection, opencv, image]
   blockchain: [blockchain, web3, smart contract, solidity, tokenization, ethereum]
   cloud: [aws, cloud, docker, kubernetes, jenkins, ci/cd, devops, deployment]
-  ux: [ux, ui/ux, figma, wireframe, prototype, usability, user research, design]
+  # Deliberately no bare "design": "design REST APIs" in a backend posting
+  # must not pull Figma projects onto an engineering resume.
+  ux: [ux, ui/ux, figma, wireframe, prototype, usability, user research,
+       designer, design system, product design, user interface, user experience]
   performance: [performance, optimization, load time, scalability, concurrent]
   saas: [saas, b2b, platform, multi-tenant, subscription]
   trading: [trading, finance, backtest, portfolio, market data, algorithmic]
@@ -69,7 +72,7 @@ defaults:
   max_bullets_per_role: 5      # matches latex_resume.MAX_ROLE_BULLETS
   max_bullets_per_project: 3   # matches latex_resume.MAX_PROJECT_BULLETS; floor is 2
   # Projects are picked per job by relevance to the posting: most relevant
-  # first, irrelevant ones dropped, never fewer than two on the resume.
+  # first, irrelevant ones dropped, at most four and never fewer than two.
 
 experience:
   - id: exp_bangopure
@@ -196,6 +199,74 @@ projects:
       - text: "Optimized frontend performance for fast load times across all devices and screen sizes."
         tags: [performance, react]
         src: full_stack
+
+  # ---- Design projects (from the UI/UX resume). These carry only ux tags,
+  # so they surface for design postings and drop away for engineering ones.
+  - id: proj_otakulink
+    name: "OtakuLink, Anime Streaming Platform"
+    tech: "Figma"
+    tags: [ux]
+    bullets:
+      - text: "Designed the full streaming UX from scratch: user flows, wireframes, a component library, and a high fidelity prototype."
+        tags: [ux]
+        src: uiux
+      - text: "Focused the experience on content discovery and clear visual hierarchy."
+        tags: [ux]
+        src: uiux
+      - text: "Won 1st place in the Soventure'25 competitive UI/UX design competition."
+        tags: [ux]
+        src: uiux
+
+  - id: proj_teensotera
+    name: "Teen So Tera, Islamic Web Application"
+    tech: "Figma"
+    tags: [ux]
+    bullets:
+      - text: "Designed an accessible, user centered interface for daily worship needs."
+        tags: [ux]
+        src: uiux
+      - text: "Integrated prayer times, a Qibla compass, Tasbeeh counter, daily Adhkars and an Islamic calendar into one coherent experience."
+        tags: [ux]
+        src: uiux
+      - text: "Won 1st place at DeenFest'24 for usability and aesthetic quality."
+        tags: [ux]
+        src: uiux
+
+  - id: proj_kitimat
+    name: "Kitimat Canada, Civic Community Platform"
+    tech: "Figma"
+    tags: [ux]
+    bullets:
+      - text: "Designed clean, accessible UI/UX for a transparent civic platform serving diverse user groups."
+        tags: [ux]
+        src: uiux
+      - text: "Covered local commerce, event management and community information flows across the platform."
+        tags: [ux]
+        src: uiux
+
+  - id: proj_credo
+    name: "Credo, Cybersecurity Agency Website"
+    tech: "Figma"
+    tags: [ux]
+    bullets:
+      - text: "Designed the complete website experience: service architecture pages and cloud focused sections."
+        tags: [ux]
+        src: uiux
+      - text: "Built a brand aligned visual design system carried across every page."
+        tags: [ux]
+        src: uiux
+
+  - id: proj_figma_client_work
+    name: "Selected Figma Client Work"
+    tech: "Figma"
+    tags: [ux]
+    bullets:
+      - text: "Delivered design work for international clients including BedaBoo Kids (UAE), Costa Da Morte (Spain), Aegean (Greece), The Menu (South Africa) and Brandit Lab."
+        tags: [ux]
+        src: uiux
+      - text: "Additional projects include Yale School Revamp (3rd place, NASCON'24), Sweden Relocators App, Preppo, Railroad Ecommerce, Arli Plumbing, a Women Empowerment Initiative, a travel agency and Novel Axis."
+        tags: [ux]
+        src: uiux
 
 # Structured so the template can set the institution bold with the dates flush
 # right and the degree in italics beneath — the reference resume's layout.
