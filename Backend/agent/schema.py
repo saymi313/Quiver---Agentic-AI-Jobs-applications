@@ -166,10 +166,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "model": "gemini-flash-latest",
         "api_key": "",
         "base_url": "",
-        # Real provider calls allowed per UTC day, across every purpose.
-        # Gemini's free tier is ~1,500/day; 1,200 leaves headroom for manual
-        # use of the same key elsewhere.
-        "daily_budget": 1200,
+        # Real provider calls allowed per day, across every purpose. Gemini's
+        # free tier is 20 requests per day *per model*, and the fallback list
+        # covers about three distinct models, so 60 is the honest ceiling.
+        # See agent/llm.py for the per-purpose shares underneath it.
+        "daily_budget": 60,
     },
     # The scheduler. Off by default: turning on unattended runs is a decision,
     # not a side effect of an upgrade. When on, it fires discovery and the

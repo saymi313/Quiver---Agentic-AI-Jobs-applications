@@ -16,6 +16,45 @@ const TABS = [
   { key: 'outreach', label: 'Outreach' },
 ]
 
+/*
+  The header's AI badge. It reports remaining daily calls once they run low,
+  because the free tier is small enough to run out mid-session — and when it
+  does, cover letters and form answers are quietly skipped. Silence there is
+  worse than a warning.
+*/
+function AiStatus({ ai }) {
+  const budget = ai.budget || {}
+  const { cap = 0, remaining = 0, restingModels = [] } = budget
+
+  if (!ai.available) {
+    return <Status tone="warn" title={ai.reason}>AI not configured</Status>
+  }
+  if (cap && remaining <= 0) {
+    return (
+      <Status tone="bad" title={`Every model has spent its daily free-tier allowance. Resets tomorrow.`}>
+        AI quota spent
+      </Status>
+    )
+  }
+  if (cap && remaining <= cap * 0.25) {
+    return (
+      <Status
+        tone="warn"
+        title={`${remaining} of ${cap} daily calls left${
+          restingModels.length ? `. Resting: ${restingModels.join(', ')}` : ''
+        }`}
+      >
+        {remaining} AI calls left
+      </Status>
+    )
+  }
+  return (
+    <Status tone="ok" title={cap ? `${remaining} of ${cap} daily calls left` : ai.reason}>
+      {ai.model}
+    </Status>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState('jobs')
   const [health, setHealth] = useState(null)
@@ -55,9 +94,7 @@ export default function App() {
             {offline ? (
               <Status tone="bad">API offline</Status>
             ) : health ? (
-              <Status tone={health.ai.available ? 'ok' : 'warn'} title={health.ai.reason}>
-                {health.ai.available ? health.ai.model : 'AI not configured'}
-              </Status>
+              <AiStatus ai={health.ai} />
             ) : (
               <Status tone="neutral">connecting</Status>
             )}

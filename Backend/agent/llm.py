@@ -39,35 +39,42 @@ TIMEOUT = 90
 # Budget, cache, throttle
 # --------------------------------------------------------------------------
 #
-# The free tiers this runs on are quota-bound (~1,500 requests/day on Gemini),
-# and the scheduler can now spend that quota unattended overnight. Three
-# defences, all here so no call site can forget them:
+# The free tiers this runs on are quota-bound, and the scheduler can spend that
+# quota unattended overnight. Four defences, all here so no call site can
+# forget them:
 #
 #   throttle  a minimum interval between real provider calls, so a burst of
 #             tailoring does not trip the per-minute limit and die on 429s.
-#   budget    a daily call ceiling with per-purpose reservations. Cheap bulk
-#             purposes (classification) cut out first; answering questions on
-#             a live application form is allowed up to the full cap, because
-#             failing mid-submit costs the most.
-#   cache     classification and JD analysis are pure functions of their
-#             input — the same title asked twice should cost one call.
+#   budget    a daily call ceiling, plus a per-purpose share so one bulk job
+#             cannot eat the day. Answering questions on a live application
+#             form is never share-limited: failing mid-submit costs the most.
+#   rotation  Gemini's daily allowance is per MODEL, so a model that reports
+#             its day exhausted leaves the rotation and the next one is tried.
+#   cache     classification and contact extraction are pure functions of
+#             their input — the same page asked twice should cost one call.
 #
 # A budget refusal raises LLMError like any other failure; every caller
 # already treats LLMError as "work without the model".
 
-DAILY_BUDGET_DEFAULT = 1200
+# Measured against this account, 2026-08: the free tier allows 20 requests per
+# day *per model*, not the ~1,500 per key the docs' headline number suggests.
+# `gemini-flash-latest` is an alias and shares its bucket with the model it
+# points at, so the four fallbacks are really about three buckets.
+GEMINI_FREE_PER_MODEL_PER_DAY = 20
+DAILY_BUDGET_DEFAULT = 60
 MIN_INTERVAL_S = 5.0
 
-# Fraction of the daily budget a purpose may spend up to. Purposes not listed
-# use the default. apply is 1.0 by design: it is the last thing to starve.
-PURPOSE_CEILINGS: dict[str, float] = {
-    "apply": 1.0,
-    "tailor": 0.85,
-    "outreach": 0.85,
-    "classify": 0.60,
-    "extract": 0.60,
+# The most of the daily budget any one purpose may spend on itself. These
+# deliberately over-subscribe: on a quiet day a single purpose can take more
+# than an equal split, but nothing can take everything. `apply` is exempt.
+PURPOSE_SHARE: dict[str, float] = {
+    "apply": 1.0,        # never share-limited — only the hard cap stops it
+    "tailor": 0.60,
+    "outreach": 0.30,
+    "classify": 0.30,
+    "extract": 0.20,     # contact extraction is bulk work; it goes first
 }
-DEFAULT_CEILING = 0.90
+DEFAULT_SHARE = 0.25
 
 _throttle_lock = threading.Lock()
 _last_call_at = 0.0
@@ -90,18 +97,85 @@ def budget_status() -> dict[str, Any]:
     cap = _daily_budget()
     return {"cap": cap, "spent": spent.get("total", 0),
             "remaining": max(0, cap - spent.get("total", 0)),
-            "byPurpose": {k: v for k, v in spent.items() if k != "total"}}
+            "byPurpose": {k: v for k, v in spent.items() if k != "total"},
+            "restingModels": sorted(_resting_models())}
 
 
 def _check_budget(purpose: str) -> None:
-    spent = store.llm_spent_today().get("total", 0)
+    spent = store.llm_spent_today()
     cap = _daily_budget()
-    ceiling = int(cap * PURPOSE_CEILINGS.get(purpose, DEFAULT_CEILING))
-    if spent >= ceiling:
+    total = spent.get("total", 0)
+    if total >= cap:
         raise LLMError(
-            f"Daily LLM budget reached for '{purpose}' ({spent}/{cap} calls, "
-            f"ceiling {ceiling}). Resets at midnight UTC; raise llm.daily_budget "
-            f"in Settings if the quota allows it.")
+            f"Daily LLM budget spent ({total}/{cap} calls). It resets tomorrow; "
+            f"raise llm.daily_budget in Settings if your quota allows more.")
+
+    share = int(cap * PURPOSE_SHARE.get(purpose, DEFAULT_SHARE))
+    mine = spent.get(purpose, 0)
+    if share and mine >= share:
+        raise LLMError(
+            f"'{purpose}' has used its share of today's LLM budget "
+            f"({mine}/{share} of {cap} calls). Other work can still run; this "
+            f"purpose resumes tomorrow.")
+
+
+# --------------------------------------------------------------------------
+# Per-model day quota
+# --------------------------------------------------------------------------
+#
+# A model that answers 429 with a per-day quota violation is put to rest
+# rather than retried: its allowance is gone until Google's own reset, which
+# happens on Pacific time while this store counts UTC days. Rather than model
+# that mismatch, a resting model is simply re-checked after a few hours — an
+# early re-check costs one rejected round trip, and a rejected request does
+# not consume quota.
+
+_MODEL_STATE_KEY = "llm_model_state"
+REST_FOR_S = 4 * 3600
+
+
+def _model_state() -> dict[str, str]:
+    try:
+        return dict(store.get_setting(_MODEL_STATE_KEY, {}) or {})
+    except Exception:
+        return {}
+
+
+def _resting_models() -> set[str]:
+    """Models whose daily quota reported empty recently."""
+    now = time.time()
+    resting: set[str] = set()
+    for model, marked in _model_state().items():
+        try:
+            when = float(marked)
+        except (TypeError, ValueError):
+            continue
+        if now - when < REST_FOR_S:
+            resting.add(model)
+    return resting
+
+
+def _rest_model(model: str) -> None:
+    state = {m: v for m, v in _model_state().items() if m in _resting_models()}
+    state[model] = f"{time.time():.0f}"
+    try:
+        store.set_setting(_MODEL_STATE_KEY, state)
+    except Exception:
+        pass
+
+
+def _quota_scope(payload: dict[str, Any]) -> str:
+    """'day', 'minute' or 'unknown', read out of Google's QuotaFailure detail."""
+    for detail in (payload.get("error", {}) or {}).get("details", []) or []:
+        if not str(detail.get("@type", "")).endswith("QuotaFailure"):
+            continue
+        for violation in detail.get("violations", []) or []:
+            quota_id = str(violation.get("quotaId", ""))
+            if "PerDay" in quota_id:
+                return "day"
+            if "PerMinute" in quota_id:
+                return "minute"
+    return "unknown"
 
 
 def _throttle() -> None:
@@ -141,7 +215,13 @@ OPENROUTER_FALLBACKS = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-
 
 
 class LLMError(RuntimeError):
-    pass
+    """`retryable` means waiting and asking again could work — a per-minute
+    rate limit. A daily quota is not retryable, and retrying one wastes 40
+    seconds per call for nothing."""
+
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 _ENV_LOADED = False
@@ -202,8 +282,16 @@ def _gemini(prompt: str, system: str, schema: dict | None, model: str, key: str)
         body["generationConfig"]["responseMimeType"] = "application/json"
         body["generationConfig"]["responseSchema"] = _gemini_schema(schema)
 
+    order = [model, *[m for m in GEMINI_FALLBACKS if m != model]]
+    resting = _resting_models()
+    # A model resting on an empty day quota is skipped outright; if every one
+    # is resting the list would be empty, so fall back to trying them anyway
+    # rather than refusing without asking.
+    candidates = [m for m in order if m not in resting] or order
+
     last_error = ""
-    for candidate in [model, *[m for m in GEMINI_FALLBACKS if m != model]]:
+    exhausted: list[str] = []
+    for candidate in candidates:
         resp = requests.post(
             GEMINI_URL.format(model=candidate),
             params={"key": key},
@@ -214,7 +302,20 @@ def _gemini(prompt: str, system: str, schema: dict | None, model: str, key: str)
             last_error = f"model {candidate} not found"
             continue
         if resp.status_code == 429:
-            raise LLMError("Gemini free-tier rate limit hit. Wait a minute and retry.")
+            # The daily allowance is per model, so a spent day on one model
+            # says nothing about the next: rest this one and move along.
+            try:
+                scope = _quota_scope(resp.json())
+            except Exception:
+                scope = "unknown"
+            if scope == "day":
+                _rest_model(candidate)
+                exhausted.append(candidate)
+                last_error = f"{candidate}: daily quota spent"
+                continue
+            raise LLMError(
+                f"{candidate} hit a per-minute rate limit. Waiting and retrying.",
+                retryable=True)
         if not resp.ok:
             raise LLMError(f"Gemini {resp.status_code}: {resp.text[:300]}")
         data = resp.json()
@@ -238,6 +339,15 @@ def _gemini(prompt: str, system: str, schema: dict | None, model: str, key: str)
             raise LLMError("Gemini hit the output limit before answering (thinking tokens "
                            "consumed the budget). Shorten the prompt or raise maxOutputTokens.")
         raise LLMError(f"Gemini returned no text (finishReason={reason}).")
+
+    if exhausted:
+        # Not retryable: waiting twenty seconds does not refill a day.
+        raise LLMError(
+            f"Every Gemini model has spent its free-tier day "
+            f"({GEMINI_FREE_PER_MODEL_PER_DAY} requests per model): "
+            f"{', '.join(exhausted)}. The allowance resets once a day. "
+            f"Add a second provider in Settings (Groq is also free) to keep "
+            f"working today.")
     raise LLMError(f"No usable Gemini model ({last_error}).")
 
 
@@ -285,7 +395,8 @@ def _openai_compatible(url: str, prompt: str, system: str, schema: dict | None,
             last_error = f"{candidate}: {resp.text[:160]}"
             continue
         if resp.status_code == 429:
-            raise LLMError("Provider rate limit hit. Wait a minute and retry.")
+            raise LLMError("Provider rate limit hit. Wait a minute and retry.",
+                           retryable=True)
         if not resp.ok:
             raise LLMError(f"{resp.status_code}: {resp.text[:300]}")
         return resp.json()["choices"][0]["message"]["content"]
@@ -383,7 +494,9 @@ def complete(prompt: str, *, system: str = "", schema: dict | None = None,
             return out
         except LLMError as exc:
             last = exc
-            if "rate limit" in str(exc).lower() and attempt < retries:
+            # Only a per-minute limit is worth waiting out. A spent daily
+            # quota used to cost 40 seconds of sleeping before failing anyway.
+            if getattr(exc, "retryable", False) and attempt < retries:
                 time.sleep(20 * (attempt + 1))
                 continue
             raise
