@@ -128,7 +128,14 @@ export default function JobsTab() {
         </Note>
       ) : null}
 
-      <Pipeline stats={overview.stats} retentionDays={overview.settings.limits?.retention_days ?? 3} />
+      <Pipeline
+        stats={overview.stats}
+        retentionDays={overview.settings.limits?.retention_days ?? 3}
+        schedule={overview.schedule}
+        queue={overview.queue}
+        busy={busy}
+        onRetry={() => stream.start({ key: 'agent_tasks' })}
+      />
 
       <Disclosure
         title="Search"
@@ -219,11 +226,12 @@ export default function JobsTab() {
  * produce. Contact and company totals belong on Outreach, where they are
  * actionable.
  */
-function Pipeline({ stats, retentionDays }) {
+function Pipeline({ stats, retentionDays, schedule, queue, busy, onRetry }) {
   const byStatus = stats.jobsByStatus || {}
   const ready = stats.matchedJobs || 0
   const applied = byStatus.applied || 0
   const failed = byStatus.failed || 0
+  const retrying = (queue?.pending || 0) + (queue?.failed || 0)
 
   return (
     <Section>
@@ -241,8 +249,36 @@ function Pipeline({ stats, retentionDays }) {
         />
         <Metric label="Failed" value={failed} hint={failed ? 'see the reason on the row' : 'none'} />
       </dl>
+      {schedule?.enabled ? (
+        <p className="mt-3 border-t border-line pt-2.5 text-tiny leading-relaxed text-n-500">
+          Scheduled: next search {nextWhen(schedule.nextDiscoverAt)}
+          {retrying
+            ? `; ${retrying} failed step${retrying === 1 ? '' : 's'} queued to retry ${nextWhen(schedule.nextTasksAt)}`
+            : ''}
+          . Searches run on their own — applying still takes your click.
+        </p>
+      ) : retrying ? (
+        <div className="mt-3 flex items-center justify-between gap-4 border-t border-line pt-2.5">
+          <p className="text-tiny leading-relaxed text-n-500">
+            {retrying} step{retrying === 1 ? '' : 's'} from the last search failed and can be
+            retried — descriptions that would not load, resume builds that errored.
+          </p>
+          <Button disabled={busy} onClick={onRetry}>
+            Retry failed steps
+          </Button>
+        </div>
+      ) : null}
     </Section>
   )
+}
+
+function nextWhen(iso) {
+  if (!iso) return 'soon'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) return 'within a minute'
+  const mins = Math.round((d.getTime() - Date.now()) / 60000)
+  if (mins < 60) return `in ${mins} min`
+  return `at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 /* ------------------------------------------------------- application log */

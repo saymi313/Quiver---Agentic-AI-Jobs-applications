@@ -9,6 +9,7 @@ import {
   Note,
   Select,
   Status,
+  Switch,
 } from './ui'
 
 /*
@@ -44,10 +45,19 @@ const asList = (v) =>
   Array.isArray(v) ? v : String(v || '').split(',').map((s) => s.trim()).filter(Boolean)
 const asText = (v) => (Array.isArray(v) ? v.join(', ') : v || '')
 
+function fmtWhen(iso) {
+  if (!iso) return 'soon'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'soon'
+  if (d.getTime() <= Date.now()) return 'on the next tick'
+  return `at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
+
 export default function Settings({ overview, onSaved, open, onToggle }) {
   const [profile, setProfile] = useState(overview.settings.profile)
   const [targeting, setTargeting] = useState(overview.settings.targeting)
   const [limits, setLimits] = useState(overview.settings.limits || {})
+  const [schedule, setSchedule] = useState(overview.settings.schedule || {})
   const [provider, setProvider] = useState(overview.llm.provider || 'gemini')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -88,6 +98,16 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
           ...limits,
           retention_days: Math.max(0, Number(limits.retention_days ?? 3) || 0),
           purge_keeps_applied: limits.purge_keeps_applied !== false,
+        },
+        schedule: {
+          ...schedule,
+          enabled: !!schedule.enabled,
+          discover_every_hours: Math.min(48, Math.max(1, Number(schedule.discover_every_hours ?? 6) || 6)),
+          tasks_every_minutes: Math.min(720, Math.max(2, Number(schedule.tasks_every_minutes ?? 30) || 30)),
+          quiet_hours: [
+            Math.min(23, Math.max(0, Number(schedule.quiet_hours?.[0] ?? 1) || 0)),
+            Math.min(24, Math.max(0, Number(schedule.quiet_hours?.[1] ?? 7) || 0)),
+          ],
         },
         llm: { provider, ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}) },
       })
@@ -321,6 +341,76 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
               label="Never delete jobs I applied to"
               hint="On by default. Turning this off removes your own record of where you applied; the double-apply guard still holds either way, because it reads the applications log rather than this table."
             />
+          </div>
+        </div>
+
+        {/* -------------------------------------------------------- schedule */}
+        <div>
+          <p className={group}>Schedule</p>
+          <p className="mt-1 text-tiny leading-relaxed text-n-500">
+            Runs searches and retries on their own, through the same console below. Applying is
+            never scheduled — submitting an application always takes your click.
+          </p>
+          <div className="mt-3">
+            <Switch
+              checked={!!schedule.enabled}
+              onChange={(v) => setSchedule({ ...schedule, enabled: v })}
+              label="Run on a schedule"
+              hint={
+                schedule.enabled && overview.schedule?.nextDiscoverAt
+                  ? `Next search ${fmtWhen(overview.schedule.nextDiscoverAt)}; next retry pass ${fmtWhen(overview.schedule.nextTasksAt)}.`
+                  : 'Off: everything runs only when you press a button.'
+              }
+            />
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Field label="Search every" hint="Hours between discovery runs.">
+              <Input
+                type="number"
+                min={1}
+                max={48}
+                value={schedule.discover_every_hours ?? 6}
+                onChange={(e) => setSchedule({ ...schedule, discover_every_hours: e.target.value })}
+              />
+            </Field>
+            <Field label="Retry queue every" hint="Minutes between passes over failed steps.">
+              <Input
+                type="number"
+                min={2}
+                max={720}
+                value={schedule.tasks_every_minutes ?? 30}
+                onChange={(e) => setSchedule({ ...schedule, tasks_every_minutes: e.target.value })}
+              />
+            </Field>
+            <Field label="Quiet hours" hint="Local time. Nothing fires inside this window.">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={schedule.quiet_hours?.[0] ?? 1}
+                  onChange={(e) =>
+                    setSchedule({
+                      ...schedule,
+                      quiet_hours: [e.target.value, schedule.quiet_hours?.[1] ?? 7],
+                    })
+                  }
+                />
+                <span className="shrink-0 text-tiny text-n-500">to</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={24}
+                  value={schedule.quiet_hours?.[1] ?? 7}
+                  onChange={(e) =>
+                    setSchedule({
+                      ...schedule,
+                      quiet_hours: [schedule.quiet_hours?.[0] ?? 1, e.target.value],
+                    })
+                  }
+                />
+              </div>
+            </Field>
           </div>
         </div>
 

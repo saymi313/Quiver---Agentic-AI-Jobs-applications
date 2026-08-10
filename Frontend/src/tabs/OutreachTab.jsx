@@ -331,7 +331,7 @@ export default function OutreachTab() {
 
       <Disclosure
         title="Pipeline tasks"
-        description="Rebuild the dataset, sync the sheet, retry failed rows."
+        description="Rebuild the company dataset by crawling each site."
         open={openTasks}
         onToggle={setOpenTasks}
         actions={

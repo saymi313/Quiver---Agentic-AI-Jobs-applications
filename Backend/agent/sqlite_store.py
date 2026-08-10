@@ -32,7 +32,7 @@ from typing import Any, Iterable, Iterator
 from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
-                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now,
+                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now, retry_policy,
                      with_job_defaults)
 
 DB_PATH = BASE_DIR / "agent_data.sqlite3"
@@ -150,6 +150,23 @@ CREATE TABLE IF NOT EXISTS runs (
     finished_at     TEXT
 );
 
+CREATE TABLE IF NOT EXISTS tasks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind            TEXT NOT NULL,          -- jd_fetch | resume_build | verify_email_greylist
+    payload         TEXT,                   -- JSON args for the handler
+    status          TEXT NOT NULL DEFAULT 'pending',
+        -- pending | running | done | failed | dead
+    attempts        INTEGER DEFAULT 0,
+    max_attempts    INTEGER DEFAULT 3,
+    next_run_at     TEXT,                   -- ISO UTC; due when <= now
+    last_error      TEXT,
+    priority        INTEGER DEFAULT 0,
+    dedupe_key      TEXT,                   -- idempotent enqueue
+    created_at      TEXT NOT NULL,
+    finished_at     TEXT,
+    UNIQUE(dedupe_key)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key             TEXT PRIMARY KEY,
     value           TEXT NOT NULL,
@@ -169,6 +186,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_hash   ON jobs(dedupe_hash);
 CREATE INDEX IF NOT EXISTS idx_people_status ON people(email_status);
 CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach(status);
 CREATE INDEX IF NOT EXISTS idx_app_hash ON applications(job_hash);
+CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(status, next_run_at);
 """
 
 # Columns added after the first release, applied to existing databases on open.
@@ -419,6 +437,83 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
         with tx() as c:
             c.execute(f"DELETE FROM jobs WHERE id IN ({marks})", [d["id"] for d in doomed])
     return {"deleted": len(doomed), "resumes": resumes, "cutoff": cutoff}
+
+
+# --------------------------------------------------------------------------
+# Task queue
+# --------------------------------------------------------------------------
+
+def enqueue_task(kind: str, payload: dict[str, Any], *, dedupe_key: str,
+                 priority: int = 0, delay_s: int = 0) -> int | None:
+    """Queue one retryable unit of work. Idempotent on dedupe_key."""
+    from datetime import timedelta
+
+    policy = retry_policy(kind)
+    due = (datetime.now(timezone.utc) + timedelta(seconds=delay_s)).isoformat()
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO tasks (kind, payload, status, attempts, max_attempts, "
+            "next_run_at, priority, dedupe_key, created_at) "
+            "VALUES (?,?,?,0,?,?,?,?,?) "
+            "ON CONFLICT(dedupe_key) DO NOTHING",
+            (kind, json.dumps(payload), "pending", policy["max_attempts"],
+             due, priority, dedupe_key, now()))
+        return int(cur.lastrowid) if cur.rowcount else None
+
+
+def claim_due_tasks(limit: int = 50) -> list[dict[str, Any]]:
+    """Atomically take the due tasks: mark running, return them."""
+    cutoff = now()
+    with tx() as c:
+        rows = _rows(c.execute(
+            "SELECT * FROM tasks WHERE status IN ('pending','failed') "
+            "AND next_run_at <= ? ORDER BY priority DESC, next_run_at LIMIT ?",
+            (cutoff, limit)))
+        if rows:
+            marks = ",".join("?" * len(rows))
+            c.execute(f"UPDATE tasks SET status='running' WHERE id IN ({marks})",
+                      [r["id"] for r in rows])
+    for r in rows:
+        try:
+            r["payload"] = json.loads(r["payload"] or "{}")
+        except json.JSONDecodeError:
+            r["payload"] = {}
+    return rows
+
+
+def complete_task(task_id: int) -> None:
+    with tx() as c:
+        c.execute("UPDATE tasks SET status='done', finished_at=? WHERE id=?",
+                  (now(), task_id))
+
+
+def fail_task(task_id: int, error: str) -> str:
+    """Record a failure; back off exponentially, or mark dead past the cap.
+    Returns the resulting status."""
+    from datetime import timedelta
+
+    row = _row(_conn().execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())
+    if not row:
+        return "missing"
+    attempts = int(row["attempts"] or 0) + 1
+    policy = retry_policy(row["kind"])
+    if attempts >= int(row["max_attempts"] or policy["max_attempts"]):
+        status, due = "dead", None
+    else:
+        status = "failed"
+        due = (datetime.now(timezone.utc)
+               + timedelta(seconds=policy["backoff_base_s"] * (2 ** (attempts - 1)))).isoformat()
+    with tx() as c:
+        c.execute("UPDATE tasks SET status=?, attempts=?, last_error=?, next_run_at=?, "
+                  "finished_at=? WHERE id=?",
+                  (status, attempts, (error or "")[:400], due,
+                   now() if status == "dead" else None, task_id))
+    return status
+
+
+def task_stats() -> dict[str, int]:
+    return {str(r[0]): int(r[1]) for r in
+            _conn().execute("SELECT status, COUNT(*) FROM tasks GROUP BY status")}
 
 
 def known_hashes() -> set[str]:

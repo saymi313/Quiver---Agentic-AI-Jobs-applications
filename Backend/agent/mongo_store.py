@@ -30,7 +30,8 @@ from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
                      with_job_defaults,
-                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now)
+                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now,
+                     retry_policy)
 
 _client = None
 _db = None
@@ -115,6 +116,9 @@ def _ensure_indexes(db) -> None:
     db.outreach.create_index([("id", ASCENDING)], unique=True)
     db.outreach.create_index([("status", ASCENDING)])
     db.runs.create_index([("id", ASCENDING)], unique=True)
+    db.tasks.create_index([("id", ASCENDING)], unique=True)
+    db.tasks.create_index([("dedupe_key", ASCENDING)], unique=True, sparse=True)
+    db.tasks.create_index([("status", ASCENDING), ("next_run_at", ASCENDING)])
 
 
 def init() -> None:
@@ -321,6 +325,86 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
     if doomed:
         db.jobs.delete_many({"id": {"$in": [int(d["id"]) for d in doomed]}})
     return {"deleted": len(doomed), "resumes": resumes, "cutoff": cutoff}
+
+
+# --------------------------------------------------------------------------
+# Task queue — mirrors sqlite_store function for function
+# --------------------------------------------------------------------------
+
+def enqueue_task(kind: str, payload: dict[str, Any], *, dedupe_key: str,
+                 priority: int = 0, delay_s: int = 0) -> int | None:
+    """Queue one retryable unit of work. Idempotent on dedupe_key."""
+    db = _connect()
+    if db.tasks.find_one({"dedupe_key": dedupe_key}, {"id": 1}):
+        return None
+    policy = retry_policy(kind)
+    due = (datetime.now(timezone.utc) + timedelta(seconds=delay_s)).isoformat()
+    doc = {"id": _next_id("tasks"), "kind": kind, "payload": json.dumps(payload),
+           "status": "pending", "attempts": 0, "max_attempts": policy["max_attempts"],
+           "next_run_at": due, "last_error": None, "priority": int(priority),
+           "dedupe_key": dedupe_key, "created_at": now(), "finished_at": None}
+    try:
+        db.tasks.insert_one(doc)
+    except Exception:
+        return None          # lost a race on the unique index — already queued
+    return int(doc["id"])
+
+
+def claim_due_tasks(limit: int = 50) -> list[dict[str, Any]]:
+    """Atomically take the due tasks: mark running, return them."""
+    db = _connect()
+    cutoff = now()
+    claimed: list[dict[str, Any]] = []
+    for _ in range(int(limit)):
+        doc = db.tasks.find_one_and_update(
+            {"status": {"$in": ["pending", "failed"]}, "next_run_at": {"$lte": cutoff}},
+            {"$set": {"status": "running"}},
+            sort=[("priority", -1), ("next_run_at", 1)],
+            return_document=True)
+        if not doc:
+            break
+        doc.pop("_id", None)
+        try:
+            doc["payload"] = json.loads(doc.get("payload") or "{}")
+        except json.JSONDecodeError:
+            doc["payload"] = {}
+        claimed.append(doc)
+    return claimed
+
+
+def complete_task(task_id: int) -> None:
+    _connect().tasks.update_one(
+        {"id": int(task_id)},
+        {"$set": {"status": "done", "finished_at": now()}})
+
+
+def fail_task(task_id: int, error: str) -> str:
+    """Record a failure; back off exponentially, or mark dead past the cap.
+    Returns the resulting status."""
+    db = _connect()
+    row = db.tasks.find_one({"id": int(task_id)})
+    if not row:
+        return "missing"
+    attempts = int(row.get("attempts") or 0) + 1
+    policy = retry_policy(row["kind"])
+    if attempts >= int(row.get("max_attempts") or policy["max_attempts"]):
+        status, due, fin = "dead", None, now()
+    else:
+        status = "failed"
+        due = (datetime.now(timezone.utc)
+               + timedelta(seconds=policy["backoff_base_s"] * (2 ** (attempts - 1)))).isoformat()
+        fin = None
+    db.tasks.update_one({"id": int(task_id)}, {"$set": {
+        "status": status, "attempts": attempts, "last_error": (error or "")[:400],
+        "next_run_at": due, "finished_at": fin}})
+    return status
+
+
+def task_stats() -> dict[str, int]:
+    out: dict[str, int] = {}
+    for doc in _connect().tasks.aggregate([{"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
+        out[str(doc["_id"])] = int(doc["n"])
+    return out
 
 
 def known_hashes() -> set[str]:

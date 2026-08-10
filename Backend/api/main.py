@@ -43,6 +43,15 @@ from .resume_parse import parse_resume
 
 app = FastAPI(title="Quiver", version="1.0.0")
 
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    # The daemon thread that fires scheduled discovery and retry drains. It
+    # does nothing until schedule.enabled is turned on in Settings, and it can
+    # only ever dispatch the tasks in scheduler.SCHEDULABLE — never applying.
+    from . import scheduler
+    scheduler.start()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -545,6 +554,7 @@ async def auto_stream(job_id: str, cursor: int = 0):
 @app.get("/api/agent/overview")
 def agent_overview() -> dict[str, Any]:
     from agent import llm as agent_llm, matcher, store as agent_store
+    from . import scheduler
 
     agent_store.init()
     ok, reason = agent_llm.available()
@@ -552,6 +562,8 @@ def agent_overview() -> dict[str, Any]:
     running = manager.active()
     return {
         "stats": agent_store.stats(),
+        "schedule": scheduler.status(),
+        "queue": agent_store.task_stats(),
         "settings": agent_store.all_settings(),
         "store": agent_store.backend_status(),
         "llm": {"available": ok, "reason": reason, **agent_llm.config(), "api_key": ""},
@@ -660,6 +672,7 @@ class SettingsPatch(BaseModel):
     targeting: dict[str, Any] | None = None
     limits: dict[str, Any] | None = None
     llm: dict[str, Any] | None = None
+    schedule: dict[str, Any] | None = None
 
 
 @app.post("/api/agent/settings")

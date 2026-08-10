@@ -5,6 +5,7 @@ The agent loop.
   resumes   build a tailored resume for specific jobs, on demand
   apply     fill and submit the forms for specific jobs the user chose
   outreach  research each verified contact, write a personal email, send it
+  tasks     drain the retry queue: failed JD fetches, resume builds, greylists
 
 Applying is user-triggered only. Discovery and resume generation are safe to
 automate; submitting an application on someone's behalf without them asking is
@@ -246,6 +247,12 @@ def discover(*, which: list[str], limit: int, find_people: bool,
                     counts["people"] += 1
                     if check["status"] in ("valid", "risky"):
                         counts["verified"] += 1
+                    elif "greylisted" in (check.get("detail") or ""):
+                        # The mail server literally asked us to retry later.
+                        store.enqueue_task(
+                            "verify_email_greylist",
+                            {"person_id": pid, "company_id": cid, "email": email},
+                            dedupe_key=f"verify:{email}", delay_s=900)
                     log(f"[hn] {email:<38} {check['status']} ({check['score']:.2f})")
 
     # ---- Remote / European boards ---------------------------------------
@@ -323,6 +330,7 @@ def discover(*, which: list[str], limit: int, find_people: bool,
     if track.new_ids:
         log(_rule("Fetching full job descriptions"))
         fetched = 0
+        queued_retries = 0
         for job_id in track.new_ids:
             row = store.job(job_id)
             if not row or not jobdesc.needs_fetch(row):
@@ -331,7 +339,15 @@ def discover(*, which: list[str], limit: int, find_people: bool,
             if text and len(text) > len(row.get("description") or ""):
                 store.set_job_description(job_id, text, origin)
                 fetched += 1
-        log(f"[jd] filled in {fetched} description(s) from the listing pages")
+            elif origin == "unavailable" and (row.get("url") or row.get("apply_url")):
+                # Not silence: queue a retry for the tasks cadence. A job with
+                # no URL at all is excluded — there is nothing to retry against.
+                if store.enqueue_task("jd_fetch", {"job_id": job_id},
+                                      dedupe_key=f"jd_fetch:{job_id}", delay_s=600):
+                    queued_retries += 1
+        log(f"[jd] filled in {fetched} description(s) from the listing pages"
+            + (f", queued {queued_retries} retr{'y' if queued_retries == 1 else 'ies'}"
+               if queued_retries else ""))
         counts["descriptions"] = fetched
 
     # ---- Score everything found -----------------------------------------
@@ -379,6 +395,9 @@ def discover(*, which: list[str], limit: int, find_people: bool,
             for row in queue[:cap]:
                 if tailor.build_and_record(row, log=log)["ok"]:
                     built += 1
+                else:
+                    store.enqueue_task("resume_build", {"job_id": int(row["id"])},
+                                       dedupe_key=f"resume_build:{row['id']}", delay_s=900)
             counts["resumes"] = built
             if len(queue) > cap:
                 log(f"[resume] {len(queue) - cap} matched role(s) left without a resume — "
@@ -394,12 +413,103 @@ def discover(*, which: list[str], limit: int, find_people: bool,
 
 
 # --------------------------------------------------------------------------
+# Task queue drain
+# --------------------------------------------------------------------------
+
+def drain_tasks(limit: int = 50, *, log: Callable[[str], None] = _log) -> dict[str, Any]:
+    """
+    Work through everything due in the retry queue.
+
+    Each task is one unit of background work that failed during discovery and
+    was queued instead of forgotten: a JD fetch that timed out, a resume build
+    that errored, a greylisted address whose mail server said "retry later".
+    Success completes the task; failure backs off exponentially until the
+    policy in schema.RETRY_POLICIES declares it dead.
+    """
+    tasks = store.claim_due_tasks(limit)
+    counts = {"claimed": len(tasks), "done": 0, "failed": 0, "dead": 0}
+    if not tasks:
+        log("[tasks] queue is empty — nothing due")
+        return counts
+
+    log(f"[tasks] {len(tasks)} task(s) due")
+    jd_filled = 0
+
+    def settle(tid: int, ok: bool, error: str = "") -> None:
+        if ok:
+            store.complete_task(tid)
+            counts["done"] += 1
+        else:
+            status = store.fail_task(tid, error)
+            counts["dead" if status == "dead" else "failed"] += 1
+
+    for t in tasks:
+        tid, kind = int(t["id"]), t["kind"]
+        payload = t.get("payload") or {}
+
+        if kind == "jd_fetch":
+            job_id = int(payload.get("job_id") or 0)
+            row = store.job(job_id)
+            if not row or not jobdesc.needs_fetch(row):
+                # Purged, or filled in by a later discover run: nothing left to do.
+                settle(tid, True)
+                continue
+            text, origin = jobdesc.fetch_description(row, log=log)
+            if text and len(text) > len(row.get("description") or ""):
+                store.set_job_description(job_id, text, origin)
+                jd_filled += 1
+                log(f"[tasks] jd_fetch #{job_id}: got {len(text)} chars ({origin})")
+                settle(tid, True)
+            else:
+                settle(tid, False, "description still unavailable")
+
+        elif kind == "resume_build":
+            job_id = int(payload.get("job_id") or 0)
+            row = store.job(job_id)
+            if not row or tailor.existing(row):
+                settle(tid, True)
+                continue
+            out = tailor.build_and_record(row, log=log)
+            settle(tid, out["ok"], out.get("reason") or "build failed")
+
+        elif kind == "verify_email_greylist":
+            email = (payload.get("email") or "").strip().lower()
+            if not email:
+                settle(tid, False, "no email in payload")
+                continue
+            check = people_mod.verify_email(email, log=log)
+            log(f"[tasks] verify {email}: {check['status']} ({check['detail'][:60]})")
+            if check["status"] in ("valid", "risky", "invalid"):
+                # A definitive answer either way resolves the task; only
+                # "unknown" (still greylisted / unreachable) retries.
+                store.upsert_person({
+                    "company_id": payload.get("company_id"), "email": email,
+                    "email_status": check["status"], "email_score": check["score"],
+                    "verify_detail": check["detail"],
+                })
+                settle(tid, True)
+            else:
+                settle(tid, False, check["detail"])
+
+        else:
+            settle(tid, False, f"unknown task kind: {kind}")
+
+    if jd_filled:
+        # Fresh descriptions change fit scores, so re-score before anyone reads them.
+        log(_rule("Re-scoring jobs with new descriptions"))
+        counts.update(matcher.score_pending(limit=100, log=log))
+
+    log(f"[tasks] done={counts['done']} retry_later={counts['failed']} dead={counts['dead']}")
+    return counts
+
+
+# --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
-    ap.add_argument("mode", choices=["discover", "apply", "resumes", "outreach"])
+    ap.add_argument("mode", choices=["discover", "apply", "resumes", "outreach", "tasks"])
     ap.add_argument("--sources", default="yc,hn,remote,hidden",
                     help="comma list: yc, hn, remote, hidden")
     ap.add_argument("--limit", type=int, default=25)
@@ -447,6 +557,10 @@ def main(argv: list[str] | None = None) -> int:
                 _log(_rule("Applying to the selected jobs"))
                 stats["apply"] = applier.apply_to_ids(
                     job_ids, dry_run=args.dry_run, headless=not args.headed)
+
+        if args.mode == "tasks":
+            _log(_rule("Draining the retry queue"))
+            stats["tasks"] = drain_tasks(limit=max(args.limit, 50))
 
         if args.mode == "outreach":
             _log(_rule("Cold outreach"))

@@ -48,6 +48,38 @@ def with_job_defaults(row: dict[str, Any]) -> dict[str, Any]:
     row["has_resume"] = bool(row.get("resume_path"))
     return row
 
+# --------------------------------------------------------------------------
+# Task queue
+# --------------------------------------------------------------------------
+#
+# A task is one retryable unit of background work: fetch a JD that timed out,
+# rebuild a resume whose LaTeX pass failed, re-verify a greylisted address.
+# Failures used to be a log line and then silence; now they are rows that the
+# `tasks` runner mode drains on its own cadence.
+#
+# `dedupe_key` makes enqueueing idempotent — discovering the same job twice
+# must not queue its JD fetch twice.
+
+TASK_FIELDS = (
+    "kind", "payload", "status", "attempts", "max_attempts",
+    "next_run_at", "last_error", "priority", "dedupe_key",
+)
+
+TASK_STATUSES = ("pending", "running", "done", "failed", "dead")
+
+# Retry behaviour lives here as data, not scattered through call sites.
+# `backoff_base_s` doubles per attempt: base, 2x, 4x...
+RETRY_POLICIES: dict[str, dict[str, int]] = {
+    "jd_fetch":              {"max_attempts": 3, "backoff_base_s": 600},
+    "resume_build":          {"max_attempts": 3, "backoff_base_s": 900},
+    "verify_email_greylist": {"max_attempts": 4, "backoff_base_s": 900},
+}
+
+
+def retry_policy(kind: str) -> dict[str, int]:
+    return RETRY_POLICIES.get(kind, {"max_attempts": 3, "backoff_base_s": 600})
+
+
 PERSON_FIELDS = (
     "company_id", "full_name", "role", "title", "email", "email_source",
     "email_status", "email_score", "verify_detail", "linkedin", "github",
@@ -134,6 +166,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "model": "gemini-flash-latest",
         "api_key": "",
         "base_url": "",
+    },
+    # The scheduler. Off by default: turning on unattended runs is a decision,
+    # not a side effect of an upgrade. When on, it fires discovery and the
+    # retry queue on their own cadences — applying is not schedulable at all.
+    "schedule": {
+        "enabled": False,
+        "discover_every_hours": 6,
+        "tasks_every_minutes": 30,
+        "sources": ["yc", "hn", "remote", "hidden"],
+        "discover_limit": 25,
+        # Local hours [start, end) during which nothing fires.
+        "quiet_hours": [1, 7],
     },
 }
 

@@ -68,6 +68,15 @@ RUNNABLE = {
                        "same engine and house style as the Resume Tailor tab.",
         "flags": ["job_ids"],
     },
+    "agent_tasks": {
+        "label": "Retry failed steps",
+        "module": "agent.runner",
+        "subcommand": "tasks",
+        "description": "Work through the retry queue: job descriptions that would not load, "
+                       "resume builds that errored, and email checks the mail server asked "
+                       "us to retry later.",
+        "flags": ["limit"],
+    },
     "agent_outreach": {
         "label": "Cold email founders",
         "module": "agent.runner",
