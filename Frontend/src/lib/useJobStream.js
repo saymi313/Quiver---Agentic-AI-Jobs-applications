@@ -3,9 +3,13 @@ import { api } from './api'
 
 /**
  * Drives one background task: start it, stream its stdout over SSE, stop it.
- * Shared by the Auto Mode and Agent tabs so both consoles behave identically.
+ *
+ * Takes the finish callback as a bare function. The old `{ onFinish }` shape
+ * silently accepted a plain function too — destructuring just made `onFinish`
+ * undefined, so the caller's refresh never ran and the screen sat stale after
+ * every run.
  */
-export function useJobStream({ onFinish } = {}) {
+export function useJobStream(onFinish) {
   const [job, setJob] = useState(null)
   const [lines, setLines] = useState([])
   const [starting, setStarting] = useState('')
@@ -84,5 +88,5 @@ export function useJobStream({ onFinish } = {}) {
   useEffect(() => detach, [detach])
 
   const busy = job?.status === 'running' || job?.status === 'stopping'
-  return { job, lines, busy, starting, error, setError, start, stop, view, attach, clear: () => setLines([]) }
+  return { job, lines, busy, starting, error, setError, start, stop, view, clear: () => setLines([]) }
 }

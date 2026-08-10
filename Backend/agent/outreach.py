@@ -25,7 +25,7 @@ from typing import Any, Callable
 from api.config import BASE_DIR
 from api import behuman
 
-from . import llm, matcher, store
+from . import env, llm, matcher, store
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
@@ -57,20 +57,10 @@ Rules:
 """ + "\n" + behuman.RULES
 
 
-def _load_env() -> None:
-    env_file = BASE_DIR / ".env"
-    if not env_file.exists():
-        return
-    for raw in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def credentials() -> tuple[str, str]:
-    _load_env()
+    env.load()
     return os.environ.get("GMAIL_ADDRESS", ""), os.environ.get("GMAIL_APP_PASS", "")
 
 

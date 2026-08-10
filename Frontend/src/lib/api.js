@@ -44,8 +44,6 @@ export const api = {
 
   stop: (jobId) => fetch(`${BASE}/api/auto/stop/${jobId}`, { method: 'POST' }).then(handle),
 
-  job: (jobId, cursor = 0) => fetch(`${BASE}/api/auto/jobs/${jobId}?cursor=${cursor}`).then(handle),
-
   streamUrl: (jobId, cursor = 0) => `${BASE}/api/auto/jobs/${jobId}/stream?cursor=${cursor}`,
 
   // ---- agent ----
@@ -66,6 +64,8 @@ export const api = {
     if (q) p.set('q', q)
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
+
+  agentScreenshotUrl: (name) => `${BASE}/api/agent/screenshot/${encodeURIComponent(name)}`,
 
   agentResumeUrl: (jobId, fmt = 'pdf', download = false) =>
     `${BASE}/api/agent/resume/${jobId}?fmt=${fmt}${download ? '&download=true' : ''}`,

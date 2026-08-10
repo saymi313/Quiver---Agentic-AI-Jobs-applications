@@ -1,7 +1,10 @@
 # ---------------------------------------------------------------------------
 # Secrets — never commit these
 # ---------------------------------------------------------------------------
-Backend/.env
+# Any .env anywhere — a future Frontend/.env must never reach a commit.
+.env
+.env.*
+!.env.example
 Backend/credentials.json
 Backend/token.json
 *.pem
@@ -27,6 +30,7 @@ env/
 # ---------------------------------------------------------------------------
 Backend/outputs/
 Backend/cv_data/_build_*/
+Backend/cv_data/*.tex
 
 # Local LaTeX engine (20 MB binary, fetched by tools/install_tex.py)
 Backend/tools/tectonic*
@@ -39,7 +43,8 @@ Backend/agent_data.sqlite3-*
 
 # LaTeX build artifacts
 *.aux
-*.log
+Backend/cv_data/*.log
+Backend/outputs/**/*.log
 *.out
 *.toc
 *.fls
@@ -72,5 +77,3 @@ desktop.ini
 # ---------------------------------------------------------------------------
 # Backend/companies_dataset.csv
 # Backend/send_log.jsonl
-# Backend/applications.jsonl
-# Backend/*.xlsx

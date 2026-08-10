@@ -40,7 +40,7 @@ PROFILE_PATH = CV_DATA / "profile.yaml"
 MIN_ROLE_BULLETS = 3
 MAX_ROLE_BULLETS = 5
 
-# Same delimiters cv_engine.py uses, so one template serves both paths.
+# Custom delimiters so LaTeX braces pass through Jinja untouched.
 JINJA_KW = dict(
     block_start_string="[%", block_end_string="%]",
     variable_start_string="[[", variable_end_string="]]",
@@ -435,50 +435,23 @@ def _styled(s: Any) -> str:
     return tex_escape(resume_style.enforce(s))
 
 
-def _skill_rows(lines: list[str]) -> list[dict[str, str]]:
-    """
-    Split `Languages: JavaScript, C++` into a bold category and its list.
-
-    The house style wants categorised bullets rather than a paragraph, so a
-    line with no colon still becomes a row — it just gets a generic label
-    rather than being silently dropped.
-    """
-    rows: list[dict[str, str]] = []
-    for line in lines:
-        if not line or not line.strip():
-            continue
-        label, sep, items = line.partition(":")
-        if not sep or len(label) > 40:
-            rows.append({"label": "Also", "value": _styled(line)})
-        else:
-            rows.append({"label": _styled(label), "value": _styled(items)})
-    return rows
-
 
 def render_tex(content: ResumeContent) -> str:
     env = Environment(loader=FileSystemLoader(str(CV_DATA)), autoescape=False, **JINJA_KW)
     env.filters["tex"] = tex_escape
     template = env.get_template(TEMPLATE_NAME)
 
-    # Contact line in the reference layout: location, phone, email, then the
-    # full URLs spelled out. It wraps to a second centred line rather than
-    # abbreviating — a text parser reads the whole address, and the reference
-    # resume does exactly this. Nothing here is style-enforced: a hyphen inside
-    # linkedin.com/in/usairam-saeed-148044285 is part of the address.
-    parts: list[str] = []
-    if content.location:
-        parts.append(_styled(content.location))
-    if content.phone:
-        parts.append(tex_escape(resume_style.phone(content.phone)))
-    if content.email:
-        parts.append(tex_escape(content.email))
-    for link in content.links:
-        url = link.get("url", "")
-        if not url:
-            continue
-        shown = re.sub(r"^https?://(www\.)?", "", url).rstrip("/")
-        parts.append(rf"\href{{{tex_url(url)}}}{{{tex_escape(shown)}}}")
-    contact_line = r" \textbar{} ".join(p for p in parts if p)
+    # Contact ordering comes from the shared helper so this renderer and the
+    # DOCX/TXT one cannot drift; only the LaTeX escaping and the hyperlink
+    # wrapping are format-specific. URLs get \href on top of the visible text.
+    url_by_text = {re.sub(r"^https?://(www\.)?", "", (l.get("url") or "")).rstrip("/"): l["url"]
+                   for l in (content.links or []) if l.get("url")}
+    shown = [
+        rf"\href{{{tex_url(url_by_text[part])}}}{{{tex_escape(part)}}}"
+        if part in url_by_text else tex_escape(part)
+        for part in resume_style.contact_parts(content)
+    ]
+    contact_line = r" \textbar{} ".join(shown)
 
     # The reference merges awards, certifications and languages into one
     # bulleted section: each award is its own bullet, all certifications share
@@ -496,7 +469,7 @@ def render_tex(content: ResumeContent) -> str:
         "title": _styled(content.title),
         "contact_line": contact_line,
         "summary": _styled(content.summary),
-        "skills": _skill_rows(content.skills),
+        "skills": resume_style.skill_rows(content.skills),
         "education": [_styled(e) for e in content.education if e],
         "education_entries": [{
             "institution": _styled(e.get("institution")), "location": _styled(e.get("location")),

@@ -57,13 +57,8 @@ FIELD_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"why.*(join|company|us|interested)|cover\s*letter|motivat", re.I), "_cover_letter"),
 ]
 
-SUBMIT_RE = re.compile(r"^\s*(submit|send|apply|submit application|apply now|"
-                       r"send application|finish|complete)\s*$", re.I)
-
 # Walls the agent cannot get past. Detected explicitly so the job is recorded as
 # a failure with a reason the user can act on, rather than disappearing.
-CAPTCHA_MARKERS = ("recaptcha", "hcaptcha", "turnstile", "captcha", "arkoselabs",
-                   "funcaptcha", "geetest")
 LOGIN_MARKERS = re.compile(
     r"\b(sign in to (?:apply|continue)|log ?in to (?:apply|continue)|"
     r"create an account to apply|please (?:sign|log) ?in|"
@@ -914,62 +909,3 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
     log(f"[apply] done — submitted={counts['submitted']} filled={counts.get('filled', 0)} "
         f"failed={counts['failed']} already-applied={counts['already']}")
     return counts
-
-
-def run_applications(limit: int = 5, *, dry_run: bool = False, headless: bool = True,
-                     max_age_days: int | None = None,
-                     log: Callable[[str], None] = print) -> dict[str, Any]:
-    targeting = store.get_setting("targeting", {}) or {}
-    threshold = float(targeting.get("min_fit_score", 55))
-    if max_age_days is None:
-        max_age_days = targeting.get("max_age_days", 3)
-    require_date = bool(targeting.get("require_posted_date", True))
-    order = targeting.get("apply_order", "recent")
-
-    queue = store.jobs_to_apply(limit=limit, min_score=threshold,
-                                max_age_days=max_age_days,
-                                require_posted_date=require_date, order=order)
-    jobs, excluded = queue["jobs"], queue["excluded"]
-
-    log(f"[apply] {excluded['considered']} matched role(s) considered · "
-        f"skipped {excluded['stale']} older than {max_age_days}d, "
-        f"{excluded['undated']} with no posting date, "
-        f"{excluded['duplicate']} already applied to")
-
-    if not jobs:
-        log("[apply] nothing fresh to apply to. Run Research again for newer postings, "
-            "widen the age window, or lower the fit threshold in Settings.")
-        return {"attempted": 0, "submitted": 0, "skipped": 0, "failed": 0, **excluded}
-
-    log(f"[apply] {len(jobs)} role(s) queued, "
-        f"{'newest first' if order == 'recent' else 'best fit first'}"
-        + (" — DRY RUN, nothing will be submitted" if dry_run else ""))
-
-    counts = {"attempted": 0, "submitted": 0, "skipped": 0, "failed": 0, "filled": 0}
-    seen_this_run: set[str] = set()
-
-    for job in jobs:
-        job_hash = job.get("dedupe_hash")
-        # Re-check against the live table: a long run could have submitted this
-        # same role under a different URL a few minutes ago.
-        if job_hash and (job_hash in seen_this_run or job_hash in store.applied_hashes()):
-            log(f"[apply] SKIP (already applied) {job.get('company_name')} — {job['title'][:50]}")
-            store.set_job_status(job["id"], "duplicate")
-            counts["skipped"] += 1
-            continue
-
-        age = job.get("age_days")
-        log(f"[apply] fit {job.get('fit_score', 0):.0f} · posted "
-            f"{'unknown' if age is None else f'{age:.1f}d ago'} · hash {job_hash or '—'}")
-
-        counts["attempted"] += 1
-        result = apply_to_job(job, dry_run=dry_run, headless=headless, log=log)
-        status = _record(job, result, dry_run=dry_run, log=log)
-        counts[status] = counts.get(status, 0) + 1
-        if status in ("submitted", "filled") and not dry_run and job_hash:
-            seen_this_run.add(job_hash)
-        time.sleep(2)
-
-    log(f"[apply] done — submitted={counts.get('submitted',0)} filled={counts.get('filled',0)} "
-        f"skipped={counts.get('skipped',0)} failed={counts.get('failed',0)}")
-    return {**counts, **excluded}

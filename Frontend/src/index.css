@@ -31,7 +31,6 @@
   /* ---------- primitive: accent + status ---------- */
   --color-brand-500: #26a37f;
   --color-brand-400: #34c397;
-  --color-brand-300: #6bd6b5;
   --color-ok-400: #35c08a;
   --color-warn-400: #d9a441;
   --color-bad-400: #e0655f;
@@ -46,17 +45,13 @@
   --color-line-strong: #30343d;
 
   --color-fg: var(--color-n-100);
-  --color-fg-muted: var(--color-n-400);
-  --color-fg-subtle: var(--color-n-500);
 
   --color-accent: var(--color-brand-500);
-  --color-accent-hover: var(--color-brand-400);
 
   /* ---------- radius ---------- */
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 10px;
 
   /* ---------- type ---------- */
   --text-micro: 11px;
@@ -65,8 +60,6 @@
   --text-tiny--line-height: 18px;
   --text-sm: 13px;
   --text-sm--line-height: 20px;
-  --text-base: 14px;
-  --text-base--line-height: 22px;
   --text-lg: 16px;
   --text-lg--line-height: 24px;
   --text-xl: 20px;

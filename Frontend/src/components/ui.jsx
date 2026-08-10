@@ -140,7 +140,7 @@ export function Button({
   )
 }
 
-export function Spinner({ className = 'size-3.5' }) {
+function Spinner({ className = 'size-3.5' }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
@@ -150,7 +150,7 @@ export function Spinner({ className = 'size-3.5' }) {
 }
 
 /** Shared by input, select and textarea so the three can never drift. */
-export const control =
+const control =
   'w-full rounded-sm border border-line-strong bg-sunken px-2.5 py-1.5 text-sm text-n-100 ' +
   'transition-colors outline-none placeholder:text-n-600 ' +
   'hover:border-n-600 focus:border-brand-400 disabled:bg-surface disabled:text-n-500'
@@ -404,26 +404,10 @@ const stroke = {
 /** Icons are 14px (size-3.5) inside buttons and 16px (size-4) standalone.
  *  Only glyphs the app actually uses live here. */
 export const Icon = {
-  Play: (p) => (
-    <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden="true" {...p}>
-      <path d="M8 5.5v13a1 1 0 0 0 1.53.85l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5Z" />
-    </svg>
-  ),
-  Stop: (p) => (
-    <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden="true" {...p}>
-      <rect x="6" y="6" width="12" height="12" rx="2" />
-    </svg>
-  ),
   Download: (p) => (
     <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
       <path d="M12 4v12m0 0 4-4m-4 4-4-4" />
       <path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
-    </svg>
-  ),
-  Upload: (p) => (
-    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
-      <path d="M12 16V4m0 0L8 8m4-4 4 4" />
-      <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
     </svg>
   ),
   Doc: (p) => (
@@ -436,11 +420,6 @@ export const Icon = {
     <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
       <path d="M20 11a8 8 0 1 0-.6 4" />
       <path d="M20 5v6h-6" />
-    </svg>
-  ),
-  Check: (p) => (
-    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
-      <path d="m5 13 4 4L19 7" />
     </svg>
   ),
   X: (p) => (

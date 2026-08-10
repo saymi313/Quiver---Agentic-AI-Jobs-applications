@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { useJobStream } from '../lib/useJobStream'
 import Console from '../components/Console'
 import {
   Button,
@@ -43,10 +44,6 @@ export default function OutreachTab() {
   const [activity, setActivity] = useState(null)
   const [agent, setAgent] = useState(null)
   const [error, setError] = useState('')
-  const [starting, setStarting] = useState('')
-  const [job, setJob] = useState(null)
-  const [lines, setLines] = useState([])
-  const esRef = useRef(null)
 
   // Founder outreach (agent)
   const [emailLimit, setEmailLimit] = useState(10)
@@ -82,67 +79,31 @@ export default function OutreachTab() {
     }
   }, [])
 
-  const attachStream = useCallback(
-    (jobId, cursor = 0) => {
-      esRef.current?.close()
-      const es = new EventSource(api.streamUrl(jobId, cursor))
-      esRef.current = es
-      es.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data)
-        if (msg.type === 'lines') setLines((prev) => [...prev, ...msg.lines])
-        if (msg.type === 'end') {
-          setJob(msg.job)
-          es.close()
-          esRef.current = null
-          refresh()
-        }
-      }
-      es.onerror = () => {
-        es.close()
-        esRef.current = null
-      }
-    },
-    [refresh],
-  )
+  // One SSE implementation for the whole app. This tab used to hand-roll
+  // its own EventSource handling, line for line the same as the hook.
+  const stream = useJobStream(refresh)
 
   useEffect(() => {
     refresh().then((o) => {
-      if (o?.activeJob) {
-        setJob(o.activeJob)
-        setLines([])
-        attachStream(o.activeJob.id, 0)
-      }
+      if (o?.activeJob) stream.view(o.activeJob)
     })
-    return () => esRef.current?.close()
-  }, [refresh, attachStream])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh])
 
   useEffect(() => {
-    if (job?.status !== 'running') return
+    if (stream.job?.status !== 'running') return
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
-  }, [job?.status, refresh])
+  }, [stream.job?.status, refresh])
 
-  async function run(key, payload = {}) {
-    setError('')
-    setStarting(key)
-    try {
-      const started = await api.run({ key, ...payload })
-      setJob(started)
-      setLines([])
-      attachStream(started.id, 0)
-      refresh()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setStarting('')
-    }
-  }
+  const run = (key, payload = {}) => stream.start({ key, ...payload })
 
   if (!csv) return <Empty title="Loading" />
 
   const stats = csv.stats
   const env = csv.environment
-  const busy = job?.status === 'running' || job?.status === 'stopping' || !!starting
+  const starting = stream.starting
+  const busy = stream.busy || !!starting
   const tasks = csv.tasks?.filter((t) => t.key !== 'send') || []
   const verified =
     (agent?.stats?.peopleByStatus?.valid || 0) + (agent?.stats?.peopleByStatus?.risky || 0)
@@ -332,7 +293,7 @@ export default function OutreachTab() {
         </div>
       </Section>
 
-      <Console lines={lines} job={job} onStop={() => api.stop(job.id).catch((e) => setError(e.message))} onClear={() => setLines([])} />
+      <Console lines={stream.lines} job={stream.job} onStop={stream.stop} onClear={stream.clear} />
 
       {/* ---------------------------------------------------------- history */}
       <Section title="Recent sends" description="Every attempt, newest first." flush>

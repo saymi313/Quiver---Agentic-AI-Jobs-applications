@@ -251,6 +251,19 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                   {r.failure_reason ? (
                     <p className="mt-0.5 text-micro leading-snug text-bad-400/80">
                       {r.failure_reason}
+                      {r.screenshot ? (
+                        <>
+                          {' '}
+                          <a
+                            href={api.agentScreenshotUrl(r.screenshot)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-n-500 underline hover:text-n-300"
+                          >
+                            screenshot
+                          </a>
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
                 </Td>

@@ -35,34 +35,14 @@ HEAD_PT = 12
 SMALL_PT = 9.5
 
 
+# Both delegate to resume_style so this renderer and the LaTeX one share one
+# definition of "how skills split" and "what order the contact line goes in".
 def _rows(skills: list[str]) -> list[tuple[str, str]]:
-    """`Languages: JavaScript, C++` -> ("Languages", "JavaScript, C++")."""
-    out: list[tuple[str, str]] = []
-    for line in skills:
-        if not line or not line.strip():
-            continue
-        label, sep, items = line.partition(":")
-        if sep and len(label) <= 40:
-            out.append((resume_style.enforce(label), resume_style.enforce(items)))
-        else:
-            out.append(("Also", resume_style.enforce(line)))
-    return out
+    return [(r["label"], r["value"]) for r in resume_style.skill_rows(skills)]
 
 
 def _contact_line(content: Any) -> str:
-    """Reference order: location, phone, email, then every URL spelled out."""
-    parts: list[str] = []
-    if content.location:
-        parts.append(resume_style.enforce(content.location))
-    if content.phone:
-        parts.append(resume_style.phone(content.phone))
-    if content.email:
-        parts.append(content.email)
-    for link in content.links or []:
-        url = (link.get("url") or "").strip()
-        if url:
-            parts.append(re.sub(r"^https?://(www\.)?", "", url).rstrip("/"))
-    return " | ".join(p for p in parts if p)
+    return " | ".join(resume_style.contact_parts(content))
 
 
 def _achievements(content: Any) -> list[tuple[str, str]]:

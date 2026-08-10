@@ -19,13 +19,8 @@ Apply Method classification:
     Unknown   - scraping failed; human review required
 
 Requirements:
-    pip install gspread google-auth requests beautifulsoup4 lxml
+    pip install requests beautifulsoup4
 
-Google Sheets setup:
-    1. Create a Google Cloud project and enable Google Sheets + Drive APIs.
-    2. Create a Service Account and download the JSON key as 'credentials.json'.
-    3. Create a Google Sheet and share it with the service account email.
-    4. Put the sheet name in SHEET_NAME below.
 """
 
 import csv
@@ -43,21 +38,10 @@ from companies_data import (
     resume_for_vertical,
 )
 
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-    GSPREAD_AVAILABLE = True
-except ImportError:
-    GSPREAD_AVAILABLE = False
-
-
 # ---------------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------------
 
-CREDENTIALS_FILE = "credentials.json"
-SHEET_NAME = "IT Prospecting Pipeline - Pakistan"
-WORKSHEET_NAME = "Leads"
 LOCAL_CSV_BACKUP = "companies_dataset.csv"
 
 HEADERS = [
@@ -385,55 +369,6 @@ def discover_company(company):
     }
 
 
-# ---------------------------------------------------------------------------
-# GOOGLE SHEETS INTEGRATION
-# ---------------------------------------------------------------------------
-
-def get_worksheet():
-    """Open (or create) the target worksheet and ensure headers exist."""
-    if not GSPREAD_AVAILABLE:
-        print("[WARN] gspread not installed; skipping Google Sheets step.")
-        return None
-    if not os.path.exists(CREDENTIALS_FILE):
-        print(f"[WARN] {CREDENTIALS_FILE} not found; skipping Google Sheets step.")
-        return None
-
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
-    client = gspread.authorize(creds)
-
-    try:
-        spreadsheet = client.open(SHEET_NAME)
-    except gspread.SpreadsheetNotFound:
-        spreadsheet = client.create(SHEET_NAME)
-
-    try:
-        worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
-    except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=WORKSHEET_NAME, rows=400,
-                                              cols=len(HEADERS))
-
-    existing = worksheet.row_values(1)
-    if existing != HEADERS:
-        worksheet.update("A1", [HEADERS])
-
-    return worksheet
-
-
-def write_rows_to_sheet(worksheet, rows):
-    if worksheet is None:
-        return
-    values = [[row.get(col, "") for col in HEADERS] for row in rows]
-    try:
-        worksheet.append_rows(values, value_input_option="USER_ENTERED")
-        print(f"[OK] Wrote {len(values)} rows to Google Sheet '{SHEET_NAME}'.")
-    except Exception as exc:
-        print(f"[ERROR] Failed to write to Google Sheet: {exc}")
-
-
 def write_rows_to_csv(rows, path):
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=HEADERS)
@@ -464,8 +399,6 @@ def run_pipeline():
 
     write_rows_to_csv(enriched_rows, LOCAL_CSV_BACKUP)
 
-    worksheet = get_worksheet()
-    write_rows_to_sheet(worksheet, enriched_rows)
 
     print("[DONE] Human review required in the Google Sheet before outreach.")
 

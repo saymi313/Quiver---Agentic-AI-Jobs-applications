@@ -16,6 +16,8 @@ Two deliberate choices:
 
 from __future__ import annotations
 
+from . import env
+
 import json
 import os
 import re
@@ -41,25 +43,15 @@ CONNECT_TIMEOUT_MS = 8000
 # Connection
 # --------------------------------------------------------------------------
 
-def _load_env() -> None:
-    env_file = BASE_DIR / ".env"
-    if not env_file.exists():
-        return
-    for raw in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def uri() -> str:
-    _load_env()
+    env.load()
     return os.environ.get("MONGODB_URI", "").strip()
 
 
 def db_name() -> str:
-    _load_env()
+    env.load()
     return os.environ.get("MONGODB_DB", "jobscript").strip() or "jobscript"
 
 
@@ -529,18 +521,6 @@ def upsert_person(data: dict[str, Any]) -> int | None:
         found = db.people.find_one(key, {"id": 1})
         return int(found["id"]) if found else None
     return int(doc["id"])
-
-
-def set_person_verification(person_id: int, status: str, score: float, detail: str) -> None:
-    _connect().people.update_one(
-        {"id": int(person_id)},
-        {"$set": {"email_status": status, "email_score": float(score),
-                  "verify_detail": detail, "verified_at": now()}})
-
-
-def people_needing_verification(limit: int = 100) -> list[dict[str, Any]]:
-    cur = _connect().people.find({"email_status": "unknown"}).sort("discovered_at", 1).limit(int(limit))
-    return _cleaned(cur)
 
 
 def people_to_email(limit: int = 20) -> list[dict[str, Any]]:

@@ -77,22 +77,12 @@ quiver/
 │   │   ├── resume_build.py        ATS-safe document assembly + PDF/DOCX/TXT rendering
 │   │   ├── resume_style.py        house style: fonts, hyphens, voice, bullet floor
 │   │   ├── jobs.py                child-process runner with SSE log streaming
-│   │   ├── state.py               read-only views over the CSV / logs / .env
-│   │   └── llm.py                 optional Claude rewrite pass
+│   │   └── state.py               read-only views over the CSV / logs / .env
 │   │
 │   ├── prospecting_pipeline.py    crawl company sites → companies_dataset.csv
 │   ├── send_applications.py       send personalised cold emails via Gmail SMTP
 │   ├── email_templates.py         10 templates + vertical→template routing
 │   ├── companies_data.py          curated company list
-│   ├── build_excel.py             styled .xlsx workbook for human review
-│   ├── sync_sheet_from_csv.py     push the CSV to Google Sheets
-│   ├── fix_failed_leads.py        re-resolve rows whose last send failed
-│   ├── patch_bounce_leads.py      clean up bounced addresses
-│   ├── generate_dataset.py        legacy CSV regeneration helper
-│   │
-│   ├── cv_engine.py               LaTeX resume engine (bullet scoring + pdflatex)
-│   ├── build_resume.py            static LaTeX build
-│   ├── tailor_from_jd.py          JD-tailored LaTeX build (CLI equivalent of Tab 1)
 │   ├── cv_data/
 │   │   ├── profile.yaml           source of truth for every resume
 │   │   ├── template.tex.j2        Jinja2 LaTeX template
@@ -105,7 +95,6 @@ quiver/
 │   │
 │   ├── companies_dataset.csv      the pipeline's working dataset
 │   ├── send_log.jsonl             append-only audit of every send attempt
-│   ├── applications.jsonl         append-only audit of every resume build
 │   └── outputs/                   generated resumes (git-ignored)
 │       └── agent_resumes/         one tailored resume per tracked job
 │
@@ -148,9 +137,9 @@ Then, on the **Jobs** screen → **Settings**:
 2. Fill in the profile fields — these go straight into application forms.
 3. Set the titles, locations and keywords you actually want.
 
-**Requirements:** Python 3.10+ and Node 18+. LaTeX (MiKTeX / TeX Live) is optional — only the
-legacy `build_resume.py` / `tailor_from_jd.py` CLI path needs it. The dashboard generates PDFs with
-ReportLab, so it works without a LaTeX install.
+**Requirements:** Python 3.10+ and Node 18+. For LaTeX PDFs run
+`python tools/install_tex.py` once (fetches Tectonic, no admin rights); without an engine the
+dashboard falls back to ReportLab PDFs.
 
 ### Ways to run it
 
@@ -552,41 +541,9 @@ filter.
 
 ### Optional AI pass
 
-With the Anthropic SDK installed and a credential available, a toggle appears that rewrites bullets
-and the summary for the specific posting using Claude:
-
-```bash
-pip install anthropic
-setx ANTHROPIC_API_KEY sk-ant-...      # or: ant auth login
-```
-
-It is constrained to facts already in your resume, preserves existing metrics unchanged, and reports
-requirements it could find no evidence for as *gaps* rather than inventing them. Everything in the
-tab works without it — the deterministic rebuild is the baseline, not a fallback.
-
----
-
-## Outreach
-
-Runs the pipeline scripts as child processes and streams stdout into the page over server-sent
-events.
-
-**Send applications** gets typed controls for every flag on `send_applications.py`:
-
-| Control | Flag | Notes |
-| --- | --- | --- |
-| Dry run | `--dry-run` | Renders and previews every email. Nothing is sent, the CSV is untouched. |
-| Route to yourself | `--to-self` | Real SMTP send, every recipient replaced with your own address. |
-| Limit | `--limit N` | Max emails this run. |
-| Delay | `--delay N` | Seconds between sends. |
-| Vertical | `--vertical X` | Restrict to one segment. |
-
-The button relabels itself for the mode you're in, and a red warning appears when both safety
-toggles are off. **Discover companies**, **Build Excel workbook**, **Sync Google Sheet** and
-**Fix failed leads** are one click each.
-
-The page also shows dataset stats, per-vertical progress, the recent-sends table from
-`send_log.jsonl`, and a run history you can re-open the log for.
+The rewrite pass runs on the agent's configured provider (Gemini by default — the free key you set
+in Jobs → Settings). It reorders and rewrites bullets for the specific posting, constrained to
+facts already in your resume, and rejected rewrites fall back to the original line.
 
 ### Safety model
 
@@ -669,45 +626,33 @@ The dashboard shows an amber banner while this is unset; dry runs still work.
 
 ### `Backend/cv_data/profile.yaml`
 
-Source of truth for the *LaTeX* resume path (`build_resume.py`, `tailor_from_jd.py`). The dashboard's
+Source of truth for every generated resume. The dashboard's
 Resume Tailor does not use it — that works from whatever file you upload.
 
 ### `Backend/credentials.json`
 
-Google service-account key, only needed for `sync_sheet_from_csv.py`.
+Google service-account key. No longer used by any live path; safe to delete.
 
 ---
 
 ## Command line (without the dashboard)
 
-Every pipeline step still runs standalone from `Backend/`:
+Every step still runs standalone from `Backend/`:
 
 ```bash
 python prospecting_pipeline.py                      # discover careers/ATS/emails → CSV
-python build_excel.py                               # styled workbook for review
 python send_applications.py --dry-run               # preview, no network
 python send_applications.py --limit 3 --to-self     # safe deliverability test
 python send_applications.py --limit 30 --delay 60   # real run
+
+python -m agent.runner discover --sources yc,hn,remote,hidden --limit 40
+python -m agent.runner resumes  --job-ids 12,15
+python -m agent.runner apply    --job-ids 12,15 --dry-run
+python -m agent.runner outreach --limit 10 --delay 90 --dry-run
+
+python tools/build_resumes.py                       # rebuild the master resumes
+python tools/check_resume.py                        # audit any PDF against the house style
 ```
-
-LaTeX resume path (needs `pdflatex` or `latexmk` on PATH):
-
-```bash
-python build_resume.py                              # all bullets → outputs/static/resume.pdf
-python build_resume.py --tex-only                   # emit .tex only, no LaTeX needed
-python tailor_from_jd.py --jd jd.txt --slug sadapay
-python tailor_from_jd.py --jd jd.txt --company "SadaPay" --slug sadapay --update-csv
-```
-
-`send_applications.py` attaches the **`Generated Resume`** path first when the file exists, and falls
-back to **`Resume to Send`** otherwise:
-
-| Situation | What gets attached |
-| --- | --- |
-| No `Generated Resume`, or the file is missing on disk | `Resume to Send` — your defaults from `companies_data.py` |
-| After `tailor_from_jd.py … --update-csv` | The tailored PDF at `outputs/tailored/…/resume.pdf` |
-
----
 
 ## HTTP API
 
@@ -762,4 +707,4 @@ Recruitee, Jobvite, Workable, Ashby, Rippling, Zoho Recruit and Rozee.pk.
 | Sends fail at SMTP login | `GMAIL_APP_PASS` missing or still the placeholder. Regular account passwords are rejected. |
 | A task won't start (`409`) | Another task is already running; stop it first. They share the CSV. |
 | Port already in use | `python run_dashboard.py --port 8010`, or kill the stale process. |
-| AI toggle is greyed out | `pip install anthropic` and set `ANTHROPIC_API_KEY`. Hover the toggle for the exact reason. |
+| AI toggle is greyed out | Set a Gemini key in Jobs → Settings and press Test. |

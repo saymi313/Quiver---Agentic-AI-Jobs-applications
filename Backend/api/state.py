@@ -8,7 +8,7 @@ import os
 from collections import Counter
 from typing import Any
 
-from .config import APP_LOG, BASE_DIR, CSV_FILE, SEND_LOG
+from .config import BASE_DIR, CSV_FILE, SEND_LOG
 
 TERMINAL = {"Applied", "Interview", "Offer", "Rejected", "Failed"}
 
@@ -92,10 +92,6 @@ def _tail_jsonl(path, limit: int) -> list[dict[str, Any]]:
 
 def send_log(limit: int = 40) -> list[dict[str, Any]]:
     return _tail_jsonl(SEND_LOG, limit)
-
-
-def application_log(limit: int = 25) -> list[dict[str, Any]]:
-    return _tail_jsonl(APP_LOG, limit)
 
 
 def environment() -> dict[str, Any]:

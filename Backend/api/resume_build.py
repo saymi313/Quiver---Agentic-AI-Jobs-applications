@@ -22,12 +22,6 @@ from . import resume_style
 from .ats import ALIAS_TO_CANON, SKILL_LEXICON, _alias_pattern, _norm
 from .resume_parse import STANDARD_HEADINGS, ExperienceEntry, ParsedResume
 
-SECTION_RENDER_ORDER = [
-    "summary", "skills", "experience", "projects", "education",
-    "certifications", "awards", "publications", "volunteer", "languages",
-]
-
-
 @dataclass
 class BuiltResume:
     name: str = ""

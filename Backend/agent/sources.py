@@ -32,6 +32,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from api.resume_parse import EMAIL_RE  # one email regex for the whole app
+
 UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -39,7 +41,6 @@ UA = {
 }
 TIMEOUT = 25
 
-EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]{2,}")
 URL_RE = re.compile(r"https?://[^\s\"'<>)\]]+")
 
 EU_HINTS = {

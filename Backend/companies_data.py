@@ -394,10 +394,6 @@ def iter_companies():
             }
 
 
-def company_count():
-    return sum(len(v) for v in COMPANIES_BY_VERTICAL.values())
-
-
 if __name__ == "__main__":
     print(f"Total companies: {company_count()}")
     for vertical, entries in COMPANIES_BY_VERTICAL.items():

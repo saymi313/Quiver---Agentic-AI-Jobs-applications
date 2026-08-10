@@ -29,7 +29,7 @@ import requests
 
 from api.config import BASE_DIR
 
-from . import store
+from . import env, store
 
 TIMEOUT = 90
 
@@ -60,25 +60,10 @@ class LLMError(RuntimeError):
 _ENV_LOADED = False
 
 
-def _load_env() -> None:
-    """Read Backend/.env once so keys live beside the Gmail credentials."""
-    global _ENV_LOADED
-    if _ENV_LOADED:
-        return
-    _ENV_LOADED = True
-    env_file = BASE_DIR / ".env"
-    if not env_file.exists():
-        return
-    for raw in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def config() -> dict[str, Any]:
-    _load_env()
+    env.load()
     cfg = dict(store.DEFAULT_SETTINGS["llm"])
     cfg.update(store.get_setting("llm", {}) or {})
     if not cfg.get("api_key"):

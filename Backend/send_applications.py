@@ -79,16 +79,10 @@ TERMINAL_FAIL_STATUSES = {"Rejected"}              # respect rejections
 # ---------------------------------------------------------------------------
 
 def load_env_file():
-    """Tiny stdlib .env loader (KEY=VALUE per line, # comments supported)."""
-    if not ENV_FILE.exists():
-        return
-    for raw in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key, val = key.strip(), val.strip().strip('"').strip("'")
-        os.environ.setdefault(key, val)
+    """Delegates to the one shared loader in agent/env.py."""
+    from agent import env
+
+    env.load()
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +115,7 @@ def build_context(row):
 
 def pick_resume_path(row):
     """
-    Prefer a tailored LaTeX build (from tailor_from_jd.py) over static CSV
+    Prefer a tailored per-row PDF when the CSV names one, else the static
     'Resume to Send'. 'Generated Resume' is a repo-relative path.
     """
     for key in ("Generated Resume", "Tailored PDF"):

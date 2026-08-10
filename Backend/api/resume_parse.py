@@ -16,7 +16,9 @@ from typing import Any
 BULLET_CHARS = "•·▪●○–—-*‣◦➢»"
 BULLET_RE = re.compile(rf"^\s*[{re.escape(BULLET_CHARS)}]\s+")
 
-EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+# The one email regex, shared with agent/sources.py. The {2,} tail rejects
+# truncated artifacts like "a@b.c." that page scrapes produce.
+EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 URL_RE = re.compile(r"(?:https?://|www\.)[^\s,;)]+", re.I)
 LINKEDIN_RE = re.compile(r"linkedin\.com/[^\s,;)]+", re.I)

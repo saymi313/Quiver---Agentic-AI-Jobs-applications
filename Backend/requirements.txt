@@ -1,11 +1,8 @@
+# Company crawl (CSV pipeline)
 requests>=2.31.0
 beautifulsoup4>=4.12.0
-lxml>=5.0.0
-openpyxl>=3.1.0
 
-gspread>=6.0.0
-google-auth>=2.29.0
-
+# Resume engine
 jinja2>=3.1.0
 pyyaml>=6.0.0
 
@@ -19,7 +16,7 @@ pydantic>=2.7.0
 pdfplumber>=0.11.0
 PyMuPDF>=1.24.0
 python-docx>=1.1.0
-reportlab>=4.1.0
+reportlab>=4.1.0          # non-LaTeX PDF fallback only
 
 # Agent: data store
 pymongo[srv]>=4.8.0       # MongoDB backend; falls back to bundled SQLite if unset
@@ -27,8 +24,3 @@ pymongo[srv]>=4.8.0       # MongoDB backend; falls back to bundled SQLite if uns
 # Agent: startup research, auto-apply, cold outreach
 playwright>=1.45.0        # then run once:  python -m playwright install chromium
 dnspython>=2.6.0          # MX lookups for email verification
-
-# Optional: enables the "AI rewrite pass" toggle in the Resume Tailor tab.
-# The Agent tab's brain is configured in the UI instead (Gemini/Groq/Ollama,
-# all free) and needs no package.
-# anthropic>=0.60.0

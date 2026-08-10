@@ -32,10 +32,6 @@ JOB_FIELDS = (
     "resume_path", "resume_version", "resume_built_at", "applied_at", "failure_reason",
 )
 
-# A tracked job moves through these. `tracked` means discovered, scored and
-# waiting on the user; nothing is ever applied to without an explicit click.
-JOB_STATUSES = ("new", "tracked", "applied", "failed", "skipped", "duplicate")
-
 # Rows written before the tracking columns existed simply do not carry them —
 # MongoDB is schemaless and SQLite backfills NULL. Every read path runs through
 # this so the API and the UI see one stable shape instead of guarding each key.

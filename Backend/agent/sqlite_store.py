@@ -641,20 +641,6 @@ def upsert_person(data: dict[str, Any]) -> int | None:
         return int(row["id"]) if row else None
 
 
-def set_person_verification(person_id: int, status: str, score: float, detail: str) -> None:
-    with tx() as c:
-        c.execute(
-            "UPDATE people SET email_status = ?, email_score = ?, verify_detail = ?, verified_at = ? "
-            "WHERE id = ?",
-            (status, score, detail, now(), person_id),
-        )
-
-
-def people_needing_verification(limit: int = 100) -> list[dict[str, Any]]:
-    return _rows(_conn().execute(
-        "SELECT * FROM people WHERE email_status = 'unknown' ORDER BY discovered_at LIMIT ?", (limit,)))
-
-
 def people_to_email(limit: int = 20) -> list[dict[str, Any]]:
     return _rows(_conn().execute(
         "SELECT p.*, c.name AS company_name, c.domain, c.description, c.website, c.industry, c.region "

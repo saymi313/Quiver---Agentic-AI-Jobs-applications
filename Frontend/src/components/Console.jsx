@@ -16,7 +16,7 @@ const JOB_TONE = {
 
 /** Colour carries severity; the prefix already carries the category, so only
  *  lines that need attention get a colour at all. */
-export function lineTone(line) {
+function lineTone(line) {
   if (/^\[done\]|SUBMITTED|^\s*\[(SENT|OK|DONE)/i.test(line)) return 'text-ok-400'
   if (/^\s*\[(FAIL|ERROR)/i.test(line) || /exited with code|Traceback|FAILED|REJECTED/.test(line))
     return 'text-bad-400'

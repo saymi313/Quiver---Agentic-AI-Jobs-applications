@@ -2,7 +2,6 @@
 Cold-email templates for the prospecting pipeline.
 
 Each template is shared by:
-    - build_excel.py          (renders the 'Cold Email Templates' sheet)
     - send_applications.py    (actually sends the email via Gmail SMTP)
 
 Placeholders supported (any missing ones are left unchanged):

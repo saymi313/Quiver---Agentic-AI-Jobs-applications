@@ -1,7 +1,7 @@
 """
 BeHuman: strip the tells of machine-written prose.
 
-Adapted from the `behuman` skill in Backend/.skills/behuman, which in turn
+Adapted from the `behuman` skill (Wikipedia's "Signs of AI writing"), which in turn
 follows Wikipedia's "Signs of AI writing" field guide. Every prompt in this
 project that produces prose a human will read — resume bullets, summaries,
 cover letters, cold emails — imports `RULES` and appends it to its system

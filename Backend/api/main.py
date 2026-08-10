@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import llm, resume_style, state
+from . import resume_style, state
 from .ats import analyze
 from .config import (
     ALLOWED_RESUME_EXT,
@@ -85,7 +85,6 @@ def health() -> dict[str, Any]:
     Anthropic path is reported separately so the UI never claims "AI off" while
     Gemini is happily rewriting bullets.
     """
-    anthropic_ok, anthropic_why = llm.available()
     try:
         from agent import llm as agent_llm
 
@@ -99,12 +98,11 @@ def health() -> dict[str, Any]:
         "ok": True,
         "time": datetime.now(timezone.utc).isoformat(),
         "ai": {
-            "available": agent_ok or anthropic_ok,
-            "reason": agent_why if agent_ok else (anthropic_why if anthropic_ok else agent_why),
-            "model": agent_model if agent_ok else llm.MODEL,
-            "provider": provider if agent_ok else "anthropic",
+            "available": agent_ok,
+            "reason": agent_why,
+            "model": agent_model,
+            "provider": provider,
         },
-        "anthropic": {"available": anthropic_ok, "reason": anthropic_why, "model": llm.MODEL},
         "latex": {"engine": _latex_engine()},
     }
 
@@ -226,13 +224,8 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
     jd = ctx["jd"]
     analysis = ctx["analysis"]
 
+    # The AI rewrite happens inside the LaTeX tailor (agent.llm / Gemini).
     ai_result: dict[str, Any] | None = None
-    if req.useAi:
-        ai_result = llm.enhance(parsed.raw_text, ctx["jd_text"], analysis)
-        if not ai_result.get("ok"):
-            ai_result = {**ai_result, "applied": False}
-        else:
-            ai_result["applied"] = True
 
     built = build_resume(
         parsed, jd, analysis["match"],
@@ -253,19 +246,28 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
     txt_path.write_text(text, encoding="utf-8")
     files["txt"] = txt_path.name
 
-    if "docx" in req.formats:
-        try:
-            render_docx(built, session_dir / f"{stem}.docx")
-            files["docx"] = f"{stem}.docx"
-        except Exception as exc:
-            errors["docx"] = str(exc)
+    def render_plain_fallback() -> None:
+        """The ReportLab/python-docx renderers over the parsed upload.
 
-    if "pdf" in req.formats:
-        try:
-            render_pdf(built, session_dir / f"{stem}.pdf")
-            files["pdf"] = f"{stem}.pdf"
-        except Exception as exc:
-            errors["pdf"] = str(exc)
+        Only runs when LaTeX is off or its build failed. With LaTeX on, these
+        files would be overwritten by the tailored versions moments later —
+        the old flow really did render every document twice per build.
+        """
+        if "docx" in req.formats:
+            try:
+                render_docx(built, session_dir / f"{stem}.docx")
+                files["docx"] = f"{stem}.docx"
+            except Exception as exc:
+                errors["docx"] = str(exc)
+        if "pdf" in req.formats:
+            try:
+                render_pdf(built, session_dir / f"{stem}.pdf")
+                files["pdf"] = f"{stem}.pdf"
+            except Exception as exc:
+                errors["pdf"] = str(exc)
+
+    if not req.useLatex:
+        render_plain_fallback()
 
     # ---- LaTeX build -----------------------------------------------------
     latex_info: dict[str, Any] | None = None
@@ -330,6 +332,14 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
         except Exception as exc:
             latex_info = {"error": f"{type(exc).__name__}: {exc}"}
             errors["tex"] = str(exc)[:300]
+            # LaTeX path died before producing files — fall back to the plain
+            # renderers so the user still gets a PDF and DOCX.
+            render_plain_fallback()
+
+        if not latex_out.get("pdf") and "pdf" not in files:
+            # Compiled but produced no PDF (no engine installed): plain PDF
+            # fallback, tailored TXT/DOCX from above still stand.
+            render_plain_fallback()
 
     ctx["files"] = files
 
@@ -438,7 +448,6 @@ def auto_overview() -> dict[str, Any]:
 def auto_activity() -> dict[str, Any]:
     return {
         "sends": state.send_log(40),
-        "builds": state.application_log(20),
     }
 
 
@@ -589,6 +598,18 @@ def agent_jobs(limit: int = 200, status: str | None = None,
     agent_store.init()
     rows = agent_store.list_jobs(max(1, min(limit, 1000)), status,
                                  category=category, source=source, q=q)
+
+    # Failed rows link to the screenshot the applier saved — the evidence of
+    # what the form looked like when it stopped. The applications log holds
+    # the filename; newest attempt wins.
+    shots: dict[int, str] = {}
+    for app_row in agent_store.list_applications(300):
+        if app_row.get("screenshot") and app_row.get("job_id") is not None:
+            shots.setdefault(int(app_row["job_id"]), app_row["screenshot"])
+    for r in rows:
+        if r.get("status") == "failed":
+            r["screenshot"] = shots.get(int(r["id"]))
+
     everything = agent_store.list_jobs(1000)
 
     def tally(key: str) -> dict[str, int]:

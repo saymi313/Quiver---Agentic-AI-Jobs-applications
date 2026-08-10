@@ -161,33 +161,6 @@ def lint(text: str, *, where: str = "") -> list[str]:
     return problems
 
 
-def bullet_shape(text: str) -> list[str]:
-    """
-    Check one Experience bullet against the required shape:
-    action verb, what was built, how, and the outcome or scale.
-
-    Only the mechanical half is checkable. Whether an outcome is *meaningful*
-    is a judgement call left to the writer, but a bullet with no number and no
-    outcome clause at all is reliably weak, so it is worth surfacing.
-    """
-    issues = lint(text, where="")
-    words = (text or "").strip().split()
-    if not words:
-        return ["empty bullet"]
-    if WEAK_OPENERS.match(text):
-        pass  # already reported by lint
-    elif not re.match(r"^[A-Z][a-z]+(ed|d|s|t|n|ing)?\b", words[0]):
-        issues.append(f"does not open with a verb — {words[0]!r}")
-    if len(words) > 45:
-        issues.append(f"{len(words)} words, past the point a recruiter reads")
-    return issues
-
-
-def has_metric(text: str) -> bool:
-    """True when the line carries a real number, percentage or scale word."""
-    return bool(re.search(r"\d", text or ""))
-
-
 def file_stem(name: str, company: str = "", role: str = "") -> str:
     """
     House naming for every generated resume file: Name_Company_Role.
@@ -208,6 +181,46 @@ def file_stem(name: str, company: str = "", role: str = "") -> str:
 
     bits = [words(name or "Resume", 40), words(company, 30), words(role, 40)]
     return "_".join(b for b in bits if b)
+
+
+def skill_rows(lines: list[str]) -> list[dict[str, str]]:
+    """
+    Split `Languages: JavaScript, C++` into a bold category and its list.
+
+    Shared by the LaTeX and DOCX renderers so the two cannot drift — they used
+    to carry byte-identical private copies of this. A line with no colon still
+    becomes a row under a generic label rather than being silently dropped.
+    """
+    rows: list[dict[str, str]] = []
+    for line in lines or []:
+        if not line or not line.strip():
+            continue
+        label, sep, items = line.partition(":")
+        if sep and len(label) <= 40:
+            rows.append({"label": enforce(label), "value": enforce(items)})
+        else:
+            rows.append({"label": "Also", "value": enforce(line)})
+    return rows
+
+
+def contact_parts(content: Any) -> list[str]:
+    """
+    Contact line in the reference order: location, phone, email, spelled-out
+    URLs. Returns plain-text parts; each renderer joins and escapes its own
+    way. URLs are never style-enforced — their hyphens are part of the address.
+    """
+    parts: list[str] = []
+    if getattr(content, "location", ""):
+        parts.append(enforce(content.location))
+    if getattr(content, "phone", ""):
+        parts.append(phone(content.phone))
+    if getattr(content, "email", ""):
+        parts.append(content.email)
+    for link in getattr(content, "links", None) or []:
+        url = (link.get("url") or "").strip()
+        if url:
+            parts.append(re.sub(r"^https?://(www\.)?", "", url).rstrip("/"))
+    return [p for p in parts if p]
 
 
 def report(fields: dict[str, Any]) -> dict[str, Any]:

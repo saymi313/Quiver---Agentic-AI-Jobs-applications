@@ -5,11 +5,10 @@ The agent loop.
   resumes   build a tailored resume for specific jobs, on demand
   apply     fill and submit the forms for specific jobs the user chose
   outreach  research each verified contact, write a personal email, send it
-  full      discover + outreach. Deliberately never applies.
 
 Applying is user-triggered only. Discovery and resume generation are safe to
 automate; submitting an application on someone's behalf without them asking is
-not, so `apply` requires explicit --job-ids and `full` stops short of it.
+not, so `apply` requires explicit --job-ids.
 
 Invoked as a script so the dashboard can stream stdout through the existing job
 console:
@@ -18,7 +17,6 @@ console:
     python -m agent.runner resumes --job-ids 12,15
     python -m agent.runner apply --job-ids 12,15 --dry-run
     python -m agent.runner outreach --limit 10 --delay 90 --dry-run
-    python -m agent.runner full --limit 25
 """
 
 from __future__ import annotations
@@ -158,11 +156,26 @@ def purge_stale(*, log: Callable[[str], None] = _log) -> dict[str, Any]:
             except OSError:
                 pass
 
-    if out["deleted"]:
+    # Application screenshots age out on the same clock. They exist to explain
+    # a recent failure; a month-old PNG explains nothing anyone will ask about.
+    shots = 0
+    cutoff = time.time() - days * 86400
+    shot_dir = Path(applier.SHOT_DIR)
+    if shot_dir.is_dir():
+        for png in shot_dir.glob("*.png"):
+            try:
+                if png.stat().st_mtime < cutoff:
+                    png.unlink()
+                    shots += 1
+            except OSError:
+                pass
+
+    if out["deleted"] or shots:
         log(f"[purge] removed {out['deleted']} job(s) discovered more than {days} day(s) ago"
-            + (f", and {removed} resume file(s)" if removed else "")
+            + (f", {removed} resume file(s)" if removed else "")
+            + (f", {shots} old screenshot(s)" if shots else "")
             + (" — applied jobs kept" if keep_applied else ""))
-    return {"deleted": out["deleted"], "files": removed}
+    return {"deleted": out["deleted"], "files": removed, "screenshots": shots}
 
 
 def build_resumes_for(job_ids: list[int], *, log: Callable[[str], None] = _log) -> dict[str, Any]:
@@ -386,7 +399,7 @@ def discover(*, which: list[str], limit: int, find_people: bool,
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
-    ap.add_argument("mode", choices=["discover", "apply", "resumes", "outreach", "full"])
+    ap.add_argument("mode", choices=["discover", "apply", "resumes", "outreach"])
     ap.add_argument("--sources", default="yc,hn,remote,hidden",
                     help="comma list: yc, hn, remote, hidden")
     ap.add_argument("--limit", type=int, default=25)
@@ -412,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     stats: dict[str, Any] = {}
 
     try:
-        if args.mode in ("discover", "full"):
+        if args.mode == "discover":
             stats["discover"] = discover(
                 which=which, limit=args.limit,
                 find_people=not args.no_people, scan_ats=not args.no_ats,
@@ -435,10 +448,10 @@ def main(argv: list[str] | None = None) -> int:
                 stats["apply"] = applier.apply_to_ids(
                     job_ids, dry_run=args.dry_run, headless=not args.headed)
 
-        if args.mode in ("outreach", "full"):
+        if args.mode == "outreach":
             _log(_rule("Cold outreach"))
             stats["outreach"] = outreach.run_outreach(
-                limit=args.limit if args.mode == "outreach" else min(args.limit, 10),
+                limit=args.limit,
                 dry_run=args.dry_run, delay=args.delay,
                 attach_resume=not args.no_attach, to_self=args.to_self)
 
