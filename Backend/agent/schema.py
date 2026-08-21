@@ -7,6 +7,7 @@ default settings exist in exactly one place and cannot drift apart.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -35,6 +36,12 @@ JOB_FIELDS = (
     "resume_mode", "resume_changes", "resume_approved",
     # Auto Apply's review queue. The agent proposes; a human decides.
     "proposed_at", "proposal_reason", "proposal_decision",
+    # The posting parsed into fields rather than left as prose: what a
+    # keyword-aligned resume is aimed at, and what the feed filters on. Filled
+    # by agent/jobmeta.py at scoring time. `skills` is a JSON list; `saved` is
+    # the user's bookmark, which survives the retention purge.
+    "salary_min", "salary_max", "salary_currency", "seniority",
+    "work_arrangement", "skills", "deadline", "saved",
 )
 
 # What a human said about a proposal. `None` means undecided — the row is
@@ -50,6 +57,8 @@ JOB_VIEW_DEFAULTS: dict[str, Any] = {
     "resume_built_at": None, "applied_at": None, "failure_reason": None,
     "resume_mode": None, "resume_changes": None, "resume_approved": None,
     "proposed_at": None, "proposal_reason": None, "proposal_decision": None,
+    "salary_min": None, "salary_max": None, "salary_currency": None,
+    "seniority": None, "work_arrangement": None, "deadline": None, "saved": 0,
 }
 
 
@@ -57,6 +66,18 @@ def with_job_defaults(row: dict[str, Any]) -> dict[str, Any]:
     for key, value in JOB_VIEW_DEFAULTS.items():
         row.setdefault(key, value)
     row["has_resume"] = bool(row.get("resume_path"))
+    # `skills` is stored as a JSON string on SQLite and as a list on Mongo.
+    # Callers get a list either way, so the frontend never has to know which
+    # backend answered.
+    skills = row.get("skills")
+    if isinstance(skills, str):
+        try:
+            row["skills"] = json.loads(skills) if skills.strip() else []
+        except (ValueError, TypeError):
+            row["skills"] = []
+    elif skills is None:
+        row["skills"] = []
+    row["saved"] = bool(row.get("saved"))
     return row
 
 # --------------------------------------------------------------------------

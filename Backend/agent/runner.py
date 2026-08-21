@@ -356,6 +356,9 @@ def discover(*, which: list[str], limit: int, find_people: bool,
     log(_rule("Scoring roles against your profile"))
     scored = matcher.score_pending(limit=400, log=log)
     counts.update(scored)
+    # Parse detail into anything scored before the parser existed. Idempotent,
+    # so it costs nothing once the backlog is cleared.
+    matcher.enrich_pending(limit=400, log=log)
 
     # ---- Recruiter contact, per job --------------------------------------
     # Only ever written when a real address was found and verified. A job with

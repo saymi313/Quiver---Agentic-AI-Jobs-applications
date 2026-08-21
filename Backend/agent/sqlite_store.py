@@ -255,6 +255,25 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("applications", "tracker_status TEXT"),
     ("applications", "message_id TEXT"),
     ("applications", "last_message_at TEXT"),
+    # The posting parsed into fields (agent/jobmeta.py), plus the user's
+    # bookmark. `skills` is a JSON list; `saved` is 0/1 and survives the purge.
+    ("jobs", "salary_min REAL"),
+    ("jobs", "salary_max REAL"),
+    ("jobs", "salary_currency TEXT"),
+    ("jobs", "seniority TEXT"),
+    ("jobs", "work_arrangement TEXT"),
+    ("jobs", "skills TEXT"),
+    ("jobs", "deadline TEXT"),
+    ("jobs", "saved INTEGER DEFAULT 0"),
+    # An application a person entered or imported by hand, rather than one the
+    # agent submitted. Tracked so the manual rows are never mistaken for
+    # submissions the applier made.
+    ("applications", "source TEXT"),
+    ("applications", "title TEXT"),
+    ("applications", "company_name TEXT"),
+    ("applications", "url TEXT"),
+    ("applications", "notes TEXT"),
+    ("applications", "applied_on TEXT"),
 ]
 
 
@@ -462,6 +481,44 @@ def set_job_status(job_id: int, status: str) -> None:
         c.execute("UPDATE jobs SET status = ? WHERE id = ?", (status, job_id))
 
 
+# The columns agent/jobmeta.py fills. Kept as a set so set_job_meta can only
+# ever write parsed fields, never an arbitrary key from a caller's dict.
+_META_COLUMNS = {"salary_min", "salary_max", "salary_currency", "seniority",
+                 "work_arrangement", "skills", "deadline", "employment_type"}
+
+
+def set_job_meta(job_id: int, meta: dict[str, Any]) -> None:
+    """Store the parsed job fields. `skills` is JSON-encoded on the way in."""
+    updates = {k: v for k, v in meta.items() if k in _META_COLUMNS}
+    if not updates:
+        return
+    if "skills" in updates and not isinstance(updates["skills"], str):
+        updates["skills"] = json.dumps(updates["skills"])
+    sets = ", ".join(f"{k} = ?" for k in updates)
+    with tx() as c:
+        c.execute(f"UPDATE jobs SET {sets} WHERE id = ?",
+                  [*updates.values(), job_id])
+
+
+def set_job_saved(job_id: int, saved: bool = True) -> None:
+    """Bookmark or un-bookmark a job. A saved job survives the retention purge."""
+    with tx() as c:
+        c.execute("UPDATE jobs SET saved = ? WHERE id = ?", (1 if saved else 0, job_id))
+
+
+def pass_job(job_id: int) -> None:
+    """
+    The user passed on a role from the feed.
+
+    Recorded as `skipped` so it drops out of the ready view exactly as a
+    gate-rejected role does, but with a reason that says a person did it — the
+    two are different intents and the row should say which.
+    """
+    with tx() as c:
+        c.execute("UPDATE jobs SET status = 'skipped', fit_reason = ? WHERE id = ?",
+                  ("Passed by you", job_id))
+
+
 def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any]:
     """
     Delete jobs discovered more than `days` ago.
@@ -477,7 +534,9 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
     this one, but the history would be gone from the UI.
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=max(0, int(days)))).isoformat()
-    sql = "SELECT id, resume_path FROM jobs WHERE discovered_at < ?"
+    # A bookmarked job is kept on purpose; ageing it out would quietly discard a
+    # shortlist the user built by hand.
+    sql = "SELECT id, resume_path FROM jobs WHERE discovered_at < ? AND COALESCE(saved, 0) = 0"
     args: list[Any] = [cutoff]
     if keep_applied:
         sql += " AND status != 'applied'"
@@ -762,6 +821,22 @@ def jobs_needing_scoring(limit: int = 200) -> list[dict[str, Any]]:
         "WHERE j.status = 'new' ORDER BY j.discovered_at DESC LIMIT ?", (limit,)))
 
 
+def jobs_needing_meta(limit: int = 400) -> list[dict[str, Any]]:
+    """
+    Scored jobs that were never parsed into fields.
+
+    The detail parser (agent/jobmeta.py) was added after these rows were
+    scored, so they carry a score but no salary, skills or seniority. This
+    finds them to be enriched in place, and finds nothing once a run has caught
+    up — a job with a description but a null `skills` is the whole set.
+    """
+    return _job_rows(_conn().execute(
+        "SELECT j.*, c.name AS company_name FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id "
+        "WHERE j.skills IS NULL AND j.description IS NOT NULL AND j.description != '' "
+        "ORDER BY j.discovered_at DESC LIMIT ?", (limit,)))
+
+
 def applied_hashes() -> set[str]:
     """Identities already acted on, so a role is never applied to twice."""
     rows = _conn().execute(
@@ -867,6 +942,7 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
               max_score: float | None = None, posted_within_days: int | None = None,
               location: str | None = None, company: str | None = None,
               remote: bool | None = None, has_resume: bool | None = None,
+              min_salary: float | None = None, saved: bool | None = None,
               sort: str = "recent") -> list[dict[str, Any]]:
     sql = ("SELECT j.*, c.name AS company_name, c.region, c.ats_platform FROM jobs j "
            "LEFT JOIN companies c ON c.id = j.company_id")
@@ -914,6 +990,17 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
     if has_resume is not None:
         clause = "(j.resume_path IS NOT NULL AND j.resume_path != '')"
         where.append(clause if has_resume else f"NOT {clause}")
+    if min_salary is not None:
+        # Match on the top of the range where there is one, so a "40k-70k" role
+        # clears a 60k floor. A posting with no parsed salary is excluded rather
+        # than assumed to pass — the filter means "pays at least this", and an
+        # unknown does not.
+        where.append("COALESCE(j.salary_max, j.salary_min) >= ?")
+        args.append(float(min_salary))
+    if saved is not None:
+        where.append("COALESCE(j.saved, 0) = ?" if saved else "COALESCE(j.saved, 0) = 0")
+        if saved:
+            args.append(1)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += f" ORDER BY {JOB_SORTS.get(sort) or JOB_SORTS['recent']} LIMIT ?"
@@ -1049,9 +1136,49 @@ def record_outreach(data: dict[str, Any]) -> int:
         return int(cur.lastrowid)
 
 
+MANUAL_APPLICATION_FIELDS = ("title", "company_name", "url", "notes",
+                             "tracker_status", "applied_on")
+
+
+def add_manual_application(data: dict[str, Any]) -> int:
+    """
+    An application the user made outside Quiver, entered by hand or imported.
+
+    Recorded as a real submitted application so it counts in the tracker and the
+    reply-rate figures — the user did apply — with `source='manual'` marking that
+    the applier did not do it. It carries its own title and company because there
+    is no job row behind it to read them from.
+    """
+    stage = data.get("tracker_status") or "applied"
+    if stage not in TRACKER_STATUSES:
+        stage = "applied"
+    when = (data.get("applied_on") or "").strip() or now()
+    payload = {
+        "status": "submitted",
+        "source": "manual",
+        "dry_run": 0,
+        "tracker_status": stage,
+        "title": (data.get("title") or "").strip() or "Untitled role",
+        "company_name": (data.get("company_name") or "").strip() or None,
+        "url": (data.get("url") or "").strip() or None,
+        "notes": (data.get("notes") or "").strip() or None,
+        "applied_on": when,
+        "created_at": now(),
+        "submitted_at": when,
+    }
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    with tx() as c:
+        cur = c.execute(f"INSERT INTO applications ({cols}) VALUES ({marks})",
+                        tuple(payload.values()))
+        return int(cur.lastrowid)
+
+
 def list_applications(limit: int = 100) -> list[dict[str, Any]]:
     return _rows(_conn().execute(
-        "SELECT a.*, j.title, j.url, c.name AS company_name FROM applications a "
+        "SELECT a.*, COALESCE(j.title, a.title) AS title, "
+        "       COALESCE(j.url, a.url) AS url, "
+        "       COALESCE(c.name, a.company_name) AS company_name FROM applications a "
         "LEFT JOIN jobs j ON j.id = a.job_id "
         "LEFT JOIN companies c ON c.id = a.company_id "
         "ORDER BY a.created_at DESC LIMIT ?", (limit,)))
@@ -1071,7 +1198,9 @@ def list_outreach(limit: int = 100) -> list[dict[str, Any]]:
 
 def application(app_id: int) -> dict[str, Any] | None:
     return _row(_conn().execute(
-        "SELECT a.*, j.title, j.url, j.location, c.name AS company_name, c.domain "
+        "SELECT a.*, COALESCE(j.title, a.title) AS title, "
+        "       COALESCE(j.url, a.url) AS url, j.location, "
+        "       COALESCE(c.name, a.company_name) AS company_name, c.domain "
         "FROM applications a "
         "LEFT JOIN jobs j ON j.id = a.job_id "
         "LEFT JOIN companies c ON c.id = a.company_id "
@@ -1103,8 +1232,9 @@ def set_tracker_status(app_id: int, status: str) -> bool:
 def tracked_applications(limit: int = 500) -> list[dict[str, Any]]:
     """Every application that reached an employer, newest first."""
     return _rows(_conn().execute(
-        "SELECT a.*, j.title, j.url, j.location, j.role_category, "
-        "       c.name AS company_name, c.domain, "
+        "SELECT a.*, COALESCE(j.title, a.title) AS title, "
+        "       COALESCE(j.url, a.url) AS url, j.location, j.role_category, "
+        "       COALESCE(c.name, a.company_name) AS company_name, c.domain, "
         "       (SELECT COUNT(*) FROM messages m WHERE m.application_id = a.id) AS message_count "
         "FROM applications a "
         "LEFT JOIN jobs j ON j.id = a.job_id "

@@ -304,6 +304,39 @@ def set_job_status(job_id: int, status: str) -> None:
     _connect().jobs.update_one({"id": int(job_id)}, {"$set": {"status": status}})
 
 
+# The columns agent/jobmeta.py fills. Kept as a set so set_job_meta can only
+# ever write parsed fields, never an arbitrary key from a caller's dict.
+_META_COLUMNS = {"salary_min", "salary_max", "salary_currency", "seniority",
+                 "work_arrangement", "skills", "deadline", "employment_type"}
+
+
+def set_job_meta(job_id: int, meta: dict[str, Any]) -> None:
+    """Store the parsed job fields. `skills` stays a list on this backend."""
+    updates = {k: v for k, v in meta.items() if k in _META_COLUMNS}
+    if not updates:
+        return
+    _connect().jobs.update_one({"id": int(job_id)}, {"$set": updates})
+
+
+def set_job_saved(job_id: int, saved: bool = True) -> None:
+    """Bookmark or un-bookmark a job. A saved job survives the retention purge."""
+    _connect().jobs.update_one({"id": int(job_id)},
+                               {"$set": {"saved": 1 if saved else 0}})
+
+
+def pass_job(job_id: int) -> None:
+    """
+    The user passed on a role from the feed.
+
+    Recorded as `skipped` so it drops out of the ready view exactly as a
+    gate-rejected role does, but with a reason that says a person did it — the
+    two are different intents and the row should say which.
+    """
+    _connect().jobs.update_one(
+        {"id": int(job_id)},
+        {"$set": {"status": "skipped", "fit_reason": "Passed by you"}})
+
+
 def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any]:
     """
     Delete jobs discovered more than `days` ago.
@@ -322,7 +355,10 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
     can remove them from disk.
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=max(0, int(days)))).isoformat()
-    query: dict[str, Any] = {"discovered_at": {"$lt": cutoff}}
+    # A bookmarked job is kept on purpose; ageing it out would quietly discard a
+    # shortlist the user built by hand.
+    query: dict[str, Any] = {"discovered_at": {"$lt": cutoff},
+                             "saved": {"$in": [None, 0]}}
     if keep_applied:
         query["status"] = {"$ne": "applied"}
 
@@ -598,6 +634,21 @@ def jobs_needing_scoring(limit: int = 200) -> list[dict[str, Any]]:
     return _attach_company(_cleaned(cur))
 
 
+def jobs_needing_meta(limit: int = 400) -> list[dict[str, Any]]:
+    """
+    Scored jobs that were never parsed into fields.
+
+    The detail parser (agent/jobmeta.py) was added after these rows were
+    scored, so they carry a score but no salary, skills or seniority. This
+    finds them to be enriched in place, and finds nothing once a run has caught
+    up — a job with a description but no `skills` is the whole set.
+    """
+    cur = _connect().jobs.find(
+        {"skills": {"$in": [None]}, "description": {"$nin": [None, ""]}}
+    ).sort("discovered_at", -1).limit(int(limit))
+    return _attach_company(_cleaned(cur))
+
+
 def applied_hashes() -> set[str]:
     cur = _connect().applications.find(
         {"job_hash": {"$ne": None}, "status": {"$in": ["submitted", "filled"]}, "dry_run": 0},
@@ -692,6 +743,7 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
               max_score: float | None = None, posted_within_days: int | None = None,
               location: str | None = None, company: str | None = None,
               remote: bool | None = None, has_resume: bool | None = None,
+              min_salary: float | None = None, saved: bool | None = None,
               sort: str = "recent") -> list[dict[str, Any]]:
     query: dict[str, Any] = {}
     if status:
@@ -732,6 +784,18 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
         present = {"resume_path": {"$nin": [None, ""]}}
         query["$and"] = [*query.get("$and", []),
                          present if has_resume else {"$nor": [present]}]
+    if min_salary is not None:
+        # Match on the top of the range where there is one, so a "40k-70k" role
+        # clears a 60k floor. A posting with no parsed salary is excluded, not
+        # assumed to pass: the filter means "pays at least this", and an unknown
+        # does not.
+        floor = float(min_salary)
+        query["$and"] = [*query.get("$and", []),
+                         {"$or": [{"salary_max": {"$gte": floor}},
+                                  {"salary_max": {"$in": [None]},
+                                   "salary_min": {"$gte": floor}}]}]
+    if saved is not None:
+        query["saved"] = 1 if saved else {"$in": [None, 0]}
 
     order = JOB_SORTS.get(sort) or JOB_SORTS["recent"]
     # `company_name` is joined in after the fetch, so the database cannot sort
@@ -885,6 +949,41 @@ def record_outreach(data: dict[str, Any]) -> int:
     return int(doc["id"])
 
 
+MANUAL_APPLICATION_FIELDS = ("title", "company_name", "url", "notes",
+                             "tracker_status", "applied_on")
+
+
+def add_manual_application(data: dict[str, Any]) -> int:
+    """
+    An application the user made outside Quiver, entered by hand or imported.
+
+    Recorded as a real submitted application so it counts in the tracker and the
+    reply-rate figures — the user did apply — with `source='manual'` marking that
+    the applier did not do it. It carries its own title and company because there
+    is no job row behind it to read them from.
+    """
+    stage = data.get("tracker_status") or "applied"
+    if stage not in TRACKER_STATUSES:
+        stage = "applied"
+    when = (data.get("applied_on") or "").strip() or now()
+    doc = {
+        "id": _next_id("applications"),
+        "status": "submitted",
+        "source": "manual",
+        "dry_run": 0,
+        "tracker_status": stage,
+        "title": (data.get("title") or "").strip() or "Untitled role",
+        "company_name": (data.get("company_name") or "").strip() or None,
+        "url": (data.get("url") or "").strip() or None,
+        "notes": (data.get("notes") or "").strip() or None,
+        "applied_on": when,
+        "created_at": now(),
+        "submitted_at": when,
+    }
+    _connect().applications.insert_one(doc)
+    return int(doc["id"])
+
+
 def list_applications(limit: int = 100) -> list[dict[str, Any]]:
     db = _connect()
     rows = _cleaned(db.applications.find().sort("created_at", -1).limit(int(limit)))
@@ -892,9 +991,10 @@ def list_applications(limit: int = 100) -> list[dict[str, Any]]:
     companies = _company_names()
     for r in rows:
         j = jobs.get(int(r.get("job_id") or -1)) or {}
-        r["title"] = j.get("title")
-        r["url"] = j.get("url")
-        r["company_name"] = (companies.get(int(r.get("company_id") or -1)) or {}).get("name")
+        r["title"] = j.get("title") or r.get("title")
+        r["url"] = j.get("url") or r.get("url")
+        r["company_name"] = ((companies.get(int(r.get("company_id") or -1)) or {}).get("name")
+                             or r.get("company_name"))
     return rows
 
 
@@ -974,10 +1074,10 @@ def application(app_id: int) -> dict[str, Any] | None:
         return None
     job = _job_titles().get(int(row.get("job_id") or -1)) or {}
     company = _company_names().get(int(row.get("company_id") or -1)) or {}
-    row["title"] = job.get("title")
-    row["url"] = job.get("url")
+    row["title"] = job.get("title") or row.get("title")
+    row["url"] = job.get("url") or row.get("url")
     row["location"] = job.get("location")
-    row["company_name"] = company.get("name")
+    row["company_name"] = company.get("name") or row.get("company_name")
     row["domain"] = company.get("domain")
     return row
 
@@ -1017,11 +1117,11 @@ def tracked_applications(limit: int = 500) -> list[dict[str, Any]]:
     for r in rows:
         job = jobs.get(int(r.get("job_id") or -1)) or {}
         company = companies.get(int(r.get("company_id") or -1)) or {}
-        r["title"] = job.get("title")
-        r["url"] = job.get("url")
+        r["title"] = job.get("title") or r.get("title")
+        r["url"] = job.get("url") or r.get("url")
         r["location"] = job.get("location")
         r["role_category"] = job.get("role_category")
-        r["company_name"] = company.get("name")
+        r["company_name"] = company.get("name") or r.get("company_name")
         r["domain"] = company.get("domain")
         r["message_count"] = counts.get(int(r.get("id") or -1), 0)
     rows.sort(key=lambda r: (r.get("last_message_at") or r.get("submitted_at")

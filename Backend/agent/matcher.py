@@ -23,7 +23,7 @@ from api.ats import analyze_jd, match_keywords
 from api.config import BASE_DIR
 from api.resume_parse import parse_resume
 
-from . import experience, store
+from . import experience, jobmeta, store
 
 SENIOR_MARKERS = ("staff", "principal", "director", "vp", "head of", "chief", "distinguished",
                   "lead engineer", "engineering manager", "architect")
@@ -178,6 +178,31 @@ def score_job(job: dict[str, Any], *, resume: str | None = None,
     }
 
 
+def enrich_pending(limit: int = 400, *, log=print) -> int:
+    """
+    Parse detail into any scored job that has never been parsed.
+
+    Scoring enriches as it goes, so this only ever finds rows that predate the
+    parser. It is idempotent — a parsed row has a non-null `skills` list and is
+    not returned again — so it is safe to run on every discovery.
+    """
+    pending = store.jobs_needing_meta(limit)
+    done = 0
+    for job in pending:
+        try:
+            meta = jobmeta.enrich(job)
+            # Store a list either way, so a job with a description but no
+            # recognised skills is still marked parsed and not re-visited.
+            meta.setdefault("skills", [])
+            store.set_job_meta(job["id"], meta)
+            done += 1
+        except Exception as exc:
+            log(f"[match] could not parse detail for job {job.get('id')}: {exc}")
+    if done:
+        log(f"[match] parsed detail into {done} earlier job(s)")
+    return done
+
+
 def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
     """Score every unscored job in the store and set its status."""
     targeting = store.get_setting("targeting", {}) or {}
@@ -208,6 +233,17 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
         status = "matched" if result["score"] >= threshold else "skipped"
         store.set_job_fit(job["id"], result["score"],
                           f"{result['reason']} · experience: {why}", status)
+
+        # Parse the posting into fields while we already hold it — salary,
+        # seniority, work arrangement, skills, deadline. Deterministic and free,
+        # so it runs for every job rather than only matched ones; a skipped role
+        # can still be searched and filtered on its parsed detail.
+        try:
+            meta = jobmeta.enrich(job)
+            if meta:
+                store.set_job_meta(job["id"], meta)
+        except Exception as exc:  # parsing must never sink a scoring run
+            log(f"[match] could not parse detail for job {job.get('id')}: {exc}")
         if status == "matched":
             matched += 1
             log(f"[match] {result['score']:5.1f}  {job.get('company_name') or '?'} — "

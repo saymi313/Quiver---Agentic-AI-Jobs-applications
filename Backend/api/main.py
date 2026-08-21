@@ -631,6 +631,7 @@ def agent_jobs(limit: int = 200, status: str | None = None,
                max_score: float | None = None, posted_within_days: int | None = None,
                location: str | None = None, company: str | None = None,
                remote: bool | None = None, has_resume: bool | None = None,
+               min_salary: float | None = None, saved: bool | None = None,
                sort: str = "recent") -> dict[str, Any]:
     """
     The tracked jobs table.
@@ -649,7 +650,8 @@ def agent_jobs(limit: int = 200, status: str | None = None,
         max(1, min(limit, 1000)), status, category=category, source=source, q=q,
         min_score=min_score, max_score=max_score,
         posted_within_days=posted_within_days, location=location,
-        company=company, remote=remote, has_resume=has_resume, sort=sort)
+        company=company, remote=remote, has_resume=has_resume,
+        min_salary=min_salary, saved=saved, sort=sort)
 
     # Failed rows link to the screenshot the applier saved — the evidence of
     # what the form looked like when it stopped. The applications log holds
@@ -977,6 +979,30 @@ def agent_job_from_url(req: AddJobRequest) -> dict[str, Any]:
             "category": fresh.get("role_category"),
             "fitScore": fresh.get("fit_score"), "fitReason": fresh.get("fit_reason"),
             "status": fresh.get("status"), "scored": scored.get("matched", 0)}
+
+
+@app.post("/api/agent/job/{job_id}/save")
+def agent_save_job(job_id: int, saved: bool = True) -> dict[str, Any]:
+    """Bookmark a job, or clear the bookmark. A saved job survives the purge."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    if not agent_store.job(job_id):
+        raise HTTPException(404, "No such job.")
+    agent_store.set_job_saved(job_id, saved)
+    return {"ok": True, "id": job_id, "saved": saved}
+
+
+@app.post("/api/agent/job/{job_id}/pass")
+def agent_pass_job(job_id: int) -> dict[str, Any]:
+    """The user passed on a role from the feed. It leaves the ready view."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    if not agent_store.job(job_id):
+        raise HTTPException(404, "No such job.")
+    agent_store.pass_job(job_id)
+    return {"ok": True, "id": job_id, "status": "skipped"}
 
 
 @app.get("/api/agent/resume/{job_id}/changes")
