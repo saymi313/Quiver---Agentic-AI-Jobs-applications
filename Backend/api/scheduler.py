@@ -34,7 +34,7 @@ from .jobs import manager
 
 # The complete set of schedulable work. Everything else — applying above all —
 # is structurally unreachable from here.
-SCHEDULABLE = ("agent_discover", "agent_tasks", "agent_inbox")
+SCHEDULABLE = ("agent_discover", "agent_tasks", "agent_inbox", "agent_propose")
 
 POLL_S = 60
 _STATE_KEY = "schedule_state"
@@ -76,6 +76,8 @@ def _due(kind: str, sched: dict[str, Any], state: dict[str, Any],
         interval_s = max(1, int(sched.get("discover_every_hours") or 6)) * 3600
     elif kind == "inbox":
         interval_s = max(1, int(sched.get("inbox_every_minutes") or 20)) * 60
+    elif kind == "propose":
+        interval_s = max(1, int(sched.get("discover_every_hours") or 6)) * 3600
     else:
         interval_s = max(1, int(sched.get("tasks_every_minutes") or 30)) * 60
     return last is None or (now - last).total_seconds() >= interval_s
@@ -124,6 +126,20 @@ def _tick() -> None:
         store.set_setting(_STATE_KEY, state)
         if ok:
             return
+
+    # Auto Apply's shortlisting rides the discovery cadence: new roles are the
+    # only thing that creates new candidates. It is schedulable precisely
+    # because it submits nothing — the queue it fills still needs a human.
+    if _due("propose", sched, state, now):
+        from agent import store as agent_store
+
+        if (agent_store.get_setting("auto_apply", {}) or {}).get("enabled"):
+            _dispatch("agent_propose", {})
+            state["last_propose_at"] = now.isoformat()
+            store.set_setting(_STATE_KEY, state)
+            return
+        state["last_propose_at"] = now.isoformat()
+        store.set_setting(_STATE_KEY, state)
 
     if _due("tasks", sched, state, now):
         # Skip the subprocess entirely when the queue has nothing due-able.

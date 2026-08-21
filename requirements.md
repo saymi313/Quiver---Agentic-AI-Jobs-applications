@@ -251,7 +251,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   unapproved tailored document while auto-approve is off.
 - **FR-P3 (P0) [DONE].** An auto-approve toggle, independent of the review-the-form toggle
   in FR-A4.
-- **FR-P4 (P1).** Multiple named resume profiles: create, duplicate, import, mark a
+- **FR-P4 (P1) [DONE].** Multiple named resume profiles: create, duplicate, import, mark a
   default, and choose which profile an application uses. *Quiver has one
   `profile.yaml` and three built variants.*
 - **FR-P5 (P1).** Cover letters generated only where the form accepts or requires
@@ -291,7 +291,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   *Built; keep it.*
 - **FR-A8 (P1).** Batch apply over many selected jobs, with per-job results and a
   running progress line. *Partly built.*
-- **FR-A9 (P2) [MT].** Auto Apply: the agent selects and submits eligible roles on
+- **FR-A9 (P2) [DONE].** Auto Apply: the agent selects and submits eligible roles on
   its own, bounded by a match threshold, a daily cap and the user's filters. This is
   the one behaviour Quiver forbids today, structurally: `apply` requires explicit
   `--job-ids`. Enabling it is a product decision with real consequences and must be
@@ -326,10 +326,10 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 - **FR-S1 (P0) [DONE].** Web dashboard covering Find, Prep, Apply and Track as four
   first-class areas. *Three tabs exist; Track does not.*
-- **FR-S2 (P1).** Chrome extension: on any job posting, one click sends the URL to
+- **FR-S2 (P1) [DONE].** Chrome extension: on any job posting, one click sends the URL to
   Quiver, which detects the ATS, tailors and applies. The highest-value surface
   after the dashboard, because it needs no scale to be useful.
-- **FR-S3 (P1).** MCP server exposing Quiver to Claude Code and other agents:
+- **FR-S3 (P1) [DONE].** MCP server exposing Quiver to Claude Code and other agents:
   discovery with filters, apply single and batch, resume profile management, tracker
   read and import, inbox read and unread count, profile edit, remaining allowance.
   Local stdio transport first; HTTP with OAuth only if Quiver becomes hosted.
@@ -427,7 +427,7 @@ Scope decisions taken on 2026-08-21:
 | **1** | Close the loop (Track) | FR-T1, FR-T2, FR-T3, FR-T4, FR-T5, FR-T7, FR-A2, FR-A3, FR-S1 | **Completed 2026-08-21** |
 | **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | **Completed 2026-08-22** |
 | **3** | Reach | FR-A1, FR-A5, FR-A10, NFR-4 | **Completed 2026-08-22** |
-| **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | Not started |
+| **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | **Completed 2026-08-22** |
 
 **Out of scope by decision:** FR-D1 to FR-D6 and FR-B1 to FR-B5 (multi-tenant
 only), FR-S5 and FR-S6 (mobile and iMessage).
@@ -596,6 +596,55 @@ check against that page with no network at all.
 
 105 tests. Verified live: two applications ran in parallel against real
 Greenhouse forms, both correctly recorded `needs_review` rather than `failed`.
+
+### Phase 4 — what was built
+
+**Auto Apply, as a review queue.** Tsenta's agent picks roles and submits them;
+this one picks roles and *proposes* them. `agent/runner.py:propose()` shortlists
+what clears the match threshold, category filter and daily cap into a queue on
+the Jobs screen; approving hands those ids to the same `apply_to_ids` a manual
+selection uses. The guarantee is structural rather than a promise: `apply` still
+refuses to run without explicit ids, nothing in `propose()` calls the applier,
+and `agent_apply` is absent from the scheduler's whitelist. Tests assert all
+three, including one that fails if `propose` ever reaches the applier at all.
+A rejected role is never offered again — re-proposing what someone said no to is
+how an assistant becomes a nuisance.
+
+That work surfaced a falsy-zero bug worth recording: `min_score` of 0 is a
+legitimate setting meaning "propose anything matched", and `cfg.get("min_score")
+or 70` silently turned it into 70 — the user would have got the default they had
+just changed.
+
+**A Chrome extension** in `Extension/`. One click sends the current tab's URL to
+Quiver on `127.0.0.1:8000`, and reports the backend's own words: tracked, already
+tracked, closed posting, or not running. It holds no credentials and stores
+nothing; `activeTab` gives it a URL only at the moment you click. The API's CORS
+had to learn `chrome-extension://` origins, verified by loading the real
+extension in Chrome and watching the request round-trip.
+
+**An MCP server** (`agent/mcp_server.py`), local stdio rather than hosted OAuth,
+because there is no account to authenticate against — it runs as you, against
+the database the dashboard uses. Fourteen tools covering find, prep, track and
+account. Applying is deliberately **not** among them: an assistant reading a job
+board should not be able to decide, from its own reading of a conversation, to
+put your name in front of an employer. It gets `propose_applications`, which
+fills the same review queue.
+
+**Multiple resume profiles** (`api/resume_profiles.py`): create by duplication,
+set a default, edit, delete. New profiles copy an existing one rather than
+starting blank, because a blank profile compiles into a resume with no
+experience on it. Path-ish names are refused rather than slugged — "../escape"
+becoming "escape" would create a file under a name nobody asked for.
+
+One more test earned its place. `proposals()` was added to both backends with
+identical signatures, and the MongoDB copy called `_job_rows`, a helper that
+only exists on the SQLite side. It imported fine, matched signatures fine, and
+raised `NameError` the first time anything called it. `tests/test_store_parity.py`
+now walks every function in both stores for global names that do not resolve —
+and re-introducing the exact bug was confirmed to fail it.
+
+122 tests. Verified live: Auto Apply shortlisted a real role, the queue showed
+it, rejecting it removed it, and a re-run correctly declined to offer it again.
 
 ---
 

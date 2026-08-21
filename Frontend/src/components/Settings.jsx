@@ -59,6 +59,7 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
   const [limits, setLimits] = useState(overview.settings.limits || {})
   const [schedule, setSchedule] = useState(overview.settings.schedule || {})
   const [tailoring, setTailoring] = useState(overview.settings.tailoring || {})
+  const [autoApply, setAutoApply] = useState(overview.settings.auto_apply || {})
   const [provider, setProvider] = useState(overview.llm.provider || 'gemini')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -114,6 +115,12 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
           ...tailoring,
           mode: tailoring.mode || 'honest',
           auto_approve: tailoring.auto_approve !== false,
+        },
+        auto_apply: {
+          ...autoApply,
+          enabled: !!autoApply.enabled,
+          min_score: Math.min(100, Math.max(0, Number(autoApply.min_score ?? 70) || 0)),
+          daily_cap: Math.min(100, Math.max(1, Number(autoApply.daily_cap ?? 10) || 1)),
         },
         llm: { provider, ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}) },
       })
@@ -354,6 +361,41 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
               }
             />
           </div>
+        </div>
+
+        {/* ------------------------------------------------------ auto apply */}
+        <div>
+          <p className={group}>Auto Apply</p>
+          <div className="mt-3">
+            <Checkbox
+              checked={!!autoApply.enabled}
+              onChange={(v) => setAutoApply({ ...autoApply, enabled: v })}
+              label="Let the agent shortlist roles for me"
+              hint="It picks what clears the bar and puts it in a queue on this screen. Approving is what sends an application — nothing is ever submitted without you."
+            />
+          </div>
+          {autoApply.enabled ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Only shortlist above" hint="Match score, 0 to 100.">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={autoApply.min_score ?? 70}
+                  onChange={(e) => setAutoApply({ ...autoApply, min_score: e.target.value })}
+                />
+              </Field>
+              <Field label="At most per day" hint="However many qualify, it stops here.">
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={autoApply.daily_cap ?? 10}
+                  onChange={(e) => setAutoApply({ ...autoApply, daily_cap: e.target.value })}
+                />
+              </Field>
+            </div>
+          ) : null}
         </div>
 
         {/* ---------------------------------------------------- housekeeping */}

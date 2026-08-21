@@ -86,6 +86,15 @@ RUNNABLE = {
                        "offer or a rejection, and move the pipeline on.",
         "flags": ["limit", "max_age"],
     },
+    "agent_propose": {
+        "label": "Shortlist roles for approval",
+        "module": "agent.runner",
+        "subcommand": "propose",
+        "description": "Auto Apply's first half: pick the roles that clear your match "
+                       "threshold and put them in a queue for you to approve. Submits "
+                       "nothing — approving is what sends an application.",
+        "flags": [],
+    },
     "agent_outreach": {
         "label": "Cold email founders",
         "module": "agent.runner",

@@ -5,6 +5,7 @@ import Console from '../components/Console'
 import TrackedJobs from '../components/TrackedJobs'
 import Settings from '../components/Settings'
 import Portals from '../components/Portals'
+import Proposals from '../components/Proposals'
 import {
   Button,
   Checkbox,
@@ -142,6 +143,8 @@ export default function JobsTab() {
           {overview.store.reason} Everything still works and this run's data stays on disk.
         </Note>
       ) : null}
+
+      <Proposals busy={busy} onApply={applyToJobs} refreshKey={refreshKey} />
 
       <Pipeline
         stats={overview.stats}

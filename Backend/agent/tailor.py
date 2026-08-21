@@ -84,11 +84,12 @@ def tailoring_settings() -> dict[str, Any]:
     return {
         "mode": (cfg.get("mode") or "honest").strip().lower(),
         "auto_approve": bool(cfg.get("auto_approve", True)),
+        "profile": (cfg.get("profile") or "main").strip().lower(),
     }
 
 
 def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
-                  mode: str | None = None,
+                  mode: str | None = None, profile: str | None = None,
                   log: Callable[[str], None] = print) -> dict[str, Any]:
     """
     Tailor and compile a resume for one job. Never raises.
@@ -97,25 +98,30 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
     and `reason` says why, so the caller can record it against the job instead
     of dropping it.
     """
-    from api import ats, behuman, latex_resume
+    from api import ats, behuman, latex_resume, resume_profiles
 
     result: dict[str, Any] = {"ok": False, "pdf": None, "tex": None,
                               "version": "", "pages": None, "reason": "",
-                              "mode": "", "changes": [], "needsReview": False}
+                              "mode": "", "changes": [], "needsReview": False,
+                              "profile": ""}
     title = job.get("title") or "role"
     company = job.get("company_name") or "?"
 
-    if not latex_resume.PROFILE_PATH.is_file():
-        result["reason"] = "cv_data/profile.yaml is missing — nothing to tailor from."
+    profile_name = profile or tailoring_settings()["profile"]
+    profile_path = resume_profiles.path_for(profile_name)
+    result["profile"] = profile_name
+    if not profile_path.is_file():
+        result["reason"] = f"the '{profile_name}' profile is missing — nothing to tailor from."
         return result
 
     description = (job.get("description") or "").strip()
     jd_text = f"{title}\n\n{description}"
 
     try:
-        content = latex_resume.from_profile()
+        content = latex_resume.from_profile(profile_path)
     except Exception as exc:
-        result["reason"] = f"could not read profile.yaml: {type(exc).__name__}: {exc}"
+        result["reason"] = (f"could not read the '{profile_name}' profile: "
+                            f"{type(exc).__name__}: {exc}")
         return result
 
     RESUME_DIR.mkdir(parents=True, exist_ok=True)
@@ -155,7 +161,7 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
     if fails and use_llm:
         log(f"[resume]   audit failed ({fails[0]}) — rebuilding without the LLM rewrite")
         try:
-            content = latex_resume.from_profile()
+            content = latex_resume.from_profile(profile_path)
             if len(description) >= MIN_JD_CHARS:
                 latex_resume.tailor(content, jd_text, jd, use_llm=False,
                                     log=lambda m: log(f"[resume]   {m}"))
@@ -198,7 +204,7 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
 
 
 def build_and_record(job: dict[str, Any], *, use_llm: bool = True,
-                     mode: str | None = None,
+                     mode: str | None = None, profile: str | None = None,
                      log: Callable[[str], None] = print) -> dict[str, Any]:
     """Build, then write the path, version and review state onto the job.
 
@@ -207,7 +213,7 @@ def build_and_record(job: dict[str, Any], *, use_llm: bool = True,
     applier will not send it until someone has looked at the changes."""
     from . import store
 
-    out = build_for_job(job, use_llm=use_llm, mode=mode, log=log)
+    out = build_for_job(job, use_llm=use_llm, mode=mode, profile=profile, log=log)
     if out["ok"]:
         settings = tailoring_settings()
         approved = settings["auto_approve"] and not out.get("needsReview")

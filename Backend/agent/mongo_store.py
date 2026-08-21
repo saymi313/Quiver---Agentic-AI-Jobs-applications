@@ -29,7 +29,8 @@ from typing import Any, Iterable
 from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
-                     LEGACY_APPLICATION_STATUS, MESSAGE_FIELDS, TRACKER_STATUSES,
+                     LEGACY_APPLICATION_STATUS, MESSAGE_FIELDS, PROPOSAL_DECISIONS,
+                     TRACKER_STATUSES,
                      with_job_defaults,
                      OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now,
                      retry_policy)
@@ -499,6 +500,41 @@ def set_job_resume(job_id: int, path: str, version: str, *,
                   "resume_built_at": now(), "resume_mode": mode,
                   "resume_changes": json.dumps(changes or []),
                   "resume_approved": None if approved is None else (1 if approved else 0)}})
+
+
+def propose_job(job_id: int, reason: str) -> None:
+    """Put a job in the Auto Apply review queue. Proposing submits nothing."""
+    _connect().jobs.update_one(
+        {"id": int(job_id)},
+        {"$set": {"proposed_at": now(), "proposal_reason": reason,
+                  "proposal_decision": None}})
+
+
+def decide_proposal(job_id: int, decision: str) -> bool:
+    """Record the human's answer. Returns False for anything but the two values."""
+    if decision not in PROPOSAL_DECISIONS:
+        return False
+    _connect().jobs.update_one({"id": int(job_id)},
+                               {"$set": {"proposal_decision": decision}})
+    return True
+
+
+def proposals(decision: str | None = "__undecided__") -> list[dict[str, Any]]:
+    """Rows in the review queue; by default only those still waiting."""
+    query: dict[str, Any] = {"proposed_at": {"$ne": None}}
+    if decision == "__undecided__":
+        query["proposal_decision"] = None
+    elif decision:
+        query["proposal_decision"] = decision
+    rows = _attach_company(_cleaned(_connect().jobs.find(query)))
+    rows.sort(key=lambda r: (-(r.get("fit_score") or 0), r.get("proposed_at") or ""))
+    return rows
+
+
+def proposed_today() -> int:
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    return int(_connect().jobs.count_documents(
+        {"proposed_at": {"$ne": None, "$gte": since}}))
 
 
 def approve_job_resume(job_id: int, changes: list[dict[str, Any]] | None = None) -> None:

@@ -33,7 +33,8 @@ from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
                      LEGACY_APPLICATION_STATUS, MESSAGE_FIELDS, OUTREACH_FIELDS,
-                     PERSON_FIELDS, TRACKER_STATUSES, merge_settings, now, retry_policy,
+                     PERSON_FIELDS, PROPOSAL_DECISIONS, TRACKER_STATUSES, merge_settings, now,
+                     retry_policy,
                      with_job_defaults)
 
 # Overridable so the test suite can point the store at a throwaway file.
@@ -248,6 +249,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("jobs", "resume_mode TEXT"),
     ("jobs", "resume_changes TEXT"),
     ("jobs", "resume_approved INTEGER"),
+    ("jobs", "proposed_at TEXT"),
+    ("jobs", "proposal_reason TEXT"),
+    ("jobs", "proposal_decision TEXT"),
     ("applications", "tracker_status TEXT"),
     ("applications", "message_id TEXT"),
     ("applications", "last_message_at TEXT"),
@@ -653,6 +657,51 @@ def set_job_resume(job_id: int, path: str, version: str, *,
                    json.dumps(changes or []),
                    None if approved is None else (1 if approved else 0),
                    job_id))
+
+
+def propose_job(job_id: int, reason: str) -> None:
+    """Put a job in the Auto Apply review queue. Proposing submits nothing."""
+    with tx() as c:
+        c.execute("UPDATE jobs SET proposed_at = ?, proposal_reason = ?, "
+                  "proposal_decision = NULL WHERE id = ?", (now(), reason, job_id))
+
+
+def decide_proposal(job_id: int, decision: str) -> bool:
+    """Record the human's answer. Returns False for anything but the two values."""
+    if decision not in PROPOSAL_DECISIONS:
+        return False
+    with tx() as c:
+        c.execute("UPDATE jobs SET proposal_decision = ? WHERE id = ?", (decision, job_id))
+    return True
+
+
+def proposals(decision: str | None = "__undecided__") -> list[dict[str, Any]]:
+    """
+    Rows in the review queue.
+
+    The default returns only what is still waiting on a person, which is the
+    question the screen actually asks.
+    """
+    sql = ("SELECT j.*, c.name AS company_name, c.domain FROM jobs j "
+           "LEFT JOIN companies c ON c.id = j.company_id "
+           "WHERE j.proposed_at IS NOT NULL")
+    args: list[Any] = []
+    if decision == "__undecided__":
+        sql += " AND j.proposal_decision IS NULL"
+    elif decision:
+        sql += " AND j.proposal_decision = ?"
+        args.append(decision)
+    sql += " ORDER BY COALESCE(j.fit_score, 0) DESC, j.proposed_at DESC"
+    return _job_rows(_conn().execute(sql, args))
+
+
+def proposed_today() -> int:
+    """How many proposals the daily cap has already spent."""
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    row = _conn().execute(
+        "SELECT COUNT(*) FROM jobs WHERE proposed_at IS NOT NULL AND proposed_at >= ?",
+        (since,)).fetchone()
+    return int(row[0]) if row else 0
 
 
 def approve_job_resume(job_id: int, changes: list[dict[str, Any]] | None = None) -> None:

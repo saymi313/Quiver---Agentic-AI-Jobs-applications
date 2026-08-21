@@ -58,6 +58,11 @@ app.add_middleware(
         "http://localhost:5173", "http://127.0.0.1:5173",
         "http://localhost:4173", "http://127.0.0.1:4173",
     ],
+    # The browser extension. Its origin is chrome-extension://<id>, and the id
+    # is assigned at install time, so it cannot be listed literally. The API
+    # binds to loopback and holds no credentials, so the exposure is limited to
+    # extensions already installed on this machine.
+    allow_origin_regex=r"chrome-extension://[a-p]+",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -698,6 +703,7 @@ class SettingsPatch(BaseModel):
     llm: dict[str, Any] | None = None
     schedule: dict[str, Any] | None = None
     tailoring: dict[str, Any] | None = None
+    auto_apply: dict[str, Any] | None = None
 
 
 @app.post("/api/agent/settings")
@@ -742,6 +748,123 @@ def agent_screenshot(name: str):
 # --------------------------------------------------------------------------
 # Prep: tailoring modes, the change review, and adding a job by URL
 # --------------------------------------------------------------------------
+
+@app.get("/api/agent/resume-profiles")
+def agent_resume_profiles() -> dict[str, Any]:
+    """Every resume profile, and which one the agent uses by default."""
+    from . import resume_profiles
+
+    return {"rows": resume_profiles.listing(), "default": resume_profiles.default_name()}
+
+
+class ProfileRequest(BaseModel):
+    name: str
+    copy_from: str = "main"
+
+
+@app.post("/api/agent/resume-profiles")
+def agent_create_profile(req: ProfileRequest) -> dict[str, Any]:
+    """A new profile, duplicated from an existing one."""
+    from . import resume_profiles
+
+    out = resume_profiles.create(req.name, copy_from=req.copy_from)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
+
+
+@app.delete("/api/agent/resume-profiles/{name}")
+def agent_delete_profile(name: str) -> dict[str, Any]:
+    from . import resume_profiles
+
+    out = resume_profiles.delete(name)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
+
+
+@app.post("/api/agent/resume-profiles/{name}/default")
+def agent_set_default_profile(name: str) -> dict[str, Any]:
+    from . import resume_profiles
+
+    if not resume_profiles.set_default(name):
+        raise HTTPException(404, f"No profile called '{name}'.")
+    return {"ok": True, "default": resume_profiles.default_name()}
+
+
+@app.get("/api/agent/resume-profiles/{name}/content")
+def agent_read_profile(name: str) -> dict[str, Any]:
+    from . import resume_profiles
+
+    if not resume_profiles.exists(name):
+        raise HTTPException(404, f"No profile called '{name}'.")
+    return {"name": name, "text": resume_profiles.read(name)}
+
+
+class ProfileContent(BaseModel):
+    text: str
+
+
+@app.put("/api/agent/resume-profiles/{name}/content")
+def agent_write_profile(name: str, body: ProfileContent) -> dict[str, Any]:
+    """Save an edited profile, refusing anything that would not parse."""
+    from . import resume_profiles
+
+    out = resume_profiles.write(name, body.text)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
+
+
+@app.get("/api/agent/proposals")
+def agent_proposals() -> dict[str, Any]:
+    """
+    Auto Apply's review queue: what the agent would apply to, if you agree.
+
+    Reading this endpoint submits nothing, and neither does filling the queue.
+    An application happens only when the approved ids are handed to the applier,
+    which still refuses to run without them.
+    """
+    from agent import store as agent_store
+
+    agent_store.init()
+    cfg = agent_store.get_setting("auto_apply", {}) or {}
+    waiting = agent_store.proposals()
+    return {
+        "rows": waiting,
+        "settings": cfg,
+        "spentToday": agent_store.proposed_today(),
+        "dailyCap": int(cfg.get("daily_cap") or 10),
+        "enabled": bool(cfg.get("enabled")),
+    }
+
+
+class ProposalDecision(BaseModel):
+    ids: list[int]
+    decision: str
+
+
+@app.post("/api/agent/proposals/decide")
+def agent_decide_proposals(req: ProposalDecision) -> dict[str, Any]:
+    """
+    Approve or reject a batch.
+
+    Approving records the decision and hands back the ids; it does not submit.
+    The caller starts `agent_apply` with them, so the one path that reaches an
+    employer stays the same path a manual selection uses.
+    """
+    from agent import store as agent_store
+    from agent.schema import PROPOSAL_DECISIONS
+
+    agent_store.init()
+    if req.decision not in PROPOSAL_DECISIONS:
+        raise HTTPException(400, f"Decision must be one of {', '.join(PROPOSAL_DECISIONS)}.")
+
+    decided = [int(i) for i in req.ids
+               if agent_store.decide_proposal(int(i), req.decision)]
+    return {"ok": True, "decision": req.decision, "ids": decided,
+            "remaining": len(agent_store.proposals())}
+
 
 @app.get("/api/agent/portals")
 def agent_portals() -> dict[str, Any]:

@@ -33,7 +33,13 @@ JOB_FIELDS = (
     # The tailoring the resume went through, and whether a human has signed it
     # off. `resume_changes` is the before/after list the review screen shows.
     "resume_mode", "resume_changes", "resume_approved",
+    # Auto Apply's review queue. The agent proposes; a human decides.
+    "proposed_at", "proposal_reason", "proposal_decision",
 )
+
+# What a human said about a proposal. `None` means undecided — the row is
+# sitting in the queue waiting to be looked at.
+PROPOSAL_DECISIONS = ("approved", "rejected")
 
 # Rows written before the tracking columns existed simply do not carry them —
 # MongoDB is schemaless and SQLite backfills NULL. Every read path runs through
@@ -43,6 +49,7 @@ JOB_VIEW_DEFAULTS: dict[str, Any] = {
     "description_source": None, "resume_path": None, "resume_version": None,
     "resume_built_at": None, "applied_at": None, "failure_reason": None,
     "resume_mode": None, "resume_changes": None, "resume_approved": None,
+    "proposed_at": None, "proposal_reason": None, "proposal_decision": None,
 }
 
 
@@ -237,6 +244,26 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "mode": "honest",
         "auto_approve": True,
         "review_form_before_submit": False,
+    },
+    # Auto Apply, as a review queue rather than a free hand.
+    #
+    # Tsenta's version picks roles and submits them. Quiver's picks roles and
+    # *proposes* them: a human approves the batch, and only then do those job
+    # ids reach the applier. `agent_apply` still refuses to run without explicit
+    # ids, so the guarantee is structural rather than a promise — no setting,
+    # however misconfigured, can make the agent submit something nobody saw.
+    #
+    # Off by default. Turning it on is a decision, not a side effect.
+    "auto_apply": {
+        "enabled": False,
+        # Only propose roles at least this good a match.
+        "min_score": 70,
+        # And no more than this many in a day, however many qualify.
+        "daily_cap": 10,
+        # Empty means "any category the targeting settings already allow".
+        "categories": [],
+        # Only propose roles whose tailored resume is built and signed off.
+        "require_resume": True,
     },
     "limits": {
         "max_applications_per_run": 10,

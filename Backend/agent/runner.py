@@ -7,6 +7,7 @@ The agent loop.
   outreach  research each verified contact, write a personal email, send it
   tasks     drain the retry queue: failed JD fetches, resume builds, greylists
   inbox     read replies, link them to applications, move the pipeline on
+  propose   shortlist roles for your approval — never submits anything
 
 Applying is user-triggered only. Discovery and resume generation are safe to
 automate; submitting an application on someone's behalf without them asking is
@@ -511,7 +512,8 @@ def drain_tasks(limit: int = 50, *, log: Callable[[str], None] = _log) -> dict[s
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
     ap.add_argument("mode",
-                    choices=["discover", "apply", "resumes", "outreach", "tasks", "inbox"])
+                    choices=["discover", "apply", "resumes", "outreach", "tasks",
+                             "inbox", "propose"])
     ap.add_argument("--sources", default="yc,hn,remote,hidden",
                     help="comma list: yc, hn, remote, hidden")
     ap.add_argument("--limit", type=int, default=25)
@@ -572,6 +574,9 @@ def main(argv: list[str] | None = None) -> int:
             stats["inbox"] = inbox_mod.sync(days=args.max_age or 30,
                                             limit=max(args.limit, 50))
 
+        if args.mode == "propose":
+            stats["propose"] = propose()
+
         if args.mode == "outreach":
             _log(_rule("Cold outreach"))
             stats["outreach"] = outreach.run_outreach(
@@ -592,6 +597,110 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"\n[agent] FAILED — {type(exc).__name__}: {exc}")
         traceback.print_exc()
         return 1
+
+
+
+
+# --------------------------------------------------------------------------
+# Auto Apply — the proposing half
+# --------------------------------------------------------------------------
+#
+# This is the whole of Auto Apply on Quiver's side, and it deliberately stops
+# one step short of Tsenta's. Their agent picks roles and submits them. This one
+# picks roles and *proposes* them: rows go into a review queue, a human approves
+# the batch, and only then do those job ids reach `apply_to_ids`.
+#
+# The guarantee is structural rather than a promise. `agent_apply` still refuses
+# to run without explicit `--job-ids`, and nothing here calls it — so no setting,
+# however misconfigured, and no scheduled run can put an application in front of
+# an employer that nobody saw. Proposing is therefore safe to schedule; applying
+# is not, and is not in the scheduler's whitelist.
+
+def propose(*, log: Callable[[str], None] = _log) -> dict[str, Any]:
+    """Fill the Auto Apply review queue. Submits nothing, ever."""
+    cfg = store.get_setting("auto_apply", {}) or {}
+    counts = {"proposed": 0, "considered": 0, "capped": 0}
+
+    if not cfg.get("enabled"):
+        log("[auto] Auto Apply is off. Turn it on in Settings to have the agent "
+            "shortlist roles for your approval.")
+        return counts
+
+    # `or` would be wrong here: a threshold of 0 is a legitimate setting
+    # meaning "propose anything matched", and `0 or 70` is 70 — the user would
+    # silently get the default they had just changed.
+    def _number(key: str, fallback: float) -> float:
+        value = cfg.get(key)
+        if value is None or value == "":
+            return fallback
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    min_score = _number("min_score", 70)
+    daily_cap = int(_number("daily_cap", 10))
+    wanted = {str(c).strip().lower() for c in (cfg.get("categories") or []) if str(c).strip()}
+    require_resume = cfg.get("require_resume", True) is not False
+
+    spent = store.proposed_today()
+    room = max(0, daily_cap - spent)
+    if room <= 0:
+        log(f"[auto] the daily cap of {daily_cap} proposal(s) is already spent")
+        counts["capped"] = daily_cap
+        return counts
+
+    # Only rows that are genuinely actionable: matched, not applied, not already
+    # in the queue, and not previously rejected — re-proposing something the
+    # user said no to is how an assistant becomes a nuisance.
+    already = store.applied_hashes()
+    pool = [
+        j for j in store.list_jobs(500, "matched")
+        if not j.get("proposed_at")
+        and j.get("status") not in ("applied", "skipped", "duplicate")
+        and not (j.get("dedupe_hash") and j["dedupe_hash"] in already)
+    ]
+    counts["considered"] = len(pool)
+    pool.sort(key=lambda j: -(j.get("fit_score") or 0))
+
+    log(_rule("Auto Apply: shortlisting for your approval"))
+    log(f"[auto] {len(pool)} candidate(s) · score at least {min_score:.0f} · "
+        f"{room} of {daily_cap} left today")
+
+    for job in pool:
+        if counts["proposed"] >= room:
+            log(f"[auto] stopping at the daily cap of {daily_cap}")
+            counts["capped"] = daily_cap
+            break
+
+        score = float(job.get("fit_score") or 0)
+        if score < min_score:
+            continue
+        category = (job.get("role_category") or "").lower()
+        if wanted and category not in wanted:
+            continue
+        if require_resume and not job.get("resume_path"):
+            continue
+        # A resume waiting on review is not one to propose an application for:
+        # the applier would refuse it anyway, so queueing it would only produce
+        # a decision the user cannot act on.
+        if job.get("resume_approved") == 0:
+            continue
+
+        reason = (f"scored {score:.0f}"
+                  + (f" · {category.replace('_', ' ')}" if category else "")
+                  + (f" · {job.get('fit_reason')}" if job.get("fit_reason") else ""))
+        store.propose_job(int(job["id"]), reason[:400])
+        counts["proposed"] += 1
+        log(f"[auto] proposed {job.get('company_name')} — {(job.get('title') or '')[:44]} "
+            f"({score:.0f})")
+
+    if counts["proposed"]:
+        log(f"[auto] {counts['proposed']} role(s) waiting for your approval on the "
+            f"Jobs screen. Nothing has been submitted.")
+    else:
+        log("[auto] nothing cleared the bar this run.")
+    return counts
 
 
 if __name__ == "__main__":

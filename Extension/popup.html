@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quiver</title>
+    <style>
+      /*
+        The same restraint as the dashboard: opaque surfaces, one hairline
+        border, one accent. A popup is 360px wide and on screen for four
+        seconds, so it says one thing and offers one action.
+      */
+      :root {
+        color-scheme: dark;
+        --canvas: #0c0d10;
+        --surface: #16181d;
+        --line: #23262d;
+        --fg: #eceef1;
+        --muted: #8b929e;
+        --accent: #26a37f;
+        --bad: #e0655f;
+        --warn: #d9a441;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 340px;
+        padding: 14px;
+        background: var(--canvas);
+        color: var(--fg);
+        font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1 {
+        margin: 0 0 2px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      p { margin: 0; color: var(--muted); font-size: 12px; }
+      .url {
+        margin: 10px 0;
+        padding: 7px 9px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
+        max-height: 54px;
+        overflow: hidden;
+      }
+      button {
+        width: 100%;
+        height: 32px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #0c0d10;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+        /* Feedback on press, not on release. */
+        transition: transform 90ms cubic-bezier(0.3, 0, 0.2, 1), filter 120ms ease-out;
+      }
+      button:active { transform: scale(0.975); transition-duration: 40ms; }
+      button:hover { filter: brightness(1.08); }
+      button:disabled { background: #262a32; color: #6b7280; cursor: not-allowed; transform: none; }
+      .result {
+        margin-top: 10px;
+        padding: 8px 9px;
+        border: 1px solid var(--line);
+        border-left-width: 2px;
+        border-radius: 6px;
+        background: var(--surface);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .result.ok { border-left-color: var(--accent); }
+      .result.bad { border-left-color: var(--bad); }
+      .result.info { border-left-color: var(--warn); }
+      .result b { font-weight: 600; }
+      .meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+      a { color: var(--accent); }
+      @media (prefers-reduced-motion: reduce) {
+        button:active { transform: none; opacity: 0.72; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Track this job</h1>
+    <p>Quiver reads the posting, works out the role and scores it.</p>
+    <div class="url" id="url">…</div>
+    <button id="go">Track it</button>
+    <div id="out"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

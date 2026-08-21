@@ -105,6 +105,36 @@ export const api = {
 
   agentPortals: () => fetch(`${BASE}/api/agent/portals`).then(handle),
 
+  // ---- auto apply ----
+  agentProposals: () => fetch(`${BASE}/api/agent/proposals`).then(handle),
+
+  agentDecideProposals: (ids, decision) =>
+    fetch(`${BASE}/api/agent/proposals/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, decision }),
+    }).then(handle),
+
+  // ---- resume profiles ----
+  agentResumeProfiles: () => fetch(`${BASE}/api/agent/resume-profiles`).then(handle),
+
+  agentCreateProfile: (name, copyFrom = 'main') =>
+    fetch(`${BASE}/api/agent/resume-profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, copy_from: copyFrom }),
+    }).then(handle),
+
+  agentDeleteProfile: (name) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }).then(handle),
+
+  agentSetDefaultProfile: (name) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/default`, {
+      method: 'POST',
+    }).then(handle),
+
   // ---- prep ----
   agentJobFromUrl: (url) =>
     fetch(`${BASE}/api/agent/job-from-url`, {
