@@ -113,7 +113,7 @@ export default function ResumeTab({ aiStatus }) {
             <p className="mb-1 text-micro font-medium tracking-wide text-n-400 uppercase">Resume</p>
             <button
               onClick={() => fileRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-sm border border-dashed border-line-strong px-3 py-3 text-left transition-colors hover:border-n-600 hover:bg-raised"
+              className="press flex w-full items-center gap-3 rounded-sm border border-dashed border-line-strong px-3 py-3 text-left hover:border-n-600 hover:bg-raised"
             >
               <Icon.Doc className="size-4 shrink-0 text-n-500" />
               {resumeFile ? (
@@ -214,7 +214,7 @@ export default function ResumeTab({ aiStatus }) {
                       <a
                         key={fmt}
                         href={built.downloads[fmt]}
-                        className={`inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-sm transition-colors ${
+                        className={`press inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-sm ${
                           fmt === 'pdf'
                             ? 'bg-accent font-medium text-n-950 hover:bg-brand-400'
                             : 'border border-line-strong bg-raised text-n-200 hover:bg-n-800'

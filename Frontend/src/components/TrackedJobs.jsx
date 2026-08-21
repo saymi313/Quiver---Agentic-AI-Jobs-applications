@@ -313,7 +313,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                     <button
                       disabled={busy}
                       onClick={() => onGenerate([r.id])}
-                      className="text-n-500 transition-colors hover:text-n-200 disabled:opacity-40"
+                      className="press text-n-500 hover:text-n-200 disabled:opacity-40"
                     >
                       generate
                     </button>

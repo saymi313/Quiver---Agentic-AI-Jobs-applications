@@ -81,7 +81,7 @@ export default function Console({ lines, job, onStop, onClear, height = 'h-72' }
           {!stick && running ? (
             <button
               onClick={() => setStick(true)}
-              className="w-full border-t border-line py-1.5 text-tiny text-n-400 hover:text-n-200"
+              className="press w-full border-t border-line py-1.5 text-tiny text-n-400 hover:text-n-200"
             >
               Jump to latest
             </button>

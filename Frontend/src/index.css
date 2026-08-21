@@ -53,19 +53,33 @@
   --radius-sm: 6px;
   --radius-md: 8px;
 
-  /* ---------- type ---------- */
-  --text-micro: 11px;
-  --text-micro--line-height: 16px;
-  --text-tiny: 12px;
-  --text-tiny--line-height: 18px;
-  --text-sm: 13px;
-  --text-sm--line-height: 20px;
-  --text-lg: 16px;
-  --text-lg--line-height: 24px;
-  --text-xl: 20px;
-  --text-xl--line-height: 28px;
-  --text-2xl: 26px;
-  --text-2xl--line-height: 32px;
+  /* ---------- type ----------
+
+     Tracking and leading are size-specific, never one value for everything.
+     Letters read too far apart as text grows, so large sizes get negative
+     tracking; small sizes get a touch of positive tracking to stay legible.
+     Leading runs the other way: tight on headings, looser on body copy.
+
+     Sizes are in rem so a larger browser text setting scales the layout with
+     the text instead of overflowing it. 1rem = 16px at default settings. */
+  --text-micro: 0.6875rem; /* 11px */
+  --text-micro--line-height: 1.45;
+  --text-micro--letter-spacing: 0.01em;
+  --text-tiny: 0.75rem; /* 12px */
+  --text-tiny--line-height: 1.5;
+  --text-tiny--letter-spacing: 0.005em;
+  --text-sm: 0.8125rem; /* 13px */
+  --text-sm--line-height: 1.54;
+  --text-sm--letter-spacing: 0em;
+  --text-lg: 1rem; /* 16px */
+  --text-lg--line-height: 1.5;
+  --text-lg--letter-spacing: -0.006em;
+  --text-xl: 1.25rem; /* 20px */
+  --text-xl--line-height: 1.4;
+  --text-xl--letter-spacing: -0.014em;
+  --text-2xl: 1.625rem; /* 26px */
+  --text-2xl--line-height: 1.23;
+  --text-2xl--letter-spacing: -0.02em;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
@@ -88,9 +102,13 @@ body {
   background: var(--color-canvas);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-size: 14px;
+  /* Relative to the user's own text size rather than a fixed 14px, so the
+     browser's font setting actually does something. */
+  font-size: 0.875rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
 }
 
 /* One focus treatment for the whole app, keyboard only. */
@@ -118,8 +136,16 @@ body {
   background-clip: content-box;
 }
 
-/* The only animation in the system: the "running" dot. Everything else
-   resolves instantly, because motion on a data tool is noise. */
+/*
+  Motion.
+
+  Two kinds, and no more. Springs live in JS (src/lib/motion.js) because a CSS
+  transition cannot be grabbed and reversed mid-flight — it always plays out to
+  its target first. Anything a user can interrupt is animated there.
+
+  What stays in CSS is the small stuff that resolves in one step: press states
+  and colour changes. Those want a short ease, not a spring.
+*/
 @keyframes pulse-dot {
   0%,
   100% {
@@ -133,12 +159,54 @@ body {
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
+/* Press feedback: instant on the way down, gentle on the way back. The
+   asymmetry is deliberate — a press should feel caught, a release should
+   feel let go. */
+.press {
+  transition:
+    transform 90ms cubic-bezier(0.3, 0, 0.2, 1),
+    background-color 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out,
+    opacity 120ms ease-out;
+}
+/* `:active` already fires on pointer-down, so every `.press` element gets the
+   instant response for free. `data-pressed` is what usePress sets, and it adds
+   what CSS cannot: a drag-away cancel with hysteresis. */
+.press:active,
+.press[data-pressed='true'] {
+  transform: scale(0.975);
+  transition-duration: 40ms;
+}
+.press:disabled:active,
+.press[aria-disabled='true']:active {
+  transform: none;
+}
+
+/*
+  Reduced motion is a gentler equivalent, not silence. Transform-based movement
+  goes; colour and opacity feedback stays, because losing it would leave the
+  interface with no response at all.
+*/
 @media (prefers-reduced-motion: reduce) {
+  .press:active,
+  .press[data-pressed='true'] {
+    transform: none;
+    opacity: 0.72;
+  }
+  .animate-pulse-dot {
+    animation-duration: 3.2s;
+  }
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-line: #4a4f59;
+    --color-line-strong: #6d7581;
   }
 }

@@ -9,7 +9,17 @@
     * Type sizes come from the scale in index.css. `micro` is for labels only.
     * Interactive elements define hover / focus / active / disabled together,
       so a new button cannot ship with two of the four.
+    * Anything a user can interrupt is animated with a spring from src/lib/
+      motion.js, never a CSS transition — a transition always plays out to its
+      target before it will accept a new one, which is exactly wrong for a
+      panel someone is opening and closing. Colour and press states stay in
+      CSS, because they resolve in one step.
 */
+
+import { AnimatePresence, motion as m } from 'motion/react'
+
+import { springFor } from '../lib/motion'
+import { usePress } from '../lib/usePress'
 
 /* ------------------------------------------------------------------ layout */
 
@@ -55,7 +65,11 @@ export function Section({ title, description, actions, children, flush = false, 
 }
 
 /** Collapsible section. Configuration lives behind these so a screen opens
- *  showing what you came to do, not every knob that governs it. */
+ *  showing what you came to do, not every knob that governs it.
+ *
+ *  The open/close is a spring rather than a CSS transition so it can be
+ *  grabbed mid-flight: click twice quickly and it reverses from wherever it
+ *  currently is instead of finishing the first move and then undoing it. */
 export function Disclosure({ title, description, open, onToggle, children, actions }) {
   return (
     <section className="rounded-md border border-line bg-surface">
@@ -65,11 +79,11 @@ export function Disclosure({ title, description, open, onToggle, children, actio
           aria-expanded={open}
           className="group flex min-w-0 items-center gap-2 text-left"
         >
-          <Icon.Chevron
-            className={`size-3.5 shrink-0 text-n-500 transition-transform ${open ? 'rotate-90' : ''}`}
-          />
+          <m.span animate={{ rotate: open ? 90 : 0 }} transition={springFor()} className="flex">
+            <Icon.Chevron className="size-3.5 shrink-0 text-n-500" />
+          </m.span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold tracking-tight text-n-100 group-hover:text-n-50">
+            <span className="block text-sm font-semibold text-n-100 group-hover:text-n-50">
               {title}
             </span>
             {description ? (
@@ -79,7 +93,20 @@ export function Disclosure({ title, description, open, onToggle, children, actio
         </button>
         {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </header>
-      {open ? <div className="border-t border-line p-4">{children}</div> : null}
+      <AnimatePresence initial={false}>
+        {open ? (
+          <m.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={springFor()}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-line p-4">{children}</div>
+          </m.div>
+        ) : null}
+      </AnimatePresence>
     </section>
   )
 }
@@ -125,12 +152,25 @@ export function Button({
   disabled,
   className = '',
   children,
+  onClick,
   ...rest
 }) {
+  // Feedback lands on pointer-down rather than on click. Waiting for the
+  // release to acknowledge a press is the single clearest way to make a
+  // control feel dead, and it costs nothing to fix.
+  const { pressed, handlers } = usePress({ onPress: onClick, disabled: disabled || busy })
   return (
     <button
       disabled={disabled || busy}
-      className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-colors
+      data-pressed={pressed}
+      // onClick stays bound for keyboard activation, which never fires a
+      // pointer event; usePress commits the pointer path and the two do not
+      // both fire for one interaction.
+      onClick={(event) => {
+        if (event.detail === 0) onClick?.(event)
+      }}
+      {...handlers}
+      className={`press inline-flex shrink-0 items-center justify-center whitespace-nowrap
         disabled:cursor-not-allowed ${BUTTON_SIZE[size]} ${BUTTON_VARIANT[variant]} ${className}`}
       {...rest}
     >

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion as m } from 'motion/react'
 import JobsTab from './tabs/JobsTab'
 import ResumeTab from './tabs/ResumeTab'
 import OutreachTab from './tabs/OutreachTab'
 import { api } from './lib/api'
+import { springFor } from './lib/motion'
 import { Note, Status } from './components/ui'
 
 /*
@@ -70,6 +72,10 @@ export default function App() {
         <div className="mx-auto flex h-13 max-w-6xl items-center gap-6 px-6">
           <span className="text-sm font-semibold tracking-tight text-n-100">Quiver</span>
 
+          {/* The underline is one shared element that springs between tabs
+              rather than a border toggling on each button. It carries the eye
+              from where you were to where you are, and because it is a spring
+              it can be redirected mid-travel by a second click. */}
           <nav className="flex items-center gap-1" aria-label="Main">
             {TABS.map((t) => {
               const active = tab === t.key
@@ -78,13 +84,18 @@ export default function App() {
                   key={t.key}
                   onClick={() => setTab(t.key)}
                   aria-current={active ? 'page' : undefined}
-                  className={`-mb-px h-13 border-b-2 px-3 text-sm transition-colors ${
-                    active
-                      ? 'border-accent font-medium text-n-100'
-                      : 'border-transparent text-n-400 hover:text-n-200'
+                  className={`relative -mb-px h-13 px-3 text-sm transition-colors ${
+                    active ? 'font-medium text-n-100' : 'text-n-400 hover:text-n-200'
                   }`}
                 >
                   {t.label}
+                  {active ? (
+                    <m.span
+                      layoutId="tab-underline"
+                      transition={springFor()}
+                      className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
+                    />
+                  ) : null}
                 </button>
               )
             })}
@@ -108,12 +119,27 @@ export default function App() {
             From the <code className="text-n-200">Backend</code> folder run{' '}
             <code className="text-n-200">python run_dashboard.py</code>, then reload this page.
           </Note>
-        ) : tab === 'jobs' ? (
-          <JobsTab />
-        ) : tab === 'resume' ? (
-          <ResumeTab aiStatus={health?.ai} />
         ) : (
-          <OutreachTab />
+          // A short settle rather than a slide: the screens are siblings, not
+          // a stack, so there is no direction for one to come from. `mode
+          // ="wait"` would add a hole where neither screen is on show.
+          <AnimatePresence initial={false} mode="popLayout">
+            <m.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={springFor()}
+            >
+              {tab === 'jobs' ? (
+                <JobsTab />
+              ) : tab === 'resume' ? (
+                <ResumeTab aiStatus={health?.ai} />
+              ) : (
+                <OutreachTab />
+              )}
+            </m.div>
+          </AnimatePresence>
         )}
       </main>
     </div>
