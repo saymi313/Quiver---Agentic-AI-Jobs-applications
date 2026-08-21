@@ -2,11 +2,16 @@
   The design kit. Every visual decision in the app resolves to something here.
 
   Conventions:
-    * Surfaces are opaque. `surface` is the default panel, `raised` is one
-      step up (used for nested blocks), `sunken` is the console well.
-    * Depth is a 1px `line` border. No shadows, no blur, no gradients.
-    * Radius comes from four tokens; components pick one and never deviate.
-    * Type sizes come from the scale in index.css. `micro` is for labels only.
+    * Content surfaces are opaque and white; `raised`/`sunken` are the one
+      grey step up for nested blocks and wells. Only chrome is translucent.
+    * Depth is a 1px `line` border. Shadow is reserved for things that float
+      above the page, never for panels that sit on it.
+    * Radius comes from the tokens in index.css; buttons and chips are pills,
+      panels are 12 to 18px. Components pick one and never deviate.
+    * Type sizes come from the scale in index.css, each with its own tracking
+      and leading. `micro` is for labels only.
+    * Near-black is the primary action and nothing else. Blue is selection,
+      links and focus. A control that is neither gets grey.
     * Interactive elements define hover / focus / active / disabled together,
       so a new button cannot ship with two of the four.
     * Anything a user can interrupt is animated with a spring from src/lib/
@@ -28,11 +33,11 @@ import { usePress } from '../lib/usePress'
  *  knows where they are and what the screen is for. */
 export function PageHead({ title, description, actions }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 pb-5">
+    <div className="flex flex-wrap items-end justify-between gap-4 pb-6">
       <div className="max-w-2xl">
-        <h1 className="text-xl font-semibold tracking-tight text-n-100">{title}</h1>
+        <h1 className="text-2xl font-semibold text-n-100">{title}</h1>
         {description ? (
-          <p className="mt-1 text-sm leading-relaxed text-n-400">{description}</p>
+          <p className="mt-1.5 text-base leading-relaxed text-n-400">{description}</p>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
@@ -44,9 +49,9 @@ export function PageHead({ title, description, actions }) {
  *  console that should meet the border with no padding. */
 export function Section({ title, description, actions, children, flush = false, className = '' }) {
   return (
-    <section className={`rounded-md border border-line bg-surface ${className}`}>
+    <section className={`rounded-lg border border-line bg-surface ${className}`}>
       {title || actions ? (
-        <header className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+        <header className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
           <div className="min-w-0">
             {title ? (
               <h2 className="text-sm font-semibold tracking-tight text-n-100">{title}</h2>
@@ -59,7 +64,7 @@ export function Section({ title, description, actions, children, flush = false, 
         </header>
       ) : null}
       {children != null ? (
-        <div className={flush ? 'border-t border-line' : 'border-t border-line p-4'}>{children}</div>
+        <div className={flush ? 'border-t border-line' : 'border-t border-line p-5'}>{children}</div>
       ) : null}
     </section>
   )
@@ -73,8 +78,8 @@ export function Section({ title, description, actions, children, flush = false, 
  *  currently is instead of finishing the first move and then undoing it. */
 export function Disclosure({ title, description, open, onToggle, children, actions }) {
   return (
-    <section className="rounded-md border border-line bg-surface">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <section className="rounded-lg border border-line bg-surface">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <button
           onClick={() => onToggle(!open)}
           aria-expanded={open}
@@ -84,7 +89,7 @@ export function Disclosure({ title, description, open, onToggle, children, actio
             <Icon.Chevron className="size-3.5 shrink-0 text-n-500" />
           </m.span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-n-100 group-hover:text-n-50">
+            <span className="block text-sm font-semibold text-n-100">
               {title}
             </span>
             {description ? (
@@ -104,7 +109,7 @@ export function Disclosure({ title, description, open, onToggle, children, actio
             transition={springFor()}
             className="overflow-hidden"
           >
-            <div className="border-t border-line p-4">{children}</div>
+            <div className="border-t border-line p-5">{children}</div>
           </m.div>
         ) : null}
       </AnimatePresence>
@@ -126,24 +131,26 @@ export function Metric({ label, value, hint }) {
 
 /* ---------------------------------------------------------------- controls */
 
+/* Pills, as Apple and Tsenta both draw them. A rounded rectangle reads as a
+   form field; a pill reads as something to press. */
 const BUTTON_VARIANT = {
   primary:
-    'bg-accent text-n-950 font-medium hover:bg-brand-400 active:bg-brand-500 ' +
+    'bg-accent text-n-950 font-medium hover:bg-brand-400 ' +
     'disabled:bg-n-700 disabled:text-n-500',
   secondary:
-    'bg-raised text-n-200 border border-line-strong hover:bg-n-800 hover:text-n-100 ' +
-    'active:bg-n-700 disabled:bg-surface disabled:text-n-600 disabled:border-line',
+    'bg-surface text-n-100 border border-line-strong hover:bg-n-850 ' +
+    'disabled:bg-n-850 disabled:text-n-500 disabled:border-line',
   ghost:
-    'text-n-400 hover:bg-raised hover:text-n-100 active:bg-n-800 disabled:text-n-600 ' +
+    'text-n-300 hover:bg-n-850 hover:text-n-100 disabled:text-n-500 ' +
     'disabled:hover:bg-transparent',
   danger:
-    'bg-bad-400 text-n-950 font-medium hover:brightness-110 active:brightness-95 ' +
+    'bg-bad-400 text-n-950 font-medium hover:brightness-110 ' +
     'disabled:bg-n-700 disabled:text-n-500',
 }
 
 const BUTTON_SIZE = {
-  sm: 'h-7 gap-1.5 px-2.5 text-tiny rounded-sm',
-  md: 'h-8 gap-2 px-3 text-sm rounded-sm',
+  sm: 'h-7 gap-1.5 px-3 text-tiny rounded-full',
+  md: 'h-9 gap-2 px-4 text-sm rounded-full',
 }
 
 export function Button({
@@ -191,10 +198,14 @@ function Spinner({ className = 'size-3.5' }) {
 }
 
 /** Shared by input, select and textarea so the three can never drift. */
+/* Fields are the one place that keeps a rounded rectangle rather than a pill:
+   a pill-shaped text input tells you it is a button. Focus is the blue ring
+   Apple puts on every field, not a border colour change. */
 const control =
-  'w-full rounded-sm border border-line-strong bg-sunken px-2.5 py-1.5 text-sm text-n-100 ' +
-  'transition-colors outline-none placeholder:text-n-600 ' +
-  'hover:border-n-600 focus:border-brand-400 disabled:bg-surface disabled:text-n-500'
+  'w-full rounded-sm border border-line-strong bg-surface px-3 py-1.5 text-sm text-n-100 ' +
+  'transition-[border-color,box-shadow] outline-none placeholder:text-n-500 ' +
+  'hover:border-n-500 focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/18 ' +
+  'disabled:bg-n-850 disabled:text-n-500'
 
 export function Input({ className = '', ...rest }) {
   return <input className={`${control} ${className}`} {...rest} />
@@ -253,7 +264,7 @@ export function Checkbox({ checked, onChange, label, hint, disabled }) {
         checked={!!checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-3.5 shrink-0 accent-brand-500"
+        className="mt-0.5 size-4 shrink-0 accent-blue-500"
       />
       <span className="min-w-0">
         <span className="block text-sm leading-snug text-n-200">{label}</span>
@@ -276,12 +287,17 @@ export function Switch({ checked, onChange, label, hint, disabled }) {
         aria-label={typeof label === 'string' ? label : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`mt-0.5 h-4 w-7 shrink-0 rounded-full p-0.5 transition-colors
-          ${checked ? 'bg-accent' : 'bg-n-700'} ${disabled ? 'cursor-not-allowed' : ''}`}
+        // Apple's switch, at web scale: a grey track that turns green, and a
+        // white knob that keeps its own small shadow so it reads as a physical
+        // thing sitting in a groove rather than a coloured rectangle.
+        className={`mt-px h-[22px] w-[38px] shrink-0 rounded-full p-[2px]
+          transition-colors duration-200 ease-out
+          ${checked ? 'bg-ok-400' : 'bg-n-700'} ${disabled ? 'cursor-not-allowed' : ''}`}
       >
         <span
-          className={`block size-3 rounded-full bg-n-100 transition-transform
-            ${checked ? 'translate-x-3' : 'translate-x-0'}`}
+          className={`block size-[18px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)]
+            transition-transform duration-200 ease-out
+            ${checked ? 'translate-x-4' : 'translate-x-0'}`}
         />
       </button>
       <span className="min-w-0">
@@ -303,14 +319,15 @@ const STATUS_COLOR = {
   warn: 'text-warn-400',
   bad: 'text-bad-400',
   info: 'text-info-400',
-  accent: 'text-brand-400',
+  accent: 'text-blue-500',
 }
 
 export function Status({ tone = 'neutral', dot = true, pulse = false, title, children }) {
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap text-tiny ${STATUS_COLOR[tone]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full
+        px-2 py-0.5 text-micro font-medium ${STATUS_CHIP[tone] || STATUS_CHIP.neutral}`}
     >
       {dot ? (
         <span
@@ -322,12 +339,24 @@ export function Status({ tone = 'neutral', dot = true, pulse = false, title, chi
   )
 }
 
+/* A tinted pill rather than coloured text on the page ground. In a dense
+   table the fill is what carries the meaning at a glance; the word only
+   confirms it. */
+const STATUS_CHIP = {
+  ok: 'bg-ok-tint text-ok-400',
+  warn: 'bg-warn-tint text-warn-400',
+  bad: 'bg-bad-tint text-bad-400',
+  info: 'bg-info-tint text-info-400',
+  accent: 'bg-accent-tint text-n-100',
+  neutral: 'bg-n-850 text-n-400',
+}
+
 /** For categorical values (a role category, a portal name) — never status. */
 export function Tag({ children, title, className = '' }) {
   return (
     <span
       title={title}
-      className={`inline-block rounded-xs bg-raised px-1.5 py-0.5 text-micro text-n-300 ${className}`}
+      className={`inline-block rounded-full bg-n-850 px-2 py-0.5 text-micro text-n-400 ${className}`}
     >
       {children}
     </span>
@@ -335,10 +364,10 @@ export function Tag({ children, title, className = '' }) {
 }
 
 const NOTE_TONE = {
-  info: 'border-line-strong bg-raised text-n-300',
-  warn: 'border-warn-400/35 bg-warn-400/8 text-warn-400',
-  bad: 'border-bad-400/35 bg-bad-400/8 text-bad-400',
-  ok: 'border-ok-400/35 bg-ok-400/8 text-ok-400',
+  info: 'border-line bg-info-tint text-n-200',
+  warn: 'border-warn-400/25 bg-warn-tint text-n-200',
+  bad: 'border-bad-400/25 bg-bad-tint text-n-200',
+  ok: 'border-ok-400/25 bg-ok-tint text-n-200',
 }
 
 export function Note({ tone = 'info', title, children, onDismiss }) {
@@ -377,14 +406,14 @@ export function Empty({ title, children, action }) {
 export function Meter({ label, value, max, detail }) {
   const pct = max ? Math.max(0, Math.min(value / max, 1)) * 100 : 0
   const tone =
-    pct >= 85 ? 'bg-ok-400' : pct >= 60 ? 'bg-brand-500' : pct >= 35 ? 'bg-warn-400' : 'bg-bad-400'
+    pct >= 85 ? 'bg-ok-400' : pct >= 60 ? 'bg-blue-500' : pct >= 35 ? 'bg-warn-400' : 'bg-bad-400'
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-sm text-n-200">{label}</span>
         <span className="shrink-0 text-tiny tabular-nums text-n-400">
           {value}
-          <span className="text-n-600"> / {max}</span>
+          <span className="text-n-500"> / {max}</span>
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-n-800">
@@ -399,7 +428,7 @@ export function Meter({ label, value, max, detail }) {
  *  animated SVG ring was decoration around a two-digit figure. */
 export function ScoreDisplay({ value, band, caption }) {
   const tone =
-    value >= 85 ? 'text-ok-400' : value >= 70 ? 'text-brand-400' : value >= 55 ? 'text-warn-400' : 'text-bad-400'
+    value >= 85 ? 'text-ok-400' : value >= 70 ? 'text-blue-500' : value >= 55 ? 'text-warn-400' : 'text-bad-400'
   return (
     <div>
       <div className="flex items-baseline gap-2">
@@ -420,14 +449,21 @@ export function Table({ columns, rows, renderRow, empty, maxHeight = 'max-h-[32r
   if (!rows.length) return empty || null
   return (
     <div className={`${maxHeight} overflow-auto`}>
-      <table className="w-full border-collapse text-left text-tiny">
-        <thead className="sticky top-0 z-10 bg-surface">
+      {/* Fixed layout, because auto-layout hands width to whichever column has
+          the longest unbroken run of text — which squeezed the job title into
+          a four-line column while a date sat in a wide one. Columns that
+          matter declare a share; the rest divide what is left. */}
+      <table className="w-full table-fixed border-collapse text-left text-tiny">
+        {/* Uppercase micro headers on a tinted strip: they read as furniture
+            rather than as a first row of data. */}
+        <thead className="sticky top-0 z-10 bg-n-850">
           <tr className="border-b border-line">
             {columns.map((c, i) => (
               <th
                 key={i}
                 scope="col"
-                className={`px-3 py-2 font-medium text-n-500 ${c.className || ''}`}
+                className={`px-4 py-2.5 text-micro font-medium tracking-wide text-n-500
+                  uppercase ${c.className || ''}`}
               >
                 {c.label}
               </th>
@@ -441,13 +477,14 @@ export function Table({ columns, rows, renderRow, empty, maxHeight = 'max-h-[32r
 }
 
 export const Tr = ({ children, className = '' }) => (
-  <tr className={`border-b border-line/60 align-top last:border-0 hover:bg-raised/60 ${className}`}>
+  <tr className={`border-b border-line align-top transition-colors last:border-0
+    hover:bg-n-850/70 ${className}`}>
     {children}
   </tr>
 )
 
 export const Td = ({ children, className = '' }) => (
-  <td className={`px-3 py-2 ${className}`}>{children}</td>
+  <td className={`px-4 py-3 ${className}`}>{children}</td>
 )
 
 /* ------------------------------------------------------------------- icons */
@@ -489,6 +526,43 @@ export const Icon = {
   Chevron: (p) => (
     <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
       <path d="m9 6 6 6-6 6" />
+    </svg>
+  ),
+
+  /* Navigation. Line icons at a consistent 1.6 weight, sized to sit on the
+     same optical baseline as the label beside them. */
+  Briefcase: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
+    </svg>
+  ),
+  File: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </svg>
+  ),
+  Inbox: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M3 12h5l2 3h4l2-3h5" />
+      <path d="M5 5h14l2 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5l2-7Z" />
+    </svg>
+  ),
+  Send: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4L21 3Z" />
+    </svg>
+  ),
+  Logo: (p) => (
+    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true" {...p}
+         fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round">
+      {/* Three arrows fanning from one nock. Drawn as strokes: a filled
+          version collapsed into three bars at 20px. */}
+      <path d="M12 20V7m0 0-2.2 2.6M12 7l2.2 2.6" />
+      <path d="M6.6 20 8.9 9.3m0 0-2.7 1.5m2.7-1.5.6 3" />
+      <path d="M17.4 20 15.1 9.3m0 0 2.7 1.5m-2.7-1.5-.6 3" />
     </svg>
   ),
 }

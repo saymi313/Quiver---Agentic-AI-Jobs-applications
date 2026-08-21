@@ -139,7 +139,7 @@ export default function Proposals({ busy, onApply, refreshKey }) {
                           })
                         }
                         aria-label={`Include ${r.title}`}
-                        className="size-3.5 accent-brand-500"
+                        className="size-4 accent-blue-500"
                       />
                     </Td>
                     <Td className="max-w-[20rem]">
@@ -147,7 +147,7 @@ export default function Proposals({ busy, onApply, refreshKey }) {
                         href={r.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm text-n-200 hover:text-brand-400"
+                        className="text-sm font-medium text-n-100 hover:text-blue-500"
                       >
                         {r.title}
                       </a>

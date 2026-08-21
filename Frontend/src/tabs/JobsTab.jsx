@@ -6,6 +6,7 @@ import TrackedJobs from '../components/TrackedJobs'
 import Settings from '../components/Settings'
 import Portals from '../components/Portals'
 import Proposals from '../components/Proposals'
+import TopMatches from '../components/TopMatches'
 import {
   Button,
   Checkbox,
@@ -146,6 +147,8 @@ export default function JobsTab() {
 
       <Proposals busy={busy} onApply={applyToJobs} refreshKey={refreshKey} />
 
+      <TopMatches refreshKey={refreshKey} busy={busy} onApply={applyToJobs} />
+
       <Pipeline
         stats={overview.stats}
         retentionDays={overview.settings.limits?.retention_days ?? 3}
@@ -229,7 +232,7 @@ export default function JobsTab() {
                   value={workers}
                   onChange={(e) => setWorkers(Number(e.target.value))}
                   aria-label="How many applications to run at once"
-                  className="h-7 rounded-sm border border-line-strong bg-sunken px-1.5 text-sm text-n-100"
+                  className="h-7 rounded-sm border border-line-strong bg-surface px-2 text-sm text-n-100"
                 >
                   <option value={1}>1</option>
                   <option value={2}>2</option>
@@ -356,7 +359,7 @@ function ApplicationLog({ refreshKey }) {
               <Status tone={APP_TONE[r.status] || 'neutral'}>{r.status}</Status>
               <span className="text-sm text-n-200">{r.title || 'Unknown role'}</span>
               <span className="text-tiny text-n-500">{r.company_name || ''}</span>
-              {r.dry_run ? <span className="text-micro text-n-600">dry run</span> : null}
+              {r.dry_run ? <span className="text-micro text-n-500">dry run</span> : null}
               {r.error ? (
                 <span className="w-full text-tiny leading-relaxed text-n-500">{r.error}</span>
               ) : null}

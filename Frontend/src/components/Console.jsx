@@ -23,7 +23,7 @@ function lineTone(line) {
   if (/^\s*\[(SKIP|WARN)/i.test(line) || /^\[stopped|SKIPPED|\brisky\b/.test(line))
     return 'text-warn-400'
   if (/^---\s/.test(line)) return 'text-n-200'
-  if (/^\$ /.test(line)) return 'text-brand-400'
+  if (/^\$ /.test(line)) return 'text-n-100 font-medium'
   return 'text-n-400'
 }
 
@@ -70,7 +70,8 @@ export default function Console({ lines, job, onStop, onClear, height = 'h-72' }
               const el = e.currentTarget
               setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
             }}
-            className={`${height} overflow-auto bg-sunken px-4 py-3 font-mono text-micro leading-[1.7]`}
+            className={`${height} overflow-auto bg-n-850 px-4 py-3 font-mono text-micro
+              leading-[1.7] text-n-300`}
           >
             {lines.map((line, i) => (
               <div key={i} className={`whitespace-pre-wrap ${lineTone(line)}`}>

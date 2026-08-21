@@ -6,29 +6,35 @@ import OutreachTab from './tabs/OutreachTab'
 import TrackTab from './tabs/TrackTab'
 import { api } from './lib/api'
 import { springFor } from './lib/motion'
-import { Note, Status } from './components/ui'
+import { usePress } from './lib/usePress'
+import { Icon, Note, Status } from './components/ui'
 
 /*
-  Four screens, named for the job they do rather than for the machinery behind
-  them. The old labels ("Agent AI", "Auto Mode") described the implementation,
-  which left the user guessing what each page was for.
+  The app shell: a sidebar and a page.
 
-  They are in the order the work happens: find a role, aim a resume at it,
-  watch what comes back, and reach out directly where there is someone to
-  reach.
+  Four screens, named for the job they do rather than for the machinery behind
+  them, in the order the work happens — find a role, aim a resume at it, watch
+  what comes back, and reach out directly where there is someone to reach.
+
+  A sidebar rather than a top tab bar because the destinations are a permanent
+  list rather than a mode switch, and because it has room for the counts that
+  say which of them needs you. The rail is a translucent material with the page
+  passing under it; content surfaces stay opaque, because stacking one
+  translucent layer on another is where legibility goes.
 */
+
 const TABS = [
-  { key: 'jobs', label: 'Jobs' },
-  { key: 'resume', label: 'Resume' },
-  { key: 'track', label: 'Track' },
-  { key: 'outreach', label: 'Outreach' },
+  { key: 'jobs', label: 'Jobs', icon: Icon.Briefcase },
+  { key: 'resume', label: 'Resume', icon: Icon.File },
+  { key: 'track', label: 'Track', icon: Icon.Inbox },
+  { key: 'outreach', label: 'Outreach', icon: Icon.Send },
 ]
 
 /*
-  The header's AI badge. It reports remaining daily calls once they run low,
-  because the free tier is small enough to run out mid-session — and when it
-  does, cover letters and form answers are quietly skipped. Silence there is
-  worse than a warning.
+  The AI badge. It reports remaining daily calls once they run low, because the
+  free tier is small enough to run out mid-session — and when it does, cover
+  letters and form answers are quietly skipped. Silence there is worse than a
+  warning.
 */
 function AiStatus({ ai }) {
   const budget = ai.budget || {}
@@ -39,7 +45,7 @@ function AiStatus({ ai }) {
   }
   if (cap && remaining <= 0) {
     return (
-      <Status tone="bad" title={`Every model has spent its daily free-tier allowance. Resets tomorrow.`}>
+      <Status tone="bad" title="Every model has spent its daily free-tier allowance. Resets tomorrow.">
         AI quota spent
       </Status>
     )
@@ -63,93 +69,164 @@ function AiStatus({ ai }) {
   )
 }
 
+/** One destination in the rail. The selected pill is a single shared element
+ *  that springs between items, so the eye is carried rather than teleported. */
+function NavItem({ tab, active, badge, onSelect }) {
+  const { pressed, handlers } = usePress({ onPress: onSelect })
+  const IconFor = tab.icon
+  return (
+    <button
+      {...handlers}
+      onClick={(event) => event.detail === 0 && onSelect()}
+      data-pressed={pressed}
+      aria-current={active ? 'page' : undefined}
+      className={`press relative flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5
+        text-sm ${active ? 'font-medium text-n-100' : 'text-n-400 hover:text-n-100'}`}
+    >
+      {active ? (
+        <m.span
+          layoutId="nav-selected"
+          transition={springFor()}
+          className="absolute inset-0 -z-10 rounded-sm bg-n-850"
+        />
+      ) : null}
+      <IconFor className={active ? 'size-4 text-n-100' : 'size-4 text-n-500'} />
+      <span className="flex-1 text-left">{tab.label}</span>
+      {badge ? (
+        <span className="rounded-full bg-n-800 px-1.5 py-px text-micro font-medium text-n-400">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState('jobs')
   const [health, setHealth] = useState(null)
   const [offline, setOffline] = useState(false)
+  const [counts, setCounts] = useState({})
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setOffline(true))
   }, [])
 
+  // The rail's counts: what is waiting on you, per destination. Polled rather
+  // than pushed, because nothing here changes faster than a person reads.
+  useEffect(() => {
+    let alive = true
+    const read = () =>
+      Promise.all([
+        api.agentTracker().catch(() => null),
+        api.agentProposals().catch(() => null),
+      ]).then(([tracker, proposals]) => {
+        if (!alive) return
+        setCounts({
+          track: tracker?.unread || 0,
+          jobs: proposals?.rows?.length || 0,
+        })
+      })
+    read()
+    const timer = setInterval(read, 60000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [tab])
+
   return (
-    <div className="min-h-full">
-      <header className="sticky top-0 z-30 border-b border-line bg-canvas">
-        <div className="mx-auto flex h-13 max-w-6xl items-center gap-6 px-6">
-          <span className="text-sm font-semibold tracking-tight text-n-100">Quiver</span>
+    <div className="flex min-h-full">
+      {/* ------------------------------------------------------------ rail */}
+      <aside className="material sticky top-0 hidden h-screen w-56 shrink-0 flex-col
+        border-r border-line px-3 py-4 md:flex">
+        <div className="flex items-center gap-2 px-2.5 pb-5">
+          <Icon.Logo className="size-5 text-n-100" />
+          <span className="text-base font-semibold tracking-tight text-n-100">Quiver</span>
+        </div>
 
-          {/* The underline is one shared element that springs between tabs
-              rather than a border toggling on each button. It carries the eye
-              from where you were to where you are, and because it is a spring
-              it can be redirected mid-travel by a second click. */}
-          <nav className="flex items-center gap-1" aria-label="Main">
-            {TABS.map((t) => {
-              const active = tab === t.key
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  aria-current={active ? 'page' : undefined}
-                  className={`relative -mb-px h-13 px-3 text-sm transition-colors ${
-                    active ? 'font-medium text-n-100' : 'text-n-400 hover:text-n-200'
-                  }`}
-                >
-                  {t.label}
-                  {active ? (
-                    <m.span
-                      layoutId="tab-underline"
-                      transition={springFor()}
-                      className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
-                    />
-                  ) : null}
-                </button>
-              )
-            })}
-          </nav>
+        <p className="px-2.5 pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
+          Workspace
+        </p>
+        <nav className="flex flex-col gap-0.5" aria-label="Main">
+          {TABS.map((t) => (
+            <NavItem
+              key={t.key}
+              tab={t}
+              active={tab === t.key}
+              badge={counts[t.key]}
+              onSelect={() => setTab(t.key)}
+            />
+          ))}
+        </nav>
 
-          <div className="ml-auto">
-            {offline ? (
-              <Status tone="bad">API offline</Status>
-            ) : health ? (
-              <AiStatus ai={health.ai} />
-            ) : (
-              <Status tone="neutral">connecting</Status>
-            )}
+        <div className="mt-auto space-y-3 pt-6">
+          <div className="rounded-md border border-line bg-surface px-3 py-2.5">
+            <p className="text-micro font-medium tracking-wide text-n-500 uppercase">Model</p>
+            <div className="mt-1.5">
+              {offline ? (
+                <Status tone="bad">API offline</Status>
+              ) : health ? (
+                <AiStatus ai={health.ai} />
+              ) : (
+                <Status tone="neutral">connecting</Status>
+              )}
+            </div>
           </div>
         </div>
-      </header>
+      </aside>
 
-      <main className="mx-auto max-w-6xl px-6 py-7">
-        {offline ? (
-          <Note tone="bad" title="The backend is not responding">
-            From the <code className="text-n-200">Backend</code> folder run{' '}
-            <code className="text-n-200">python run_dashboard.py</code>, then reload this page.
-          </Note>
-        ) : (
-          // A short settle rather than a slide: the screens are siblings, not
-          // a stack, so there is no direction for one to come from. `mode
-          // ="wait"` would add a hole where neither screen is on show.
-          <AnimatePresence initial={false} mode="popLayout">
-            <m.div
-              key={tab}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={springFor()}
+      {/* ------------------------------------------------------------ page */}
+      <div className="min-w-0 flex-1">
+        {/* On a narrow screen the rail collapses to a top bar: the same four
+            destinations, still one tap away. */}
+        <header className="material sticky top-0 z-30 flex items-center gap-1 border-b
+          border-line px-4 py-2 md:hidden">
+          <Icon.Logo className="size-5 shrink-0 text-n-100" />
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              aria-current={tab === t.key ? 'page' : undefined}
+              className={`press rounded-full px-3 py-1 text-sm ${
+                tab === t.key ? 'bg-n-850 font-medium text-n-100' : 'text-n-400'
+              }`}
             >
-              {tab === 'jobs' ? (
-                <JobsTab />
-              ) : tab === 'resume' ? (
-                <ResumeTab aiStatus={health?.ai} />
-              ) : tab === 'track' ? (
-                <TrackTab />
-              ) : (
-                <OutreachTab />
-              )}
-            </m.div>
-          </AnimatePresence>
-        )}
-      </main>
+              {t.label}
+            </button>
+          ))}
+        </header>
+
+        <main className="mx-auto max-w-6xl px-6 py-8 lg:px-10">
+          {offline ? (
+            <Note tone="bad" title="The backend is not responding">
+              From the <code className="text-n-200">Backend</code> folder run{' '}
+              <code className="text-n-200">python run_dashboard.py</code>, then reload this page.
+            </Note>
+          ) : (
+            // A short settle rather than a slide: the screens are siblings, not
+            // a stack, so there is no direction for one to come from.
+            <AnimatePresence initial={false} mode="popLayout">
+              <m.div
+                key={tab}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={springFor()}
+              >
+                {tab === 'jobs' ? (
+                  <JobsTab />
+                ) : tab === 'resume' ? (
+                  <ResumeTab aiStatus={health?.ai} />
+                ) : tab === 'track' ? (
+                  <TrackTab />
+                ) : (
+                  <OutreachTab />
+                )}
+              </m.div>
+            </AnimatePresence>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

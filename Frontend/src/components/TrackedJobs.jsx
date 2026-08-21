@@ -227,20 +227,20 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                     setSelected(allChecked ? new Set() : new Set(actionable.map((r) => r.id)))
                   }
                   aria-label="Select all actionable jobs"
-                  className="size-3.5 accent-brand-500"
+                  className="size-4 accent-blue-500"
                 />
               ),
-              className: 'w-8',
+              className: 'w-9',
             },
-            { label: 'Role' },
-            { label: 'Company' },
-            { label: 'Location' },
-            { label: 'Category' },
-            { label: 'Portal' },
-            { label: 'Status' },
-            { label: 'Found' },
-            { label: 'Resume' },
-            { label: '', className: 'w-16' },
+            { label: 'Role', className: 'w-[24%]' },
+            { label: 'Company', className: 'w-[13%]' },
+            { label: 'Location', className: 'w-[12%]' },
+            { label: 'Category', className: 'w-[11%]' },
+            { label: 'Portal', className: 'w-[9%]' },
+            { label: 'Status', className: 'w-[8%]' },
+            { label: 'Found', className: 'w-[7%]' },
+            { label: 'Resume', className: 'w-[9%]' },
+            { label: '', className: 'w-[7%]' },
           ]}
           rows={rows}
           empty={
@@ -262,30 +262,35 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                     checked={selected.has(r.id)}
                     onChange={() => toggle(r.id)}
                     aria-label={`Select ${r.title}`}
-                    className="size-3.5 accent-brand-500 disabled:opacity-25"
+                    className="size-4 accent-blue-500 disabled:opacity-25"
                   />
                 </Td>
 
-                <Td className="max-w-[22rem]">
+                <Td>
                   <a
                     href={r.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm text-n-200 hover:text-brand-400"
+                    className="text-sm font-medium text-n-100 hover:text-blue-500"
                   >
                     {r.title}
                   </a>
                   {r.fit_score ? (
-                    <span className="ml-1.5 text-micro text-n-600">{Math.round(r.fit_score)}</span>
+                    <span className="ml-1.5 text-micro text-n-500">{Math.round(r.fit_score)}</span>
                   ) : null}
                   {/* Why this score, on every row rather than only on the ones
                       that were filtered out. A number with no reasoning behind
                       it is not something anyone can act on. */}
                   {r.fit_reason ? (
-                    <p className="mt-0.5 text-micro leading-snug text-n-500">{r.fit_reason}</p>
+                    <p
+                      className="mt-1 line-clamp-2 text-micro leading-snug text-n-500"
+                      title={r.fit_reason}
+                    >
+                      {r.fit_reason}
+                    </p>
                   ) : null}
                   {r.failure_reason ? (
-                    <p className="mt-0.5 text-micro leading-snug text-bad-400/80">
+                    <p className="mt-1 line-clamp-2 text-micro leading-snug text-bad-400">
                       {r.failure_reason}
                       {r.screenshot ? (
                         <>
@@ -315,7 +320,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                 <Td className="max-w-[13rem] text-n-400" title={r.location || ''}>
                   <span className="block truncate">{r.location || (r.remote ? 'Remote' : '—')}</span>
                   {r.remote && r.location ? (
-                    <span className="text-micro text-n-600">Remote</span>
+                    <span className="text-micro text-n-500">Remote</span>
                   ) : null}
                 </Td>
                 <Td>
@@ -340,7 +345,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                         href={api.agentResumeUrl(r.id, 'pdf')}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-brand-400 hover:underline"
+                        className="text-blue-500 hover:underline"
                         title={r.resume_version || ''}
                       >
                         view
@@ -361,7 +366,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                     <button
                       disabled={busy}
                       onClick={() => onGenerate([r.id])}
-                      className="press text-n-500 hover:text-n-200 disabled:opacity-40"
+                      className="press text-blue-500 hover:underline disabled:opacity-40"
                     >
                       generate
                     </button>

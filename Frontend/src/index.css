@@ -3,55 +3,95 @@
 /*
   Design tokens — three layers: primitive → semantic → component.
 
+  Light, in Apple's register: a white ground, near-black text, and grey that
+  carries meaning rather than decoration. The scale is deliberately the same
+  shape as the dark one it replaces — `n-950` is still the page, `n-100` is
+  still the strongest text — so every `text-n-400` and `bg-surface` in the app
+  keeps its role and only changes colour.
+
   Rules this system holds to:
-    * No gradients, no glow, no backdrop blur. Depth comes from a single
-      hairline border and a one-step surface lift, nothing else.
-    * One radius scale (4 / 6 / 8 / 10px). Nothing is a pill except the
-      switch knob and the live dot.
-    * Neutrals are opaque hex, not white-with-alpha. Stacked alpha was
-      producing a dozen near-identical greys that never lined up.
-    * One accent. It marks the primary action and the current selection —
-      never decoration.
+    * Depth is a hairline and a one-step surface lift. No drop shadows on
+      static panels; Apple uses them for things that float, not for things
+      that sit.
+    * Translucency is chrome only. The header is a real material with content
+      passing under it; content surfaces stay opaque, because stacking one
+      translucent layer on another destroys legibility.
+    * One accent for the primary action (near-black, as Tsenta uses), one for
+      selection and links (system blue). Never both for the same job.
+    * Radii are generous: Apple rounds more than a data tool instinctively
+      wants to. Pills for buttons and chips, 12 to 18px for panels.
 */
 
 @theme {
-  /* ---------- primitive: neutrals ---------- */
-  --color-n-950: #0c0d10;
-  --color-n-900: #111317;
-  --color-n-850: #16181d;
-  --color-n-800: #1b1e24;
-  --color-n-700: #262a32;
-  --color-n-600: #363b45;
-  --color-n-500: #6b7280;
-  --color-n-400: #8b929e;
-  --color-n-300: #aeb4bf;
-  --color-n-200: #d3d7de;
-  --color-n-100: #eceef1;
+  /* ---------- primitive: neutrals ----------
+     Apple's greys, not arbitrary ones: #f5f5f7 is the secondary background
+     used across apple.com, #1d1d1f its primary label, #86868b its secondary. */
+  --color-n-950: #ffffff;
+  --color-n-900: #fbfbfd;
+  --color-n-850: #f5f5f7;
+  --color-n-800: #ececed;
+  --color-n-700: #e3e3e6;
+  --color-n-600: #d2d2d7;
+  --color-n-500: #707074;   /* 4.5:1 on white and on the grey strip */
+  --color-n-400: #6e6e73;
+  --color-n-300: #515154;
+  --color-n-200: #2f2f31;
+  --color-n-100: #1d1d1f;
+  --color-n-50: #000000;
 
-  /* ---------- primitive: accent + status ---------- */
-  --color-brand-500: #26a37f;
-  --color-brand-400: #34c397;
-  --color-ok-400: #35c08a;
-  --color-warn-400: #d9a441;
-  --color-bad-400: #e0655f;
-  --color-info-400: #5b9bd8;
+  /* ---------- primitive: accent + status ----------
+     Apple's system palette, darkened until each clears 4.5:1 against the
+     surface it actually sits on — which for a chip is its own tint, not
+     white. The vivid originals are tuned for dark backgrounds and fail on a
+     light one; the values here were computed rather than eyeballed. */
+  --color-brand-500: #1d1d1f;   /* primary action: near-black, as Tsenta */
+  --color-brand-400: #000000;
+  --color-blue-500: #0071e3;    /* selection, links, focus */
+  --color-blue-400: #0077ed;
+  --color-ok-400: #197f45;
+  --color-warn-400: #a25c00;
+  --color-bad-400: #c9342a;
+  --color-info-400: #006bd7;
+
+  /* Soft tints for cards and chips — the pastel fills Tsenta uses on its job
+     cards, at the lightness Apple keeps its status backgrounds. */
+  --color-ok-tint: #e8f6ed;
+  --color-warn-tint: #fdf3e4;
+  --color-bad-tint: #fdecea;
+  --color-info-tint: #e8f2fd;
+  --color-accent-tint: #f0f0f2;
+  /* The four card tints, rotated by position rather than by meaning — they
+     separate one card from the next, they do not encode anything. Kept pale
+     enough that near-black text on them still clears AA by a wide margin. */
+  --color-tint-1: #fdf4e0;
+  --color-tint-2: #e7f6ec;
+  --color-tint-3: #eeecfb;
+  --color-tint-4: #fceceb;
 
   /* ---------- semantic ---------- */
   --color-canvas: var(--color-n-950);
-  --color-surface: var(--color-n-900);
+  --color-surface: var(--color-n-950);
   --color-raised: var(--color-n-850);
-  --color-sunken: #090a0c;
-  --color-line: #23262d;
-  --color-line-strong: #30343d;
+  --color-sunken: var(--color-n-850);
+  --color-line: #e5e5e7;
+  --color-line-strong: var(--color-n-600);
 
   --color-fg: var(--color-n-100);
-
   --color-accent: var(--color-brand-500);
 
-  /* ---------- radius ---------- */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
+  /* ---------- radius ----------
+     Bigger than a data tool reaches for on its own, because Apple's shapes
+     are bigger. `full` is for buttons and chips, which are pills. */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  /* ---------- elevation ----------
+     Two levels, both soft and low-contrast. Anything that does not float
+     gets a hairline instead. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
 
   /* ---------- type ----------
 
@@ -61,33 +101,47 @@
      Leading runs the other way: tight on headings, looser on body copy.
 
      Sizes are in rem so a larger browser text setting scales the layout with
-     the text instead of overflowing it. 1rem = 16px at default settings. */
+     the text. 1rem = 16px at default settings. */
   --text-micro: 0.6875rem; /* 11px */
   --text-micro--line-height: 1.45;
   --text-micro--letter-spacing: 0.01em;
   --text-tiny: 0.75rem; /* 12px */
   --text-tiny--line-height: 1.5;
-  --text-tiny--letter-spacing: 0.005em;
+  --text-tiny--letter-spacing: 0.004em;
   --text-sm: 0.8125rem; /* 13px */
   --text-sm--line-height: 1.54;
   --text-sm--letter-spacing: 0em;
+  --text-base: 0.875rem; /* 14px */
+  --text-base--line-height: 1.5;
+  --text-base--letter-spacing: -0.003em;
   --text-lg: 1rem; /* 16px */
   --text-lg--line-height: 1.5;
-  --text-lg--letter-spacing: -0.006em;
-  --text-xl: 1.25rem; /* 20px */
-  --text-xl--line-height: 1.4;
-  --text-xl--letter-spacing: -0.014em;
-  --text-2xl: 1.625rem; /* 26px */
-  --text-2xl--line-height: 1.23;
-  --text-2xl--letter-spacing: -0.02em;
+  --text-lg--letter-spacing: -0.008em;
+  --text-xl: 1.3125rem; /* 21px */
+  --text-xl--line-height: 1.33;
+  --text-xl--letter-spacing: -0.016em;
+  --text-2xl: 1.75rem; /* 28px */
+  --text-2xl--line-height: 1.21;
+  --text-2xl--letter-spacing: -0.021em;
+  --text-3xl: 2.5rem; /* 40px */
+  --text-3xl--line-height: 1.1;
+  --text-3xl--letter-spacing: -0.025em;
 
+  /* The platform's own face first. It already ships optical sizing, tracking
+     tables and legibility tuning; a webfont would be a step down and a
+     network request. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, Roboto, sans-serif;
+  --font-mono:
+    "SF Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
 }
 
 :root {
-  color-scheme: dark;
+  /* Light by choice, not by absence of a dark mode. The interface is designed
+     for a white ground; handing a dark one to anyone whose OS happens to ask
+     for it would give them a different, unconsidered product. */
+  color-scheme: light;
 }
 
 html,
@@ -98,42 +152,87 @@ body,
 
 body {
   margin: 0;
-  /* Flat. The old build had two radial gradients here. */
   background: var(--color-canvas);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  /* Relative to the user's own text size rather than a fixed 14px, so the
+  /* Relative to the user's own text size rather than a fixed px, so the
      browser's font setting actually does something. */
   font-size: 0.875rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-optical-sizing: auto;
 }
 
-/* One focus treatment for the whole app, keyboard only. */
+/* One focus treatment for the whole app, keyboard only. Blue, because focus
+   is selection and selection is blue. */
 :focus-visible {
-  outline: 2px solid var(--color-brand-400);
+  outline: 2px solid var(--color-blue-500);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
 
+::selection {
+  background: color-mix(in srgb, var(--color-blue-500) 18%, transparent);
+}
+
+/* Thin, low-contrast, and out of the way until you are over the region —
+   the scrollbar is not part of the design. */
 ::-webkit-scrollbar {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-n-700);
+  background: var(--color-n-600);
   border-radius: 999px;
-  border: 3px solid transparent;
+  border: 3.5px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-n-600);
+  background: var(--color-n-500);
   background-clip: content-box;
+}
+
+/*
+  Materials.
+
+  The one place translucency belongs: chrome that content passes under. A
+  bigger surface reads as thicker, so the sidebar carries more blur than the
+  header. Never stacked — no translucent surface sits on another.
+*/
+.material {
+  background: color-mix(in srgb, var(--color-n-950) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+.material-thick {
+  background: color-mix(in srgb, var(--color-n-850) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(30px);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+}
+
+/*
+  Scroll edge, not a divider.
+
+  Apple fades content into floating chrome rather than ruling a line under it.
+  The line only earns its place where there is nothing to fade.
+*/
+.scroll-edge::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -14px;
+  height: 14px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-n-950) 70%, transparent),
+    transparent
+  );
 }
 
 /*
@@ -165,17 +264,19 @@ body {
 .press {
   transition:
     transform 90ms cubic-bezier(0.3, 0, 0.2, 1),
-    background-color 120ms ease-out,
-    border-color 120ms ease-out,
-    color 120ms ease-out,
-    opacity 120ms ease-out;
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    color 140ms ease-out,
+    box-shadow 140ms ease-out,
+    opacity 140ms ease-out;
 }
+
 /* `:active` already fires on pointer-down, so every `.press` element gets the
    instant response for free. `data-pressed` is what usePress sets, and it adds
    what CSS cannot: a drag-away cancel with hysteresis. */
 .press:active,
 .press[data-pressed='true'] {
-  transform: scale(0.975);
+  transform: scale(0.97);
   transition-duration: 40ms;
 }
 .press:disabled:active,
@@ -192,7 +293,7 @@ body {
   .press:active,
   .press[data-pressed='true'] {
     transform: none;
-    opacity: 0.72;
+    opacity: 0.7;
   }
   .animate-pulse-dot {
     animation-duration: 3.2s;
@@ -204,9 +305,30 @@ body {
   }
 }
 
+/* A frosted surface is a legibility trade. When the user has said they would
+   rather not, it becomes solid rather than merely less blurred. */
+@media (prefers-reduced-transparency: reduce) {
+  .material,
+  .material-thick {
+    background: var(--color-n-950);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .material-thick {
+    background: var(--color-n-850);
+  }
+}
+
 @media (prefers-contrast: more) {
   :root {
-    --color-line: #4a4f59;
-    --color-line-strong: #6d7581;
+    --color-line: #b8b8bd;
+    --color-line-strong: #86868b;
+    --color-n-400: #4a4a4f;
+  }
+  .material,
+  .material-thick {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--color-n-950);
   }
 }

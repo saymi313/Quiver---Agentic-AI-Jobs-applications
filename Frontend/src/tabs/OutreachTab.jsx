@@ -389,7 +389,7 @@ function ContactList() {
           <Td className="text-n-200">{p.email}</Td>
           <Td className="text-n-400">
             {p.full_name || '—'}
-            {p.role ? <span className="text-n-600"> · {p.role}</span> : null}
+            {p.role ? <span className="text-n-500"> · {p.role}</span> : null}
           </Td>
           <Td className="text-n-400">{p.company_name || '—'}</Td>
           <Td>

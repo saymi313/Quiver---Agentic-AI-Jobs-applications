@@ -184,7 +184,7 @@ export default function TrackTab() {
                       href={r.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm text-n-200 hover:text-brand-400"
+                      className="text-sm font-medium text-n-100 hover:text-blue-500"
                     >
                       {r.title || 'Untitled role'}
                     </a>
@@ -271,7 +271,7 @@ export default function TrackTab() {
                       {when(msg.received_at)}
                     </span>
                     <button
-                      className="press shrink-0 text-tiny text-n-500 hover:text-n-200"
+                      className="press shrink-0 text-tiny text-blue-500 hover:underline"
                       onClick={() =>
                         api.agentMarkRead(msg.id, !msg.read_at).then(refresh).catch(() => {})
                       }
