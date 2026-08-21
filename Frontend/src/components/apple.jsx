@@ -272,6 +272,33 @@ export function ScoreRing({ value, size = 42, stroke = 3.5 }) {
 }
 
 /**
+ * A frosted panel with colour behind it.
+ *
+ * Glass only reads as glass when there is something to see through it. Every
+ * other material in the app sits over the page's own content and gets that for
+ * free; a panel at the top of a screen has nothing behind it but white, and
+ * frosting white over white is an expensive way to draw a rectangle.
+ *
+ * So this one brings its own ground: three soft washes of colour, heavily
+ * blurred, with the frosted surface over them. The washes are pale enough that
+ * near-black text on the glass keeps the contrast it has anywhere else, which
+ * is the constraint that decides how far this can go — the colour is there to
+ * be seen through the material, not to be read against.
+ */
+export function GlassPanel({ children, className = '' }) {
+  return (
+    <div className={`relative overflow-hidden rounded-lg border border-line ${className}`}>
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-16 -left-10 size-64 rounded-full bg-hue-blue opacity-100 blur-2xl" />
+        <div className="absolute -top-20 left-1/3 size-56 rounded-full bg-hue-violet opacity-95 blur-2xl" />
+        <div className="absolute -right-12 -bottom-20 size-64 rounded-full bg-hue-teal opacity-95 blur-2xl" />
+      </div>
+      <div className="material-thin material-edge relative">{children}</div>
+    </div>
+  )
+}
+
+/**
  * The actions for a selection, as a bar that floats over the page.
  *
  * Apple's answer to "you have picked some things, here is what you can do with

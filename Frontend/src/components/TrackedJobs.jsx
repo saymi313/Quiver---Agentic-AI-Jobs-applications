@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import ResumeReview from './ResumeReview'
-import { CategoryChip, Segmented, SelectionBar } from './apple'
-import { Button, Empty, Icon, Input, Section, Select, Status, Table, Tag, Td, Tr } from './ui'
+import { CategoryChip, SelectionBar } from './apple'
+import JobFilters, { NO_FILTERS, toQuery } from './JobFilters'
+import { Button, Empty, Icon, Section, Status, Table, Tag, Td, Tr } from './ui'
 
 /*
   The tracked jobs table — the centre of the Jobs screen.
@@ -50,13 +51,14 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(() => new Set())
-  const [filters, setFilters] = useState({ status: 'not_applied', category: '', source: '', q: '' })
+  const [filters, setFilters] = useState(NO_FILTERS)
   const [search, setSearch] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   // Which job's rewrite is open for review, if any.
   const [reviewing, setReviewing] = useState(null)
 
   useEffect(() => {
-    const t = setTimeout(() => setFilters((f) => ({ ...f, q: search })), 300)
+    const t = setTimeout(() => setFilters((f) => (f.q === search ? f : { ...f, q: search })), 300)
     return () => clearTimeout(t)
   }, [search])
 
@@ -64,7 +66,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
     let alive = true
     setLoading(true)
     api
-      .agentJobs({ ...filters, limit: 400 })
+      .agentJobs(toQuery(filters))
       .then((d) => alive && setData(d))
       .catch(() => alive && setData({ rows: [], categories: [], sources: {}, total: 0 }))
       .finally(() => alive && setLoading(false))
@@ -99,7 +101,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
     <Section
       title="Tracked jobs"
       description={
-        data ? `${rows.length} of ${data.total} tracked` : 'Everything the agent has found.'
+        data ? `${data.matched ?? rows.length} of ${data.total} tracked` : 'Everything the agent has found.'
       }
       flush
       actions={
@@ -109,62 +111,18 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
         </Button>
       }
     >
-      {/* --------------------------------------------------------- controls */}
-      {/* Widths live on wrappers, not on the controls. The kit's inputs are
-          w-full by design, and overriding that from a className is a
-          specificity coin-toss that Tailwind lost here at least once. */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-        {/* Five mutually exclusive views, all visible: a dropdown would hide
-            four of them behind a click and tell you nothing about what is in
-            them. */}
-        <Segmented
-          size="sm"
-          ariaLabel="Filter by application status"
-          value={filters.status}
-          onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-          options={STATUS_FILTERS.map(([value, label]) => ({ value, label }))}
-        />
-
-        <div className="w-44">
-          <Select
-            value={filters.category}
-            onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
-            aria-label="Filter by role category"
-          >
-            <option value="">All categories</option>
-            {categories.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.label} ({c.count})
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="w-36">
-          <Select
-            value={filters.source}
-            onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))}
-            aria-label="Filter by portal source"
-          >
-            <option value="">All portals</option>
-            {sources.map(([name, count]) => (
-              <option key={name} value={name}>
-                {name} ({count})
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="min-w-[10rem] flex-1">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search"
-            aria-label="Search tracked jobs"
-            className="h-8 py-0"
-          />
-        </div>
-      </div>
+      <JobFilters
+        value={filters}
+        onChange={setFilters}
+        categories={categories}
+        sources={sources}
+        open={filtersOpen}
+        onToggleOpen={setFiltersOpen}
+        matched={data?.matched}
+        total={data?.total}
+        search={search}
+        onSearch={setSearch}
+      />
 
       {toolbar ? <div className="border-b border-line px-4 py-2.5">{toolbar}</div> : null}
 

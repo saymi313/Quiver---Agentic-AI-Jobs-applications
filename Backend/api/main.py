@@ -627,48 +627,53 @@ def agent_data(kind: str = "jobs", limit: int = 100, status: str | None = None) 
 @app.get("/api/agent/jobs")
 def agent_jobs(limit: int = 200, status: str | None = None,
                category: str | None = None, source: str | None = None,
-               q: str | None = None) -> dict[str, Any]:
+               q: str | None = None, min_score: float | None = None,
+               max_score: float | None = None, posted_within_days: int | None = None,
+               location: str | None = None, company: str | None = None,
+               remote: bool | None = None, has_resume: bool | None = None,
+               sort: str = "recent") -> dict[str, Any]:
     """
     The tracked jobs table.
 
     Returns the rows plus the facet values actually present in the data, so the
-    filter dropdowns only ever offer categories and portals that exist.
+    filter controls only ever offer categories and portals that exist.
+
+    `category` and `source` take a comma-separated list for a multiple
+    selection. Every other filter narrows independently, and they combine with
+    AND — which is what someone means when they set two of them.
     """
     from agent import categories, store as agent_store
 
     agent_store.init()
-    rows = agent_store.list_jobs(max(1, min(limit, 1000)), status,
-                                 category=category, source=source, q=q)
+    rows = agent_store.list_jobs(
+        max(1, min(limit, 1000)), status, category=category, source=source, q=q,
+        min_score=min_score, max_score=max_score,
+        posted_within_days=posted_within_days, location=location,
+        company=company, remote=remote, has_resume=has_resume, sort=sort)
 
     # Failed rows link to the screenshot the applier saved — the evidence of
     # what the form looked like when it stopped. The applications log holds
-    # the filename; newest attempt wins.
-    shots: dict[int, str] = {}
-    for app_row in agent_store.list_applications(300):
-        if app_row.get("screenshot") and app_row.get("job_id") is not None:
-            shots.setdefault(int(app_row["job_id"]), app_row["screenshot"])
-    for r in rows:
-        if r.get("status") == "failed":
-            r["screenshot"] = shots.get(int(r["id"]))
+    # the filename; newest attempt wins. Only worth a query if a failed row is
+    # actually on screen.
+    if any(r.get("status") == "failed" for r in rows):
+        shots: dict[int, str] = {}
+        for app_row in agent_store.list_applications(300):
+            if app_row.get("screenshot") and app_row.get("job_id") is not None:
+                shots.setdefault(int(app_row["job_id"]), app_row["screenshot"])
+        for r in rows:
+            if r.get("status") == "failed":
+                r["screenshot"] = shots.get(int(r["id"]))
 
-    everything = agent_store.list_jobs(1000)
-
-    def tally(key: str) -> dict[str, int]:
-        out: dict[str, int] = {}
-        for r in everything:
-            value = r.get(key)
-            if value:
-                out[str(value)] = out.get(str(value), 0) + 1
-        return dict(sorted(out.items(), key=lambda kv: -kv[1]))
-
+    facets = agent_store.job_facets()
     return {
         "rows": rows,
-        "total": len(everything),
+        "total": facets["total"],
+        "matched": len(rows),
         "categories": [{"slug": s, "label": categories.CATEGORIES[s],
-                        "count": tally("role_category").get(s, 0)}
+                        "count": facets["categories"].get(s, 0)}
                        for s in categories.ALL],
-        "sources": tally("source"),
-        "statuses": tally("status"),
+        "sources": facets["sources"],
+        "statuses": facets["statuses"],
     }
 
 
@@ -790,6 +795,21 @@ def agent_set_default_profile(name: str) -> dict[str, Any]:
     if not resume_profiles.set_default(name):
         raise HTTPException(404, f"No profile called '{name}'.")
     return {"ok": True, "default": resume_profiles.default_name()}
+
+
+class ProfileCategories(BaseModel):
+    categories: list[str] = []
+
+
+@app.post("/api/agent/resume-profiles/{name}/categories")
+def agent_set_profile_categories(name: str, body: ProfileCategories) -> dict[str, Any]:
+    """Which role categories this profile's resume is written for."""
+    from . import resume_profiles
+
+    out = resume_profiles.set_categories(name, body.categories)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
 
 
 @app.get("/api/agent/resume-profiles/{name}/content")
@@ -1084,6 +1104,50 @@ def agent_mark_read(message_id: int, read: bool = True) -> dict[str, Any]:
     agent_store.init()
     agent_store.mark_message_read(message_id, read)
     return {"ok": True, "unread": agent_store.unread_count()}
+
+
+class ReplyRequest(BaseModel):
+    text: str
+    subject: str | None = None
+
+
+@app.post("/api/agent/message/{message_id}/reply")
+def agent_reply(message_id: int, body: ReplyRequest) -> dict[str, Any]:
+    """
+    Answer a message without leaving for Gmail.
+
+    A recruiter asking "does Tuesday at 3 work?" wants a sentence back within
+    the hour, and knowing it arrived is the whole reason the mailbox is read
+    here at all. The reply threads onto the original by Message-ID, so it joins
+    the conversation rather than starting a new one.
+    """
+    from agent import inbox, store as agent_store
+
+    agent_store.init()
+    out = inbox.reply(message_id, body.text, subject=body.subject, log=lambda _m: None)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error", "Could not send the reply."))
+    return {**out, "unread": agent_store.unread_count()}
+
+
+@app.get("/api/agent/mailbox")
+def agent_mailbox() -> dict[str, Any]:
+    """Whether the mailbox is connected, and what has come out of it so far."""
+    from agent import inbox, store as agent_store
+
+    ok, reason = inbox.available()
+    address, _password = inbox.credentials()
+    out: dict[str, Any] = {"connected": ok, "reason": reason, "address": address}
+    try:
+        agent_store.init()
+        messages = agent_store.list_messages(500)
+        out["messages"] = len(messages)
+        out["unread"] = agent_store.unread_count()
+        out["linked"] = sum(1 for m in messages if m.get("application_id"))
+        out["lastAt"] = max((m.get("received_at") or "" for m in messages), default="") or None
+    except Exception as exc:  # a mailbox panel must not take the page down
+        out["error"] = str(exc)[:200]
+    return out
 
 
 @app.get("/api/agent/receipt/{app_id}")

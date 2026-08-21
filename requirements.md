@@ -415,7 +415,7 @@ Scope decisions taken on 2026-08-21:
 
 | Question | Answer |
 |---|---|
-| How far to take the `apple-design` skill | **Motion and typography; surfaces stay flat.** Springs, pointer-down feedback, interruptible transitions, size-specific tracking and leading, and the eight principles. No `backdrop-filter`, no gradients, no glow: the opaque-surface rule in `index.css` stands. |
+| How far to take the `apple-design` skill | **Revised 2026-08-22 — materials are in.** Originally motion and typography only, with surfaces staying flat. The user asked twice for a glassmorphic interface, so `backdrop-filter` now carries the chrome: rail, toolbar, sheets, the floating selection bar and the dashboard hero. The rule that survives is the one that matters — content surfaces stay opaque, no translucent surface sits on another, and every colour pairing is measured against the ground it actually renders on rather than eyeballed. |
 | Scope | **Single user, phases 0 to 4.** The `[MT]` items in 5.6 and 5.7 are out: no public API, accounts, allowances or billing. |
 | Auto Apply (FR-A9) | **Build it with a review queue.** The agent selects automatically; a human approves the batch before anything is submitted. `apply` still refuses to run without explicit job ids. |
 
@@ -428,6 +428,7 @@ Scope decisions taken on 2026-08-21:
 | **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | **Completed 2026-08-22** |
 | **3** | Reach | FR-A1, FR-A5, FR-A10, NFR-4 | **Completed 2026-08-22** |
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | **Completed 2026-08-22** |
+| **5** | Workspace structure | Separate screens, strong filters, mailbox replies, role-targeted profiles | **Completed 2026-08-22** |
 
 **Out of scope by decision:** FR-D1 to FR-D6 and FR-B1 to FR-B5 (multi-tenant
 only), FR-S5 and FR-S6 (mobile and iMessage).
@@ -435,6 +436,65 @@ only), FR-S5 and FR-S6 (mobile and iMessage).
 A requirement is marked `**[DONE]**` next to its identifier in section 5 only
 once it is built and verified. Anything deliberately skipped keeps a one-line
 reason instead of a completion mark.
+
+### Phase 5 — what was built
+
+Asked for after phase 4, from the same reference product.
+
+**Separate screens instead of one.** The Jobs tab had grown into the whole
+product: six figures, the review queue, top matches, the search configuration,
+the ATS capability table, the entire settings panel and the table itself. Seven
+destinations now, in two groups — *Workspace* (Dashboard, Jobs, Track,
+Outreach) and *Setup* (Profiles, Resume check, Settings). The Jobs screen is a
+list you narrow and act on; nothing else.
+
+Search settings moved with it, which needed them to become real settings:
+`schema.DEFAULT_SETTINGS["search"]` now holds sources, depth and the two scan
+toggles, so "Find new jobs" can sit on the dashboard and still know what to do.
+`lib/useAgentRun.js` holds the run machinery both screens need, including dry
+run — two screens each remembering their own idea of that is how a real
+application gets submitted from the one that had it off.
+
+**Filters worth the name.** Was three dropdowns and a search box. Now: status,
+free text, sort, plus multiple categories picked by their own colour, multiple
+portals with counts, posted-within, minimum match, remote or on-site, whether a
+tailored resume exists, company, and place name. Every active filter shows as a
+chip that removes itself when clicked, with a count on the Filters button and a
+Clear all.
+
+Underneath, `list_jobs` gained all of it in both stores, and the endpoint
+stopped fetching a thousand whole documents a second time per request just to
+count facets — a new `job_facets()` does that in the database. **The jobs table
+went from 19 seconds to 0.44.**
+
+One bug this exposed: `api.agentJobs` destructured four known keys and dropped
+the rest, so a new filter could be built, wired and shipped while the request
+went out unchanged. It forwards the whole object now, treating `false` as a
+real value because `remote=false` means on-site.
+
+**The mailbox answers back.** `inbox.reply()` sends over the same Gmail app
+password the reader already uses, threaded by `In-Reply-To` and `References` so
+it joins the conversation. On Track, each reply carries openers chosen by its
+class — accept, propose another time, ask for feedback — that leave the cursor
+mid-sentence, because the useful half is the part only the user writes. Sending
+marks the message read. A Mailbox panel in Settings reports the connection and,
+when it is missing, exactly which three steps set it up.
+
+**A resume per kind of role.** Profiles existed since phase 4 but nothing in
+the UI reached them. Each profile now names the role categories it is written
+for, stored in its own YAML, and `tailor.tailor_for_job` resolves the profile
+from the posting's category before falling back to the default. A design
+posting builds from the design resume without anyone remembering to switch.
+The Profiles screen also names the categories no profile claims.
+
+**Glass, and a hero for it to work on.** The material classes never rendered:
+`backdrop-filter` and its `-webkit-` prefix were both written by hand, and
+Lightning CSS answered by emitting only the prefixed one, which current
+Chromium ignores. Every translucent surface in the app had been a flat 72%
+white box. With that fixed, the dashboard's figures sit on a `GlassPanel` —
+three blurred washes of colour with a frosted surface over them, since frosting
+white over white is an expensive way to draw a rectangle. Measured on the
+rendered pixels under each text node: worst contrast 4.65:1.
 
 ### Phase 0 — what was built
 

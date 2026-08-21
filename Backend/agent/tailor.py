@@ -107,7 +107,11 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
     title = job.get("title") or "role"
     company = job.get("company_name") or "?"
 
-    profile_name = profile or tailoring_settings()["profile"]
+    # An explicit choice wins; otherwise the profile written for this kind of
+    # role does, and only then the global default. This is what makes several
+    # profiles worth having: a design posting builds from the design resume
+    # without anyone remembering to switch first.
+    profile_name = profile or resume_profiles.for_category(job.get("role_category"))
     profile_path = resume_profiles.path_for(profile_name)
     result["profile"] = profile_name
     if not profile_path.is_file():

@@ -662,9 +662,37 @@ def jobs_to_apply(limit: int = 20, min_score: float = 55.0, *,
     }
 
 
+def _as_list(value: Any) -> list[str]:
+    """
+    A filter that may arrive as one value, a comma-joined string or a list.
+
+    The UI sends `category=frontend,fullstack` for a multiple selection and a
+    bare `category=frontend` for one; both mean the same thing here.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+# What "sorted by" can mean. Each ends with a stable tiebreak so paging through
+# the same filter twice returns the same order.
+JOB_SORTS = {
+    "recent": [("posted_ts", -1), ("fit_score", -1), ("id", -1)],
+    "score": [("fit_score", -1), ("posted_ts", -1), ("id", -1)],
+    "company": [("company_name", 1), ("fit_score", -1), ("id", -1)],
+    "title": [("title", 1), ("id", -1)],
+}
+
+
 def list_jobs(limit: int = 100, status: str | None = None, *,
-              category: str | None = None, source: str | None = None,
-              q: str | None = None) -> list[dict[str, Any]]:
+              category: Any = None, source: Any = None,
+              q: str | None = None, min_score: float | None = None,
+              max_score: float | None = None, posted_within_days: int | None = None,
+              location: str | None = None, company: str | None = None,
+              remote: bool | None = None, has_resume: bool | None = None,
+              sort: str = "recent") -> list[dict[str, Any]]:
     query: dict[str, Any] = {}
     if status:
         # "not_applied" means open AND actionable: a role the experience gate
@@ -672,21 +700,91 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
         # in the default view even though it is technically un-applied.
         query["status"] = ({"$nin": ["applied", "failed", "skipped", "duplicate"]}
                            if status == "not_applied" else status)
-    if category:
-        query["role_category"] = category
-    if source:
-        query["source"] = source
+    categories_wanted = _as_list(category)
+    if categories_wanted:
+        query["role_category"] = {"$in": categories_wanted}
+    sources_wanted = _as_list(source)
+    if sources_wanted:
+        query["source"] = {"$in": sources_wanted}
     if q:
         rx = {"$regex": re.escape(q), "$options": "i"}
         query["$or"] = [{"title": rx}, {"location": rx}, {"description": rx}]
-    cur = _connect().jobs.find(query).sort([("posted_ts", -1), ("fit_score", -1)]).limit(int(limit))
+    if min_score is not None or max_score is not None:
+        band: dict[str, Any] = {}
+        if min_score is not None:
+            band["$gte"] = float(min_score)
+        if max_score is not None:
+            band["$lte"] = float(max_score)
+        query["fit_score"] = band
+    if posted_within_days is not None and posted_within_days > 0:
+        query["posted_ts"] = {"$gte": int(time.time() - posted_within_days * 86400)}
+    if location:
+        query["location"] = {"$regex": re.escape(location), "$options": "i"}
+    if remote is not None:
+        # Boards disagree about where "remote" lives: some set the flag, most
+        # only say so in the location. Asking both is the only way to answer
+        # the question the user is actually asking.
+        anywhere = [{"remote": True}, {"remote": 1},
+                    {"location": {"$regex": "remote", "$options": "i"}}]
+        query["$and"] = [*query.get("$and", []),
+                         {"$or": anywhere} if remote else {"$nor": anywhere}]
+    if has_resume is not None:
+        present = {"resume_path": {"$nin": [None, ""]}}
+        query["$and"] = [*query.get("$and", []),
+                         present if has_resume else {"$nor": [present]}]
+
+    order = JOB_SORTS.get(sort) or JOB_SORTS["recent"]
+    # `company_name` is joined in after the fetch, so the database cannot sort
+    # by it. That one ordering is applied below, over the rows we already hold.
+    db_order = [pair for pair in order if pair[0] != "company_name"]
+    cur = _connect().jobs.find(query).sort(db_order).limit(int(limit))
     rows = _attach_company(_cleaned(cur))
+    if company:
+        needle = company.lower()
+        rows = [r for r in rows if needle in str(r.get("company_name") or "").lower()]
+    if sort == "company":
+        rows.sort(key=lambda r: (str(r.get("company_name") or "~").lower(),
+                                 -(r.get("fit_score") or -1)))
     applied = applied_hashes()
     for r in rows:
         ts = r.get("posted_ts")
         r["age_days"] = round((time.time() - ts) / 86400.0, 1) if ts else None
         r["already_applied"] = bool(r.get("dedupe_hash") and r["dedupe_hash"] in applied)
     return rows
+
+
+def job_facets() -> dict[str, Any]:
+    """
+    How many jobs sit under each category, portal and status.
+
+    Counted by the database. The dashboard used to work this out by fetching a
+    thousand whole rows — descriptions and all — over the network and tallying
+    them in Python, once per request, which is most of what made the jobs table
+    slow to open. One `$facet` does the whole thing server-side.
+    """
+    def group(field: str) -> list[dict[str, Any]]:
+        return [{"$match": {field: {"$nin": [None, ""]}}},
+                {"$group": {"_id": f"${field}", "n": {"$sum": 1}}},
+                {"$sort": {"n": -1}}]
+
+    out = list(_connect().jobs.aggregate([{"$facet": {
+        "total": [{"$count": "n"}],
+        "categories": group("role_category"),
+        "sources": group("source"),
+        "statuses": group("status"),
+    }}]))
+    facets = out[0] if out else {}
+
+    def tally(key: str) -> dict[str, int]:
+        return {str(d["_id"]): int(d["n"]) for d in facets.get(key, []) if d.get("_id")}
+
+    total_rows = facets.get("total") or []
+    return {
+        "total": int(total_rows[0]["n"]) if total_rows else 0,
+        "categories": tally("categories"),
+        "sources": tally("sources"),
+        "statuses": tally("statuses"),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -985,6 +1083,23 @@ def list_messages(limit: int = 200, klass: str | None = None,
         r["tracker_status"] = stages.get(int(r.get("application_id") or -1))
     return rows
 
+
+
+def get_message(message_row_id: int) -> dict[str, Any] | None:
+    """One message with the job and company it was matched to, or None."""
+    db = _connect()
+    rows = _cleaned(db.messages.find({"id": int(message_row_id)}).limit(1))
+    if not rows:
+        return None
+    row = rows[0]
+    job = (_job_titles().get(int(row.get("job_id") or -1))) or {}
+    company = (_company_names().get(int(row.get("company_id") or -1))) or {}
+    row["title"] = job.get("title")
+    row["company_name"] = company.get("name")
+    stage = db.applications.find_one({"id": int(row.get("application_id") or -1)},
+                                     {"tracker_status": 1})
+    row["tracker_status"] = (stage or {}).get("tracker_status")
+    return row
 
 def unread_count() -> int:
     return int(_connect().messages.count_documents({"read_at": None}))

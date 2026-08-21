@@ -69,12 +69,17 @@ def _describe(path: Path, name: str) -> dict[str, Any]:
         info["error"] = f"{type(exc).__name__}: {str(exc)[:120]}"
         return info
     candidate = data.get("candidate") or {}
+    target = data.get("target") or {}
     info.update({
         "title": candidate.get("title") or "",
         "summary": (candidate.get("summary") or "").strip()[:160],
         "experience": len(data.get("experience") or []),
         "projects": len(data.get("projects") or []),
         "skills": len(data.get("skills") or []),
+        # Which role categories this profile is meant for. A designer's resume
+        # and an engineer's are different documents, and the point of having
+        # both is that the right one is picked without being asked.
+        "categories": [str(c) for c in (target.get("categories") or [])],
     })
     return info
 
@@ -182,3 +187,45 @@ def write(name: str, text: str) -> dict[str, Any]:
         return {"ok": False, "error": f"No profile called '{name}'."}
     path.write_text(text, encoding="utf-8")
     return {"ok": True, "name": _slug(name) or MAIN}
+
+
+def set_categories(name: str, categories: list[str]) -> dict[str, Any]:
+    """
+    Point a profile at the role categories it is written for.
+
+    Stored in the profile's own YAML rather than in settings, because it is a
+    fact about that document — copy the file somewhere else and it stays true.
+    """
+    path = path_for(name)
+    if not path.is_file():
+        return {"ok": False, "error": f"No profile named '{name}'."}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+
+    target = dict(data.get("target") or {})
+    target["categories"] = [str(c).strip() for c in (categories or []) if str(c).strip()]
+    data["target"] = target
+    try:
+        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+                        encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": f"could not write the profile: {exc}"}
+    return {"ok": True, **_describe(path, name)}
+
+
+def for_category(slug: str | None) -> str:
+    """
+    Which profile to build a resume from for a role in this category.
+
+    A profile that names the category wins; otherwise the configured default.
+    Two profiles claiming the same category is not an error — the first by name
+    wins, deterministically, rather than the choice depending on disk order.
+    """
+    if not slug:
+        return default_name()
+    for row in listing():
+        if slug in (row.get("categories") or []):
+            return row["name"]
+    return default_name()

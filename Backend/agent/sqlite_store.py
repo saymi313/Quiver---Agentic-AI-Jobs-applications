@@ -837,9 +837,37 @@ def jobs_to_apply(limit: int = 20, min_score: float = 55.0, *,
     }
 
 
+def _as_list(value: Any) -> list[str]:
+    """
+    A filter that may arrive as one value, a comma-joined string or a list.
+
+    The UI sends `category=frontend,fullstack` for a multiple selection and a
+    bare `category=frontend` for one; both mean the same thing here.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+# What "sorted by" can mean. Each ends with a stable tiebreak so paging through
+# the same filter twice returns the same order.
+JOB_SORTS = {
+    "recent": "COALESCE(j.posted_ts, 0) DESC, COALESCE(j.fit_score, -1) DESC, j.id DESC",
+    "score": "COALESCE(j.fit_score, -1) DESC, COALESCE(j.posted_ts, 0) DESC, j.id DESC",
+    "company": "c.name COLLATE NOCASE ASC, COALESCE(j.fit_score, -1) DESC, j.id DESC",
+    "title": "j.title COLLATE NOCASE ASC, j.id DESC",
+}
+
+
 def list_jobs(limit: int = 100, status: str | None = None, *,
-              category: str | None = None, source: str | None = None,
-              q: str | None = None) -> list[dict[str, Any]]:
+              category: Any = None, source: Any = None,
+              q: str | None = None, min_score: float | None = None,
+              max_score: float | None = None, posted_within_days: int | None = None,
+              location: str | None = None, company: str | None = None,
+              remote: bool | None = None, has_resume: bool | None = None,
+              sort: str = "recent") -> list[dict[str, Any]]:
     sql = ("SELECT j.*, c.name AS company_name, c.region, c.ats_platform FROM jobs j "
            "LEFT JOIN companies c ON c.id = j.company_id")
     where: list[str] = []
@@ -851,18 +879,44 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
     elif status:
         where.append("j.status = ?")
         args.append(status)
-    if category:
-        where.append("j.role_category = ?")
-        args.append(category)
-    if source:
-        where.append("j.source = ?")
-        args.append(source)
+    categories_wanted = _as_list(category)
+    if categories_wanted:
+        where.append(f"j.role_category IN ({','.join('?' * len(categories_wanted))})")
+        args += categories_wanted
+    sources_wanted = _as_list(source)
+    if sources_wanted:
+        where.append(f"j.source IN ({','.join('?' * len(sources_wanted))})")
+        args += sources_wanted
     if q:
         where.append("(j.title LIKE ? OR j.location LIKE ? OR j.description LIKE ?)")
         args += [f"%{q}%"] * 3
+    if min_score is not None:
+        where.append("COALESCE(j.fit_score, 0) >= ?")
+        args.append(float(min_score))
+    if max_score is not None:
+        where.append("COALESCE(j.fit_score, 0) <= ?")
+        args.append(float(max_score))
+    if posted_within_days is not None and posted_within_days > 0:
+        where.append("j.posted_ts >= ?")
+        args.append(int(time.time() - posted_within_days * 86400))
+    if location:
+        where.append("j.location LIKE ?")
+        args.append(f"%{location}%")
+    if company:
+        where.append("c.name LIKE ?")
+        args.append(f"%{company}%")
+    if remote is not None:
+        # Boards disagree about where "remote" lives: some set the flag, most
+        # only say so in the location. Asking both is the only way to answer
+        # the question the user is actually asking.
+        clause = "(j.remote = 1 OR j.location LIKE '%remote%')"
+        where.append(clause if remote else f"NOT {clause}")
+    if has_resume is not None:
+        clause = "(j.resume_path IS NOT NULL AND j.resume_path != '')"
+        where.append(clause if has_resume else f"NOT {clause}")
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY COALESCE(j.posted_ts, 0) DESC, COALESCE(j.fit_score, -1) DESC LIMIT ?"
+    sql += f" ORDER BY {JOB_SORTS.get(sort) or JOB_SORTS['recent']} LIMIT ?"
     args.append(limit)
     rows = _job_rows(_conn().execute(sql, args))
     applied = applied_hashes()
@@ -871,6 +925,32 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
         r["age_days"] = round((time.time() - ts) / 86400.0, 1) if ts else None
         r["already_applied"] = bool(r.get("dedupe_hash") and r["dedupe_hash"] in applied)
     return rows
+
+
+def job_facets() -> dict[str, Any]:
+    """
+    How many jobs sit under each category, portal and status.
+
+    Counted by the database. The dashboard used to work this out by fetching a
+    thousand whole rows — descriptions and all — and tallying them in Python,
+    once per request, which is most of what made the jobs table slow to open.
+    """
+    conn = _conn()
+
+    def tally(column: str) -> dict[str, int]:
+        rows = conn.execute(
+            f"SELECT {column} AS k, COUNT(*) AS n FROM jobs "
+            f"WHERE {column} IS NOT NULL AND {column} != '' "
+            f"GROUP BY {column} ORDER BY n DESC").fetchall()
+        return {str(r["k"]): int(r["n"]) for r in rows}
+
+    total = int(conn.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"])
+    return {
+        "total": total,
+        "categories": tally("role_category"),
+        "sources": tally("source"),
+        "statuses": tally("status"),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -1087,6 +1167,18 @@ def list_messages(limit: int = 200, klass: str | None = None,
     args.append(limit)
     return _rows(_conn().execute(sql, args))
 
+
+
+def get_message(message_row_id: int) -> dict[str, Any] | None:
+    """One message with the job and company it was matched to, or None."""
+    rows = _rows(_conn().execute(
+        "SELECT m.*, j.title, c.name AS company_name, a.tracker_status "
+        "FROM messages m "
+        "LEFT JOIN applications a ON a.id = m.application_id "
+        "LEFT JOIN jobs j ON j.id = m.job_id "
+        "LEFT JOIN companies c ON c.id = m.company_id "
+        "WHERE m.id = ?", (message_row_id,)))
+    return rows[0] if rows else None
 
 def unread_count() -> int:
     row = _conn().execute("SELECT COUNT(*) FROM messages WHERE read_at IS NULL").fetchone()

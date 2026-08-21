@@ -594,6 +594,42 @@ export const Icon = {
       <path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4L21 3Z" />
     </svg>
   ),
+  Home: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M4 10.5 12 4l8 6.5" />
+      <path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8" />
+    </svg>
+  ),
+  User: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  ),
+  Gear: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6" />
+    </svg>
+  ),
+  Sliders: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="8" cy="17" r="2" />
+    </svg>
+  ),
+  Reply: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h9a7 7 0 0 1 7 7v1" />
+    </svg>
+  ),
+  Plus: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
   Logo: (p) => (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true" {...p}
          fill="none" stroke="currentColor" strokeWidth="1.8"

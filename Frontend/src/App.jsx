@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion as m } from 'motion/react'
+import DashboardTab from './tabs/DashboardTab'
 import JobsTab from './tabs/JobsTab'
 import ResumeTab from './tabs/ResumeTab'
 import OutreachTab from './tabs/OutreachTab'
 import TrackTab from './tabs/TrackTab'
+import ProfilesTab from './tabs/ProfilesTab'
+import SettingsTab from './tabs/SettingsTab'
 import { api } from './lib/api'
 import { springFor } from './lib/motion'
 import { usePress } from './lib/usePress'
@@ -23,12 +26,36 @@ import { Icon, Note, Status } from './components/ui'
   translucent layer on another is where legibility goes.
 */
 
-const TABS = [
-  { key: 'jobs', label: 'Jobs', icon: Icon.Briefcase },
-  { key: 'resume', label: 'Resume', icon: Icon.File },
-  { key: 'track', label: 'Track', icon: Icon.Inbox },
-  { key: 'outreach', label: 'Outreach', icon: Icon.Send },
+/*
+  Two groups, because the destinations answer two different questions.
+
+  The first is the work: what is happening, what to act on, what came back, who
+  to reach. The second is the setup behind it — which resume, and how the agent
+  behaves. Splitting them is what let the search settings, the portal table and
+  the whole configuration panel come off the Jobs screen, where they had been
+  sitting above the table people actually open the app to use.
+*/
+const GROUPS = [
+  {
+    label: 'Workspace',
+    tabs: [
+      { key: 'dashboard', label: 'Dashboard', icon: Icon.Home },
+      { key: 'jobs', label: 'Jobs', icon: Icon.Briefcase },
+      { key: 'track', label: 'Track', icon: Icon.Inbox },
+      { key: 'outreach', label: 'Outreach', icon: Icon.Send },
+    ],
+  },
+  {
+    label: 'Setup',
+    tabs: [
+      { key: 'profiles', label: 'Profiles', icon: Icon.User },
+      { key: 'resume', label: 'Resume check', icon: Icon.File },
+      { key: 'settings', label: 'Settings', icon: Icon.Gear },
+    ],
+  },
 ]
+
+const TABS = GROUPS.flatMap((g) => g.tabs)
 
 /*
   The AI badge. It reports remaining daily calls once they run low, because the
@@ -102,7 +129,7 @@ function NavItem({ tab, active, badge, onSelect }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('jobs')
+  const [tab, setTab] = useState('dashboard')
   const [health, setHealth] = useState(null)
   const [offline, setOffline] = useState(false)
   const [counts, setCounts] = useState({})
@@ -144,18 +171,24 @@ export default function App() {
           <span className="text-base font-semibold tracking-tight text-n-100">Quiver</span>
         </div>
 
-        <p className="px-2.5 pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
-          Workspace
-        </p>
-        <nav className="flex flex-col gap-0.5" aria-label="Main">
-          {TABS.map((t) => (
-            <NavItem
-              key={t.key}
-              tab={t}
-              active={tab === t.key}
-              badge={counts[t.key]}
-              onSelect={() => setTab(t.key)}
-            />
+        <nav className="flex flex-col gap-4" aria-label="Main">
+          {GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="px-2.5 pb-1.5 text-micro font-medium tracking-wide text-n-500 uppercase">
+                {group.label}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {group.tabs.map((t) => (
+                  <NavItem
+                    key={t.key}
+                    tab={t}
+                    active={tab === t.key}
+                    badge={counts[t.key]}
+                    onSelect={() => setTab(t.key)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -213,14 +246,20 @@ export default function App() {
                 exit={{ opacity: 0, y: -4 }}
                 transition={springFor()}
               >
-                {tab === 'jobs' ? (
+                {tab === 'dashboard' ? (
+                  <DashboardTab onOpenJobs={() => setTab('jobs')} />
+                ) : tab === 'jobs' ? (
                   <JobsTab />
-                ) : tab === 'resume' ? (
-                  <ResumeTab aiStatus={health?.ai} />
                 ) : tab === 'track' ? (
                   <TrackTab />
-                ) : (
+                ) : tab === 'outreach' ? (
                   <OutreachTab />
+                ) : tab === 'profiles' ? (
+                  <ProfilesTab />
+                ) : tab === 'resume' ? (
+                  <ResumeTab aiStatus={health?.ai} />
+                ) : (
+                  <SettingsTab />
                 )}
               </m.div>
             </AnimatePresence>

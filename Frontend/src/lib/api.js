@@ -56,12 +56,24 @@ export const api = {
     ).then(handle),
 
   // The tracked jobs table: rows plus the facet counts the filters are built from.
-  agentJobs: ({ limit = 300, status, category, source, q } = {}) => {
+  /*
+    Every filter the endpoint understands, forwarded by name.
+
+    This used to destructure four known keys and drop the rest, which meant a
+    new filter could be built, wired and shipped without doing anything at all:
+    the request went out looking exactly as it had before. Passing the object
+    through means the query and the endpoint's signature are the only two
+    things that have to agree.
+
+    `false` is a real value here — `remote=false` means on-site — so only
+    undefined, null and the empty string are treated as "not set".
+  */
+  agentJobs: ({ limit = 300, ...filters } = {}) => {
     const p = new URLSearchParams({ limit: String(limit) })
-    if (status) p.set('status', status)
-    if (category) p.set('category', category)
-    if (source) p.set('source', source)
-    if (q) p.set('q', q)
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue
+      p.set(key, String(value))
+    }
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
 
@@ -88,6 +100,15 @@ export const api = {
     if (unread) p.set('unread', 'true')
     return fetch(`${BASE}/api/agent/inbox?${p}`).then(handle)
   },
+
+  agentMailbox: () => fetch(`${BASE}/api/agent/mailbox`).then(handle),
+
+  agentReply: (messageId, text, subject) =>
+    fetch(`${BASE}/api/agent/message/${messageId}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, subject: subject || null }),
+    }).then(handle),
 
   agentSetStage: (appId, status) =>
     fetch(`${BASE}/api/agent/application/${appId}/status`, {
@@ -128,6 +149,13 @@ export const api = {
   agentDeleteProfile: (name) =>
     fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}`, {
       method: 'DELETE',
+    }).then(handle),
+
+  agentSetProfileCategories: (name, categories) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories }),
     }).then(handle),
 
   agentSetDefaultProfile: (name) =>

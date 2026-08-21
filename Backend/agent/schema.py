@@ -230,6 +230,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "max_years_experience": 3,
         "allow_internships": False,
     },
+    # What a manual "Find new jobs" run does. These used to live in the Jobs
+    # screen's own React state, which meant the controls had to be on the same
+    # page as the button. Storing them lets the button be pressed from anywhere
+    # and lets the settings be edited somewhere they are not in the way.
+    "search": {
+        "sources": ["yc", "hn", "remote", "hidden"],
+        "depth": 25,
+        "scan_ats": True,
+        "find_people": True,
+    },
     # How far the model may go when rewriting the resume for a posting, and
     # whether the result needs a human's eyes before it can be used.
     #

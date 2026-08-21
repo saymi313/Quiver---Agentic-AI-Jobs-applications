@@ -625,3 +625,83 @@ def _demote_bounced_pattern(msg: dict[str, Any], *,
         log(f"[inbox] {address} bounced; marked invalid so it is not reused")
     except Exception:
         pass
+
+
+# --------------------------------------------------------------------------
+# Replying
+# --------------------------------------------------------------------------
+
+def reply(message_id: int, body: str, *, subject: str | None = None,
+          log: Callable[[str], None] = print) -> dict[str, Any]:
+    """
+    Answer one message from the mailbox Quiver already reads.
+
+    A recruiter's "can you do Tuesday at 3?" wants a one-line answer within the
+    hour, and the whole point of reading the mailbox here is to know it arrived.
+    Making the user leave for Gmail to type that line is where the loop breaks.
+
+    The reply is threaded properly — `In-Reply-To` and `References` carry the
+    original `Message-ID` — so it lands in the same conversation rather than
+    arriving as an unrelated mail with a "Re:" subject. It goes out over the
+    same SMTP credentials the outreach sender uses; there is no second account
+    and no OAuth.
+    """
+    text = (body or "").strip()
+    if not text:
+        return {"ok": False, "error": "The reply is empty."}
+
+    row = store.get_message(message_id)
+    if not row:
+        return {"ok": False, "error": f"No message {message_id}."}
+
+    to = (row.get("from_addr") or "").strip()
+    if not to:
+        return {"ok": False, "error": "That message has no reply address."}
+
+    address, password = credentials()
+    if not address or not password:
+        return {"ok": False, "error": ("GMAIL_ADDRESS and GMAIL_APP_PASS are not set in "
+                                       "Backend/.env, so nothing can be sent.")}
+
+    original = (row.get("subject") or "").strip()
+    if subject:
+        line = subject.strip()
+    elif original.lower().startswith("re:"):
+        line = original
+    else:
+        line = f"Re: {original}" if original else "Re:"
+
+    # The RFC value, not our row id — threading is done by Message-ID.
+    ref = (row.get("message_id") or "").strip()
+
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["From"] = address
+    msg["To"] = to
+    msg["Subject"] = line
+    if ref:
+        msg["In-Reply-To"] = ref
+        msg["References"] = ref
+    msg.set_content(text)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465,
+                              context=ssl.create_default_context(), timeout=30) as server:
+            server.login(address, password)
+            server.send_message(msg)
+    except Exception as exc:
+        log(f"[inbox] reply to {to} failed: {exc}")
+        return {"ok": False, "error": str(exc)}
+
+    # Answering a message is the clearest possible signal that it has been
+    # read, so the user never has to say so twice.
+    try:
+        store.mark_message_read(message_id, True)
+    except Exception:
+        pass
+
+    log(f"[inbox] replied to {to}")
+    return {"ok": True, "to": to, "subject": line, "threaded": bool(ref)}

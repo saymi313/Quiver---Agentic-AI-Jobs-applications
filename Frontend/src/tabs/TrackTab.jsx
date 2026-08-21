@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
 import { useJobStream } from '../lib/useJobStream'
 import Console from '../components/Console'
+import QuickReply from '../components/QuickReply'
 import { MessageChip, Segmented, StageBar } from '../components/apple'
 import {
   Button,
@@ -295,6 +296,7 @@ export default function TrackTab() {
                       {msg.snippet}
                     </p>
                   ) : null}
+                  <QuickReply message={msg} onSent={refresh} />
                 </m.li>
               ))}
             </AnimatePresence>
