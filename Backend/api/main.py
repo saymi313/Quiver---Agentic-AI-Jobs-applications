@@ -743,6 +743,22 @@ def agent_screenshot(name: str):
 # Prep: tailoring modes, the change review, and adding a job by URL
 # --------------------------------------------------------------------------
 
+@app.get("/api/agent/portals")
+def agent_portals() -> dict[str, Any]:
+    """
+    What Quiver can do with each applicant tracking system.
+
+    Reading a board and submitting to it are tracked separately, because they
+    genuinely are separate: a job can be perfectly discoverable through a system
+    whose form nobody has ever got through.
+    """
+    from agent import portals
+
+    return {"rows": portals.table(), "summary": portals.summary(),
+            "levels": {"proven": portals.PROVEN, "likely": portals.LIKELY,
+                       "unproven": portals.UNPROVEN, "no": portals.NO}}
+
+
 class AddJobRequest(BaseModel):
     url: str
 

@@ -524,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-ats", action="store_true", help="skip career-portal scanning")
     ap.add_argument("--no-attach", action="store_true", help="do not attach the resume")
     ap.add_argument("--headed", action="store_true", help="show the browser while applying")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="apply to this many jobs at once (headless only, max 3)")
     ap.add_argument("--job-ids", default="",
                     help="comma list of job ids to apply to (per-job or bulk apply)")
     ap.add_argument("--no-resumes", action="store_true",
@@ -558,7 +560,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 _log(_rule("Applying to the selected jobs"))
                 stats["apply"] = applier.apply_to_ids(
-                    job_ids, dry_run=args.dry_run, headless=not args.headed)
+                    job_ids, dry_run=args.dry_run, headless=not args.headed,
+                    workers=args.workers)
 
         if args.mode == "tasks":
             _log(_rule("Draining the retry queue"))

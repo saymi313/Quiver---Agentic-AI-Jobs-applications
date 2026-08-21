@@ -18,14 +18,16 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
 from api.config import DASHBOARD_OUT
 from api import behuman
 
-from . import llm, matcher, store
+from . import llm, matcher, portals, store
 
 SHOT_DIR = DASHBOARD_OUT / "applications"
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -118,25 +120,52 @@ def _visible_captcha(page) -> bool:
     return False
 
 
-def diagnose_wall(page) -> str | None:
-    """
-    Why this form cannot be completed automatically, or None if it can.
+# A one-time code the site has emailed or texted. Unlike a captcha, this is
+# something the user can actually supply, so the application pauses instead of
+# dying — the difference between "this needs a human" and "this needs you".
+OTP_MARKERS = re.compile(
+    r"\b(enter the (?:\d[\- ]?)?(?:digit )?code|verification code|one[- ]time (?:code|password)|"
+    r"we (?:sent|emailed|texted) (?:you )?a code|confirm your (?:email|identity) to continue|"
+    r"security code)\b", re.I)
 
-    Checked before field collection: a rendered captcha challenge or a login
-    gate means the fields on the page are not the application form at all.
+
+def diagnose_wall(page) -> tuple[str, str] | None:
+    """
+    Why this form cannot be completed right now, as (kind, message).
+
+    `kind` is the application status this should become:
+
+      failed        nobody can get past it unattended — a rendered captcha
+      needs_review  a human could, given a moment: a login, or a code the site
+                    just sent. Recording those as failures conflated "the site
+                    said no" with "the site is waiting for you", and buried
+                    applications that were one step from going through.
+
+    Checked before field collection: any of these means the fields on the page
+    are not the application form at all.
     """
     if _visible_captcha(page):
-        return "blocked by a captcha challenge — this form needs a human"
+        return "failed", "blocked by a captcha challenge — this form needs a human"
 
     try:
         text = (page.inner_text("body") or "")[:6000]
     except Exception:
         text = ""
+
+    if OTP_MARKERS.search(text):
+        return ("needs_review",
+                "the site sent a one time code and is waiting for it — open the "
+                "posting, enter the code, and apply again")
+
     hit = LOGIN_MARKERS.search(text)
     if hit:
-        return f"behind a login wall — the site asks you to {hit.group(0).lower()}"
+        return ("needs_review",
+                f"behind a login wall — the site asks you to {hit.group(0).lower()}. "
+                f"Sign in once in your own browser, then apply again")
     if re.search(r"/(login|signin|sign-in|auth)\b", (page.url or ""), re.I):
-        return "redirected to a sign-in page — an account is required to apply"
+        return ("needs_review",
+                "redirected to a sign-in page — an account is required. Create it "
+                "once, then apply again")
     return None
 
 
@@ -934,8 +963,8 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             # skipped silently.
             wall = diagnose_wall(page)
             if wall:
-                result["error"] = wall
-                log(f"[apply]   FAILED — {wall}")
+                result["status"], result["error"] = wall
+                log(f"[apply]   {result['status'].upper()} — {result['error']}")
                 try:
                     shot = SHOT_DIR / f"job{job.get('id')}_blocked.png"
                     page.screenshot(path=str(shot), full_page=True)
@@ -959,8 +988,8 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     page.set_default_timeout(timeout_ms)
                     wall = diagnose_wall(page)
                     if wall:
-                        result["error"] = wall
-                        log(f"[apply]   FAILED — {wall}")
+                        result["status"], result["error"] = wall
+                        log(f"[apply]   {result['status'].upper()} — {result['error']}")
                         try:
                             shot = SHOT_DIR / f"job{job.get('id')}_blocked.png"
                             page.screenshot(path=str(shot), full_page=True)
@@ -1251,6 +1280,7 @@ def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
 
 
 def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = True,
+                 workers: int = 1,
                  log: Callable[[str], None] = print) -> dict[str, Any]:
     """
     Apply to exactly these jobs — the per-job and bulk-apply entry point.
@@ -1266,10 +1296,13 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
         return {"attempted": 0, "submitted": 0, "failed": 0, "already": 0}
 
     already = store.applied_hashes()
-    counts = {"attempted": 0, "submitted": 0, "failed": 0, "filled": 0, "already": 0}
-    log(f"[apply] {len(rows)} job(s) selected"
-        + (" — DRY RUN, nothing will be submitted" if dry_run else ""))
+    counts = {"attempted": 0, "submitted": 0, "failed": 0, "needs_review": 0, "already": 0}
+    guard = threading.Lock()
 
+    # ---- what is actually worth attempting -------------------------------
+    # Every refusal is decided up front and on the main thread, so the reasons
+    # come out in a readable order rather than interleaved from workers.
+    queue: list[dict[str, Any]] = []
     for job in rows:
         job_hash = job.get("dedupe_hash")
         if job.get("status") == "applied" or (job_hash and job_hash in already):
@@ -1283,18 +1316,64 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
         # is allowed through, since it submits nothing and is how you check the
         # form before approving.
         if not dry_run and job.get("resume_approved") == 0:
-            counts["needs_review"] = counts.get("needs_review", 0) + 1
+            counts["needs_review"] += 1
             log(f"[apply] SKIP (resume not approved) {job.get('company_name')} — "
                 f"{job['title'][:44]}. Review the changes on the Jobs screen first.")
             continue
 
-        counts["attempted"] += 1
+        # A source that only aggregates other people's postings has no form of
+        # its own. The applier still follows its Apply link, so this is a note
+        # rather than a refusal — but saying so up front beats letting the user
+        # wonder why an "arbeitnow" row took a detour.
+        if portals.submit_support(job.get("source")) == portals.NO:
+            log(f"[apply]   {portals.name_of(job.get('source'))} is an aggregator; "
+                f"following its Apply link to the employer's own form")
+        queue.append(job)
+
+    # ---- how many at once -------------------------------------------------
+    # One at a time unless explicitly asked otherwise, and never more than one
+    # with a visible browser: several headed Chromium windows fighting for the
+    # foreground is unusable, and stealing focus mid-typing corrupts the very
+    # fields being filled. Headless is capped at 3, because each worker is a
+    # whole browser and the LLM behind them is serialised by its own throttle
+    # anyway — more workers would queue on that instead.
+    lanes = max(1, int(workers or 1))
+    if lanes > 1 and not headless:
+        log("[apply] running one at a time: parallel applies need the browser hidden")
+        lanes = 1
+    lanes = min(lanes, 3, len(queue) or 1)
+
+    log(f"[apply] {len(queue)} job(s) to attempt"
+        + (f", {lanes} at a time" if lanes > 1 else "")
+        + (" — DRY RUN, nothing will be submitted" if dry_run else ""))
+
+    def attempt(job: dict[str, Any]) -> None:
+        job_hash = job.get("dedupe_hash")
+        with guard:
+            # Re-checked inside the lock: a worker may have submitted the same
+            # role (same company, same title, different board) a moment ago.
+            if job_hash and job_hash in already:
+                counts["already"] += 1
+                log(f"[apply] SKIP (just applied on another board) "
+                    f"{job.get('company_name')} — {job['title'][:40]}")
+                return
+            counts["attempted"] += 1
+
         result = apply_to_job(job, dry_run=dry_run, headless=headless, log=log)
-        status = _record(job, result, dry_run=dry_run, log=log)
-        counts[status] = counts.get(status, 0) + 1
-        if status == "submitted" and not dry_run and job_hash:
-            already.add(job_hash)
-        time.sleep(2)
+        with guard:
+            status = _record(job, result, dry_run=dry_run, log=log)
+            counts[status] = counts.get(status, 0) + 1
+            if status == "submitted" and not dry_run and job_hash:
+                already.add(job_hash)
+
+    if lanes == 1:
+        for job in queue:
+            attempt(job)
+            time.sleep(2)
+    else:
+        with ThreadPoolExecutor(max_workers=lanes) as pool:
+            for _ in pool.map(attempt, queue):
+                pass
 
     log(f"[apply] done — submitted={counts['submitted']} "
         f"needs-review={counts.get('needs_review', 0)} "

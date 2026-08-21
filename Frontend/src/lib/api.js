@@ -103,6 +103,8 @@ export const api = {
 
   agentReceipt: (appId) => fetch(`${BASE}/api/agent/receipt/${appId}`).then(handle),
 
+  agentPortals: () => fetch(`${BASE}/api/agent/portals`).then(handle),
+
   // ---- prep ----
   agentJobFromUrl: (url) =>
     fetch(`${BASE}/api/agent/job-from-url`, {

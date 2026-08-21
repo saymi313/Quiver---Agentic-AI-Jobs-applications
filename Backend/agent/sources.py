@@ -491,6 +491,8 @@ def fetch_ats_jobs(platform: str, token: str, *,
             "smartrecruiters": _jobs_smartrecruiters,
             "workable": _jobs_workable,
             "recruitee": _jobs_recruitee,
+            "breezy": _jobs_breezy,
+            "rippling": _jobs_rippling,
         }.get(platform)
         if not fetcher:
             return []
@@ -629,6 +631,73 @@ def _jobs_recruitee(token: str) -> list[dict[str, Any]]:
             "employment_type": j.get("employment_type_code") or "",
             "posted_at": j.get("published_at"),
             "source": "recruitee",
+        })
+    return out
+
+
+def _named(value: Any) -> str:
+    """A display string from a field that may be a string, a {name: ...}, or absent.
+
+    Breezy is inconsistent about this even within one payload: `location.city`
+    comes back as a bare string on some rows and as an object on others, which
+    turned a whole board into an AttributeError."""
+    if isinstance(value, dict):
+        return str(value.get("name") or value.get("label") or "")
+    return str(value or "")
+
+
+def _jobs_breezy(token: str) -> list[dict[str, Any]]:
+    """Breezy publishes its whole board at {token}.breezy.hr/json, no key."""
+    data = _get(f"https://{token}.breezy.hr/json")
+    out = []
+    for j in data if isinstance(data, list) else []:
+        loc = j.get("location") or {}
+        if isinstance(loc, dict):
+            parts = [_named(loc.get(k)) for k in ("city", "state", "country")]
+            location = ", ".join(p for p in parts if p)
+            remote = bool(loc.get("is_remote"))
+        else:
+            location, remote = _named(loc), False
+        out.append({
+            "external_id": str(j.get("id") or j.get("friendly_id") or ""),
+            "title": j.get("name", ""),
+            "location": location,
+            "remote": remote or "remote" in location.lower(),
+            "url": j.get("url", ""),
+            "apply_url": j.get("url", ""),
+            "description": strip_html(j.get("description"))[:20000],
+            "department": _named(j.get("department")),
+            "employment_type": _named(j.get("type")),
+            "posted_at": j.get("published_date"),
+            "source": "breezy",
+        })
+    return out
+
+
+def _jobs_rippling(token: str) -> list[dict[str, Any]]:
+    """
+    Rippling's public board API.
+
+    Returns titles and links only — no description — so every role goes to the
+    JD fetcher afterwards. That is fine: `jobdesc` already treats a missing
+    description as work to be done rather than a reason to drop the row.
+    """
+    data = _get(f"https://api.rippling.com/platform/api/ats/v1/board/{token}/jobs")
+    out = []
+    for j in data if isinstance(data, list) else []:
+        location = _named(j.get("workLocation"))
+        out.append({
+            "external_id": str(j.get("uuid") or ""),
+            "title": j.get("name", ""),
+            "location": location,
+            "remote": "remote" in location.lower(),
+            "url": j.get("url", ""),
+            "apply_url": j.get("url", ""),
+            "description": "",
+            "department": _named(j.get("department")),
+            "employment_type": "",
+            "posted_at": None,
+            "source": "rippling",
         })
     return out
 

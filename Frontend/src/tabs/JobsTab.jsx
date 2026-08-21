@@ -4,6 +4,7 @@ import { useJobStream } from '../lib/useJobStream'
 import Console from '../components/Console'
 import TrackedJobs from '../components/TrackedJobs'
 import Settings from '../components/Settings'
+import Portals from '../components/Portals'
 import {
   Button,
   Checkbox,
@@ -68,12 +69,24 @@ export default function JobsTab() {
   // Headed by default: Ashby's anti-bot scoring rejected a headless browser
   // as spam in testing and accepted the identical submission with a visible one.
   const [headed, setHeaded] = useState(true)
+  // Only offered with the browser hidden: several visible Chromium windows
+  // fighting for focus is unusable, and focus theft corrupts the fields being
+  // typed into.
+  const [workers, setWorkers] = useState(1)
 
   const busy = stream.busy || !!stream.starting
 
   const applyToJobs = useCallback(
-    (ids) => ids.length && stream.start({ key: 'agent_apply', job_ids: ids, dry_run: dryRun, headed }),
-    [stream, dryRun, headed],
+    (ids) =>
+      ids.length &&
+      stream.start({
+        key: 'agent_apply',
+        job_ids: ids,
+        dry_run: dryRun,
+        headed,
+        workers: headed ? 1 : workers,
+      }),
+    [stream, dryRun, headed, workers],
   )
   const generateResumes = useCallback(
     (ids) => ids.length && stream.start({ key: 'agent_resumes', job_ids: ids }),
@@ -185,6 +198,11 @@ export default function JobsTab() {
         </div>
       </Disclosure>
 
+      <Portals
+        open={openPanel === 'portals'}
+        onToggle={(v) => setOpenPanel(v ? 'portals' : '')}
+      />
+
       <Settings
         overview={overview}
         onSaved={refresh}
@@ -201,6 +219,21 @@ export default function JobsTab() {
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Switch checked={dryRun} onChange={setDryRun} label="Dry run" />
             <Switch checked={headed} onChange={setHeaded} label="Watch the browser" />
+            {!headed ? (
+              <label className="flex items-center gap-2 text-sm text-n-400">
+                <span>At once</span>
+                <select
+                  value={workers}
+                  onChange={(e) => setWorkers(Number(e.target.value))}
+                  aria-label="How many applications to run at once"
+                  className="h-7 rounded-sm border border-line-strong bg-sunken px-1.5 text-sm text-n-100"
+                >
+                  <option value={1}>1</option>
+                  <option value={2}>2</option>
+                  <option value={3}>3</option>
+                </select>
+              </label>
+            ) : null}
             {!dryRun ? <Status tone="bad">applications will be submitted</Status> : null}
           </div>
         }

@@ -58,7 +58,7 @@ RUNNABLE = {
         "description": "Open the application form for each job you selected, fill every field "
                        "from your profile, upload that job's tailored resume, and submit. "
                        "Only ever runs on jobs you picked.",
-        "flags": ["job_ids", "dry_run", "headed"],
+        "flags": ["job_ids", "dry_run", "headed", "workers"],
     },
     "agent_resumes": {
         "label": "Generate tailored resumes",

@@ -223,7 +223,12 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   discovery source. Equivalent to Tsenta's `POST /detect`.
 - **FR-F4 (P1).** Expand ATS board readers from 6 towards the 28 systems in section
   2.2, prioritised by how many target companies use each. Each new reader is one
-  function plus one recorded fixture (see NFR-4).
+  function plus one recorded fixture (see NFR-4). *Partly done: Breezy HR and
+  Rippling added, taking readers from 6 to 8. The rest were probed and refused —
+  Teamtailor needs an API key, Workday needs a tenant-specific POST, Personio
+  rate limits anonymous reads, and JazzHR, Polymer, BambooHR and Join.com have no
+  usable public GET. They are listed in the capability table as `detects: false`
+  with the reason, rather than claimed and quietly broken.*
 - **FR-F5 (P1).** Keep a persistent company-to-board registry so career pages are
   re-scanned on a cadence rather than rediscovered every run, with `last_scanned_at`
   per board. *Partly built.*
@@ -263,7 +268,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 ### 5.3 Apply
 
-- **FR-A1 (P0).** Submission works across the systems in 2.2, tracked as a per-ATS
+- **FR-A1 (P0) [DONE].** Submission works across the systems in 2.2, tracked as a per-ATS
   capability table with two independent flags, `detects` and `submits`. That table
   is visible in the UI so the user knows before selecting a job.
 - **FR-A2 (P0) [DONE].** Adopt Tsenta's application status machine in place of Quiver's:
@@ -275,7 +280,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   afterwards. *Data is captured; there is no receipt view.*
 - **FR-A4 (P1).** Optional review of the filled form before submit, on systems where
   the form can be paused.
-- **FR-A5 (P1).** Handle logins and one-time codes instead of failing on them.
+- **FR-A5 (P1) [DONE].** Handle logins and one-time codes instead of failing on them.
   Tsenta exposes this as `POST /applications/{id}/otp` with an
   `application.needs_otp` webhook. Quiver records a login wall as a terminal failure
   today.
@@ -291,7 +296,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   the one behaviour Quiver forbids today, structurally: `apply` requires explicit
   `--job-ids`. Enabling it is a product decision with real consequences and must be
   opt-in, capped and revocable.
-- **FR-A10 (P1).** Apply to several jobs in parallel with a bounded worker pool,
+- **FR-A10 (P1) [DONE].** Apply to several jobs in parallel with a bounded worker pool,
   instead of strictly one at a time.
 
 ### 5.4 Track
@@ -368,7 +373,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **NFR-3.** Honest reporting throughout: a failure is recorded with its reason and a
   screenshot, nothing is silently skipped, and a submitted application means the form
   was accepted, verified by the post-submit verdict check.
-- **NFR-4.** Each supported ATS carries an offline HTML fixture and a test driving the
+- **NFR-4 [DONE].** Each supported ATS carries an offline HTML fixture and a test driving the
   fill logic against it, so adding a system cannot regress the others.
 - **NFR-5.** Storage stays backend-agnostic: SQLite and MongoDB keep function parity,
   enforced by the shared schema module.
@@ -421,7 +426,7 @@ Scope decisions taken on 2026-08-21:
 | **0** | Apple design foundation | Motion primitives, press feedback, typography, retrofit of the existing tabs | **Completed 2026-08-21** |
 | **1** | Close the loop (Track) | FR-T1, FR-T2, FR-T3, FR-T4, FR-T5, FR-T7, FR-A2, FR-A3, FR-S1 | **Completed 2026-08-21** |
 | **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | **Completed 2026-08-22** |
-| **3** | Reach | FR-A1, FR-F4, FR-A5, FR-A10, NFR-4 | Not started |
+| **3** | Reach | FR-A1, FR-A5, FR-A10, NFR-4 | **Completed 2026-08-22** |
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | Not started |
 
 **Out of scope by decision:** FR-D1 to FR-D6 and FR-B1 to FR-B5 (multi-tenant
@@ -544,6 +549,53 @@ labels were decoration, focusing nothing when clicked and leaving every input
 unnamed to a screen reader.
 
 91 tests. Both storage backends still expose 59 identically-signed functions.
+
+### Phase 3 — what was built
+
+`agent/portals.py` holds the capability table as data, with **detects** and
+**submits** tracked separately because they genuinely are separate: a role can
+be perfectly discoverable through a system whose form nobody has ever got
+through. It is served at `/api/agent/portals` and shown on the Jobs screen, so
+the user knows what to expect before pressing Apply rather than finding out from
+a failure.
+
+Submission confidence has four values, not two. `proven` is claimed only for
+Greenhouse and Ashby, where a real application has actually gone through.
+`likely` is Lever. Everything else is `unproven`, which is deliberately not the
+same as no — the generic driver handles most standard forms, and refusing to try
+would mean never learning which ones work. A test asserts that `proven` stays
+honest.
+
+Two new board readers: **Breezy HR** and **Rippling**, taking readers from 6 to
+8. The others in Tsenta's list of 28 were probed and refused: Teamtailor needs
+an API key, Workday needs a tenant-specific POST, Personio rate limits anonymous
+reads, and JazzHR, Polymer, BambooHR and Join.com have no usable public GET.
+They sit in the table as `detects: false` with the reason, rather than being
+claimed and quietly broken. Both new readers needed a `_named()` helper first —
+Breezy returns `location.city` as a bare string on some rows and an object on
+others, which turned a whole board into an AttributeError.
+
+`diagnose_wall` now returns a status alongside its message. A rendered captcha
+is still `failed`, because nobody gets past it unattended. But a login wall or a
+one-time code is `needs_review`: those are things the user can supply, and
+recording them as failures conflated "the site said no" with "the site is
+waiting for you", burying applications that were one step from going through.
+
+Applying can run up to three at a time, and only with the browser hidden —
+several visible Chromium windows fighting for the foreground is unusable, and
+focus theft mid-typing corrupts the very fields being filled. The dedupe check
+is re-taken inside the lock, so two workers cannot both submit the same role
+found on two different boards.
+
+NFR-4 is the durable part: a real Greenhouse form is recorded to
+`tests/fixtures/portals/` and the fill logic runs against it offline. Every
+portal fix so far was found by pointing a browser at a live posting, which meant
+the next change could silently break a portal that used to work. Six tests now
+drive field collection, the furniture filter, the rule matcher and the captcha
+check against that page with no network at all.
+
+105 tests. Verified live: two applications ran in parallel against real
+Greenhouse forms, both correctly recorded `needs_review` rather than `failed`.
 
 ---
 
