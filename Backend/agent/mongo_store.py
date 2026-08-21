@@ -489,11 +489,24 @@ def set_job_recruiter(job_id: int, email: str, name: str = "") -> None:
         {"$set": {"recruiter_email": email, "recruiter_name": name or ""}})
 
 
-def set_job_resume(job_id: int, path: str, version: str) -> None:
+def set_job_resume(job_id: int, path: str, version: str, *,
+                   mode: str | None = None,
+                   changes: list[dict[str, Any]] | None = None,
+                   approved: bool | None = None) -> None:
     _connect().jobs.update_one(
         {"id": int(job_id)},
         {"$set": {"resume_path": path, "resume_version": version,
-                  "resume_built_at": now()}})
+                  "resume_built_at": now(), "resume_mode": mode,
+                  "resume_changes": json.dumps(changes or []),
+                  "resume_approved": None if approved is None else (1 if approved else 0)}})
+
+
+def approve_job_resume(job_id: int, changes: list[dict[str, Any]] | None = None) -> None:
+    """Sign off a tailored resume. `changes` carries any edits the user made."""
+    updates: dict[str, Any] = {"resume_approved": 1}
+    if changes is not None:
+        updates["resume_changes"] = json.dumps(changes)
+    _connect().jobs.update_one({"id": int(job_id)}, {"$set": updates})
 
 
 def set_job_applied(job_id: int, *, resume_version: str = "") -> None:
@@ -513,6 +526,16 @@ def mark_job_failed(job_id: int, reason: str) -> None:
 def job(job_id: int) -> dict[str, Any] | None:
     row = _clean(_connect().jobs.find_one({"id": int(job_id)}))
     return _attach_company([row])[0] if row else None
+
+
+def job_by_url(url: str) -> dict[str, Any] | None:
+    """A job already tracked at this URL. The url index is unique."""
+    row = _clean(_connect().jobs.find_one({"url": url}))
+    if not row:
+        return None
+    row["company_name"] = (_company_names().get(
+        int(row.get("company_id") or -1)) or {}).get("name")
+    return with_job_defaults(row)
 
 
 def jobs_by_ids(job_ids: list[int]) -> list[dict[str, Any]]:

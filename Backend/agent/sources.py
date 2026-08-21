@@ -980,3 +980,65 @@ def crawl_company_pages(website: str, *, max_pages: int = 5,
     if pages:
         log(f"[crawl] {domain_of(website)}: {len(pages)} page(s)")
     return pages
+
+
+# --------------------------------------------------------------------------
+# Reading a single job URL
+# --------------------------------------------------------------------------
+#
+# `detect_ats` above works from a company website, crawling for a careers page.
+# When the user pastes a job link the answer is already in the URL, so these
+# read it directly rather than fetching anything.
+
+PORTAL_URL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("greenhouse", re.compile(r"(?:job-)?boards(?:\.\w+)?\.greenhouse\.io/([\w.-]+)", re.I)),
+    ("greenhouse", re.compile(r"greenhouse\.io/(?:embed/job_app\?for=)?([\w.-]+)", re.I)),
+    ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([\w.-]+)", re.I)),
+    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([\w.-]+)", re.I)),
+    ("workable", re.compile(r"apply\.workable\.com/([\w.-]+)", re.I)),
+    ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([\w.-]+)", re.I)),
+    ("recruitee", re.compile(r"([\w-]+)\.recruitee\.com", re.I)),
+    ("teamtailor", re.compile(r"([\w-]+)\.teamtailor\.com", re.I)),
+    ("workday", re.compile(r"([\w-]+)\.(?:wd\d+\.)?myworkdayjobs\.com", re.I)),
+    ("bamboohr", re.compile(r"([\w-]+)\.bamboohr\.com", re.I)),
+    ("breezy", re.compile(r"([\w-]+)\.breezy\.hr", re.I)),
+    ("jobvite", re.compile(r"jobs\.jobvite\.com/([\w.-]+)", re.I)),
+    ("personio", re.compile(r"([\w-]+)\.jobs\.personio\.", re.I)),
+    ("join", re.compile(r"join\.com/companies/([\w.-]+)", re.I)),
+)
+
+
+def portal_from_url(url: str) -> tuple[str, str]:
+    """(platform, board token) read straight out of a job URL, or ("", "")."""
+    for platform, pattern in PORTAL_URL_PATTERNS:
+        hit = pattern.search(url or "")
+        if hit:
+            return platform, hit.group(1)
+    return "", ""
+
+
+def company_from_url(url: str) -> str:
+    """
+    A readable company name for a pasted job link.
+
+    On an ATS URL the board token is the company ("jobs.lever.co/acme/..." is
+    Acme). Everywhere else the registered domain is the best available guess,
+    and it is a guess — the description fetch usually names the employer
+    properly, and the user can correct it.
+    """
+    _, token = portal_from_url(url)
+    if token:
+        return token.replace("-", " ").replace("_", " ").strip().title()
+
+    # `careers.spotify.com` is Spotify, not Careers: drop the hosting labels
+    # before taking a name from the host.
+    generic = {"careers", "career", "jobs", "job", "apply", "boards", "board",
+               "work", "hiring", "recruiting", "talent", "www"}
+    labels = [l for l in domain_of(url).split(".") if l]
+    labels = [l for l in labels if l not in generic]
+    # Strip the public suffix: "spotify.com" -> "spotify", "acme.co.uk" -> "acme".
+    while len(labels) > 1 and len(labels[-1]) <= 3:
+        labels.pop()
+    if not labels:
+        return ""
+    return labels[-1].replace("-", " ").title()

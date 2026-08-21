@@ -58,6 +58,7 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
   const [targeting, setTargeting] = useState(overview.settings.targeting)
   const [limits, setLimits] = useState(overview.settings.limits || {})
   const [schedule, setSchedule] = useState(overview.settings.schedule || {})
+  const [tailoring, setTailoring] = useState(overview.settings.tailoring || {})
   const [provider, setProvider] = useState(overview.llm.provider || 'gemini')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -108,6 +109,11 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
             Math.min(23, Math.max(0, Number(schedule.quiet_hours?.[0] ?? 1) || 0)),
             Math.min(24, Math.max(0, Number(schedule.quiet_hours?.[1] ?? 7) || 0)),
           ],
+        },
+        tailoring: {
+          ...tailoring,
+          mode: tailoring.mode || 'honest',
+          auto_approve: tailoring.auto_approve !== false,
         },
         llm: { provider, ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}) },
       })
@@ -313,6 +319,39 @@ export default function Settings({ overview, onSaved, open, onToggle }) {
               onChange={(v) => setTargeting({ ...targeting, require_posted_date: v })}
               label="Skip roles with no posting date"
               hint="Some boards publish no date, so freshness cannot be proven. On means those are never applied to."
+            />
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------- tailoring */}
+        <div>
+          <p className={group}>Resume tailoring</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field
+              label="How far to rewrite"
+              hint="No mode may claim anything your profile does not show. This governs how far the wording travels, never what it asserts."
+            >
+              <Select
+                value={tailoring.mode || 'honest'}
+                onChange={(e) => setTailoring({ ...tailoring, mode: e.target.value })}
+              >
+                <option value="off">Off — send the curated resume unchanged</option>
+                <option value="honest">Honest — reword using only what you already wrote</option>
+                <option value="aggressive">Aggressive — rewrite freely for keyword match</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Checkbox
+              checked={tailoring.auto_approve !== false && tailoring.mode !== 'aggressive'}
+              disabled={tailoring.mode === 'aggressive'}
+              onChange={(v) => setTailoring({ ...tailoring, auto_approve: v })}
+              label="Use tailored resumes without reviewing them"
+              hint={
+                tailoring.mode === 'aggressive'
+                  ? 'Aggressive mode always needs review — it is the mode most likely to reach too far, so the rewrite is never sent unread.'
+                  : 'Off means every rewritten resume waits for your approval before it can be sent. The Jobs table shows a "review" link on any that are waiting.'
+              }
             />
           </div>
         </div>

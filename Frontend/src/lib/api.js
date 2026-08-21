@@ -102,4 +102,22 @@ export const api = {
     }).then(handle),
 
   agentReceipt: (appId) => fetch(`${BASE}/api/agent/receipt/${appId}`).then(handle),
+
+  // ---- prep ----
+  agentJobFromUrl: (url) =>
+    fetch(`${BASE}/api/agent/job-from-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    }).then(handle),
+
+  agentResumeChanges: (jobId) =>
+    fetch(`${BASE}/api/agent/resume/${jobId}/changes`).then(handle),
+
+  agentApproveResume: (jobId, changes) =>
+    fetch(`${BASE}/api/agent/resume/${jobId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes: changes || null }),
+    }).then(handle),
 }

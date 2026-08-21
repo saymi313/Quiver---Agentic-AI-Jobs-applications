@@ -1277,6 +1277,17 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
             log(f"[apply] SKIP (already applied) {job.get('company_name')} — {job['title'][:48]}")
             continue
 
+        # A tailored resume the user has not signed off is not sent. This is the
+        # point of turning auto-approve off: the rewrite is waiting to be read,
+        # and submitting it anyway would make the setting decorative. A dry run
+        # is allowed through, since it submits nothing and is how you check the
+        # form before approving.
+        if not dry_run and job.get("resume_approved") == 0:
+            counts["needs_review"] = counts.get("needs_review", 0) + 1
+            log(f"[apply] SKIP (resume not approved) {job.get('company_name')} — "
+                f"{job['title'][:44]}. Review the changes on the Jobs screen first.")
+            continue
+
         counts["attempted"] += 1
         result = apply_to_job(job, dry_run=dry_run, headless=headless, log=log)
         status = _record(job, result, dry_run=dry_run, log=log)
@@ -1285,6 +1296,7 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
             already.add(job_hash)
         time.sleep(2)
 
-    log(f"[apply] done — submitted={counts['submitted']} filled={counts.get('filled', 0)} "
+    log(f"[apply] done — submitted={counts['submitted']} "
+        f"needs-review={counts.get('needs_review', 0)} "
         f"failed={counts['failed']} already-applied={counts['already']}")
     return counts

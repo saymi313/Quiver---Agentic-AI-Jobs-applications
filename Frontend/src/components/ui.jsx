@@ -16,6 +16,7 @@
       CSS, because they resolve in one step.
 */
 
+import { cloneElement, isValidElement, useId } from 'react'
 import { AnimatePresence, motion as m } from 'motion/react'
 
 import { springFor } from '../lib/motion'
@@ -212,16 +213,34 @@ export function Textarea({ className = '', ...rest }) {
 }
 
 export function Field({ label, hint, htmlFor, children }) {
+  // The label is wired to its control automatically rather than every caller
+  // remembering an id. Without this the labels are decoration: clicking one
+  // focuses nothing, and a screen reader announces the input unnamed. Callers
+  // that pass `htmlFor` or set their own id keep them.
+  const auto = useId()
+  const single = isValidElement(children) ? children : null
+  const id = htmlFor || single?.props?.id || auto
+  const described = hint ? `${id}-hint` : undefined
+
   return (
     <div>
       <label
-        htmlFor={htmlFor}
+        htmlFor={id}
         className="mb-1 block text-micro font-medium tracking-wide text-n-400 uppercase"
       >
         {label}
       </label>
-      {children}
-      {hint ? <p className="mt-1 text-tiny leading-relaxed text-n-500">{hint}</p> : null}
+      {single
+        ? cloneElement(single, {
+            id,
+            'aria-describedby': described || single.props['aria-describedby'],
+          })
+        : children}
+      {hint ? (
+        <p id={described} className="mt-1 text-tiny leading-relaxed text-n-500">
+          {hint}
+        </p>
+      ) : null}
     </div>
   )
 }

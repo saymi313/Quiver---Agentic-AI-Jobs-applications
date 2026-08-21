@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
+import { AnimatePresence, motion as m } from 'motion/react'
+import { springFor } from '../lib/motion'
+import ResumeReview from './ResumeReview'
 import { Button, Empty, Icon, Input, Section, Select, Status, Table, Tag, Td, Tr } from './ui'
 
 /*
@@ -50,6 +53,8 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   const [selected, setSelected] = useState(() => new Set())
   const [filters, setFilters] = useState({ status: 'not_applied', category: '', source: '', q: '' })
   const [search, setSearch] = useState('')
+  // Which job's rewrite is open for review, if any.
+  const [reviewing, setReviewing] = useState(null)
 
   useEffect(() => {
     const t = setTimeout(() => setFilters((f) => ({ ...f, q: search })), 300)
@@ -167,6 +172,30 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
 
       {toolbar ? <div className="border-b border-line px-4 py-2.5">{toolbar}</div> : null}
 
+      <AnimatePresence initial={false}>
+        {reviewing ? (
+          <m.div
+            key={reviewing}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={springFor()}
+            className="overflow-hidden border-b border-line bg-raised"
+          >
+            <div className="p-4">
+              <ResumeReview
+                jobId={reviewing}
+                onDone={() => {
+                  setReviewing(null)
+                  load()
+                }}
+                onClose={() => setReviewing(null)}
+              />
+            </div>
+          </m.div>
+        ) : null}
+      </AnimatePresence>
+
       {/* Selection bar replaces the toolbar row rather than stacking under it. */}
       {chosen.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raised px-4 py-2.5">
@@ -249,6 +278,12 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                   {r.fit_score ? (
                     <span className="ml-1.5 text-micro text-n-600">{Math.round(r.fit_score)}</span>
                   ) : null}
+                  {/* Why this score, on every row rather than only on the ones
+                      that were filtered out. A number with no reasoning behind
+                      it is not something anyone can act on. */}
+                  {r.fit_reason ? (
+                    <p className="mt-0.5 text-micro leading-snug text-n-500">{r.fit_reason}</p>
+                  ) : null}
                   {r.failure_reason ? (
                     <p className="mt-0.5 text-micro leading-snug text-bad-400/80">
                       {r.failure_reason}
@@ -300,15 +335,28 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
 
                 <Td>
                   {r.has_resume ? (
-                    <a
-                      href={api.agentResumeUrl(r.id, 'pdf')}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-brand-400 hover:underline"
-                      title={r.resume_version || ''}
-                    >
-                      view
-                    </a>
+                    <span className="flex items-center gap-2">
+                      <a
+                        href={api.agentResumeUrl(r.id, 'pdf')}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand-400 hover:underline"
+                        title={r.resume_version || ''}
+                      >
+                        view
+                      </a>
+                      {/* An unapproved rewrite is the one thing standing
+                          between this job and an application, so it is a
+                          call to action rather than a badge. */}
+                      {r.resume_approved === 0 ? (
+                        <button
+                          onClick={() => setReviewing(r.id)}
+                          className="press text-warn-400 hover:underline"
+                        >
+                          review
+                        </button>
+                      ) : null}
+                    </span>
                   ) : (
                     <button
                       disabled={busy}

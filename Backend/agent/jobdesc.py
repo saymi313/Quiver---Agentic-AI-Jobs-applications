@@ -30,7 +30,30 @@ MIN_USEFUL = 400
 # Hosts whose posting body is injected by JavaScript, so a plain GET returns an
 # empty shell. Confirmed by fetching each one and finding no description text.
 JS_HOSTS = ("ashbyhq.com", "jobs.ashbyhq.com", "workable.com", "recruitee.com",
-            "personio.de", "join.com", "teamtailor.com")
+            "personio.de", "join.com", "teamtailor.com",
+            # Greenhouse's newer job-boards host renders the posting client
+            # side. A plain GET returns the board's *list* page, which is long
+            # enough to pass the length check, so a pasted link was storing the
+            # company blurb and a neighbouring vacancy's title as the job.
+            "job-boards.greenhouse.io", "job-boards.eu.greenhouse.io",
+            "myworkdayjobs.com")
+
+# Text that means "this is a board index", not "this is one posting". Length
+# alone cannot tell them apart: a list page is easily longer than a short JD.
+LOOKS_LIKE_A_BOARD = re.compile(
+    r"\b(current openings|all openings|open (?:roles|positions)|"
+    r"view all jobs|jobs at\b|browse (?:roles|jobs)|no openings)\b", re.I)
+
+# The posting existed and does not any more. Worth telling apart from "could
+# not read the page": one means try again, the other means do not bother.
+CLOSED_POSTING = re.compile(
+    r"(no longer (?:open|available|accepting)|this (?:job|position|role) (?:is )?"
+    r"(?:has been )?(?:closed|filled|expired)|position has been filled|"
+    r"applications are closed|we are no longer accepting)", re.I)
+
+
+def is_closed(text: str) -> bool:
+    return bool(CLOSED_POSTING.search((text or "")[:800]))
 
 # Chrome and page furniture that survives tag stripping and would otherwise be
 # fed to the tailor as if it were requirements.
@@ -167,17 +190,99 @@ def fetch_description(job: dict[str, Any], *,
     html = sources._safe(
         lambda: sources._get(url, as_json=False), on_error="") or ""
     fetched = _from_html(html) if isinstance(html, str) else ""
-    if len(fetched) >= MIN_USEFUL:
+
+    # Long enough is not the same as right. Greenhouse's job-boards host answers
+    # a plain GET with the board's *index*, which sails past the length check —
+    # so a pasted link stored the company blurb and a neighbouring vacancy's
+    # title as the job. Anything that reads as an index goes to the renderer
+    # however long it is.
+    looks_wrong = bool(LOOKS_LIKE_A_BOARD.search(fetched[:600]))
+    if len(fetched) >= MIN_USEFUL and not looks_wrong:
         return fetched, "fetched"
 
-    if any(host in url for host in JS_HOSTS):
+    if looks_wrong or any(host in url for host in JS_HOSTS):
         rendered = _render(url)
-        if len(rendered) >= MIN_USEFUL:
+        if is_closed(rendered):
+            log(f"[jd] the posting at {url[:60]} is closed")
+            return "", "closed"
+        if len(rendered) >= MIN_USEFUL and not LOOKS_LIKE_A_BOARD.search(rendered[:600]):
             log(f"[jd] rendered {url[:70]}")
             return rendered, "rendered"
+
+    if len(fetched) >= MIN_USEFUL:
+        return fetched, "fetched"
 
     best = max((existing, fetched), key=len)
     if not best:
         return "", "unavailable"
     # Short but real — better than nothing, and the caller can see it is thin.
     return best, "fetched" if best is fetched else "api"
+
+
+# Words that mean the line is page furniture, not a job title.
+_NOT_A_TITLE = re.compile(
+    r"^(apply|back to|share|home|careers?|jobs?|about|menu|search|sign in|log in|"
+    r"cookie|privacy|we are hiring|open (roles|positions))\b", re.I)
+
+_TITLE_SHAPE = re.compile(
+    r"\b(engineer|developer|designer|scientist|architect|analyst|manager|lead|"
+    r"programmer|consultant|specialist|intern)\b", re.I)
+
+
+def guess_title(text: str, url: str = "") -> str:
+    """
+    The role's title, read out of the description text or failing that the URL.
+
+    Only used for a job the user pasted a link to: everything discovered from a
+    board arrives with its title already attached. The first line that looks
+    like a job title wins, and "looks like" means it names a role — otherwise
+    the heading of a careers page ends up as the job title.
+    """
+    for line in (text or "").split("\n")[:40]:
+        line = line.strip(" \t·|-—–")
+        if not (6 <= len(line) <= 90) or _NOT_A_TITLE.match(line):
+            continue
+        if _TITLE_SHAPE.search(line):
+            return re.sub(r"\s{2,}", " ", line)
+
+    # The slug in an ATS URL is usually the title: /jobs/senior-backend-engineer
+    for chunk in reversed([c for c in (url or "").split("/") if c]):
+        if "-" in chunk and not chunk.isdigit():
+            words = [w for w in re.split(r"[-_]", chunk) if w and not w.isdigit()]
+            if len(words) >= 2:
+                candidate = " ".join(words).title()
+                if _TITLE_SHAPE.search(candidate):
+                    return candidate
+    return ""
+
+
+_H1 = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
+_TITLE_TAG = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+# "Full Stack Developer at ecosio", "Backend Engineer | Acme", "Role - Careers"
+_TITLE_SUFFIX = re.compile(r"\s*[|\u2013\u2014-]\s*[^|]{1,40}$|\s+at\s+[\w .&-]{1,40}$", re.I)
+
+
+def fetch_page_title(url: str) -> str:
+    """
+    The role's title read from the page's own <h1> or <title>.
+
+    Preferred over scanning the extracted body text, which on a real Greenhouse
+    board picked the heading of an unrelated vacancy listed further down the
+    page — the pasted link said Full Stack Developer and the row came out as
+    "E-invoicing & EDI Integration Engineer".
+    """
+    html_text = sources._safe(lambda: sources._get(url, as_json=False, timeout=15), "") or ""
+    if not isinstance(html_text, str):
+        return ""
+
+    for pattern in (_H1, _TITLE_TAG):
+        hit = pattern.search(html_text)
+        if not hit:
+            continue
+        text = sources.strip_html(hit.group(1))
+        text = re.sub(r"\s+", " ", text).strip()
+        if pattern is _TITLE_TAG:
+            text = _TITLE_SUFFIX.sub("", text).strip()
+        if 4 <= len(text) <= 120 and not _NOT_A_TITLE.match(text):
+            return text
+    return ""

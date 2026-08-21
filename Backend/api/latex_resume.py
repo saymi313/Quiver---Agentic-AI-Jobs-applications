@@ -22,7 +22,7 @@ from typing import Any, Callable
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from . import behuman, resume_style
+from . import behuman, resume_facts, resume_style
 from .ats import _alias_pattern, _norm
 from .config import CV_DATA
 from .resume_parse import ParsedResume
@@ -319,18 +319,41 @@ REWRITE_SCHEMA = {
     "required": ["summary", "bullets"],
 }
 
-REWRITE_SYSTEM = """You tailor an engineer's resume to one specific job posting.
+# The three tailoring modes.
+#
+#   off         submit the curated resume unchanged. No model call at all.
+#   honest      reword for the posting using only what the profile already
+#               says. This is what Quiver has always done.
+#   aggressive  rewrite more freely to maximise keyword match, and always
+#               require review before the result can be used.
+#
+# Aggressive is *not* permission to invent. The fact gate in resume_facts.py
+# applies identically in both modes: what changes is how far the prose may
+# travel from the original wording, never what it may claim.
+MODES = ("off", "honest", "aggressive")
+DEFAULT_MODE = "honest"
 
-Hard constraints:
+# Modes that cannot be auto-approved, whatever the setting says.
+FORCES_REVIEW = ("aggressive",)
+
+_SHARED_CONSTRAINTS = """
 - Only restate facts already present in the bullets you are given. Never invent an employer,
-  technology, metric, date, or credential.
+  technology, metric, date, or credential. Every number, product name and technology in your
+  output is checked against the candidate's profile, and a bullet that adds one is discarded.
 - Preserve every number exactly as written. If a bullet has no number, do not add one.
 - Keep each bullet to one line, roughly 15 to 28 words.
 - Open each bullet with a past-tense action verb (or present tense for a current role).
-- Use the posting's own vocabulary only where the underlying work genuinely matches.
 - The summary must fit two lines: 220 characters at most.
 
 Return only bullets you actually improved. `original` must be a byte-exact copy of the input.
+"""
+
+REWRITE_SYSTEM = """You tailor an engineer's resume to one specific job posting.
+
+Hard constraints:""" + _SHARED_CONSTRAINTS + """
+- Use the posting's own vocabulary only where the underlying work genuinely matches.
+- Stay close to the original phrasing. Reword for emphasis and for the posting's terms;
+  do not restructure a bullet that is already clear.
 """ + """
 House style, enforced on every line you return:
 - Never use a hyphen or dash. Write compounds open ("full stack", "real time", "end to end")
@@ -341,14 +364,54 @@ House style, enforced on every line you return:
 - No emoji. No unevidenced soft claims ("strong communicator", "proven track record").
 - Shape each bullet as: action verb, what was built, the method, then the measurable
   outcome. Keep the outcome only if a real number is already present.
-""" + "\n" + behuman.RULES
+"""
+
+HOUSE_STYLE = REWRITE_SYSTEM.split("House style, enforced on every line you return:")[1]
+
+REWRITE_SYSTEM = REWRITE_SYSTEM + "\n" + behuman.RULES
+
+# Aggressive differs in exactly one dimension: how far the prose may travel.
+# The factual constraints are the identical text, because loosening those is
+# not a mode, it is lying.
+AGGRESSIVE_SYSTEM = ("""You tailor an engineer's resume to one specific job posting, rewriting
+freely to maximise keyword match against the posting.
+
+Hard constraints:""" + _SHARED_CONSTRAINTS + """
+- Reach for the posting's exact vocabulary wherever the underlying work supports it. Where
+  the candidate wrote "database" and the posting says "PostgreSQL", use the posting's term
+  ONLY if the profile shows they used PostgreSQL. Otherwise keep the general word.
+- Restructure freely. Lead with whatever this posting cares about most, even if the original
+  bullet led with something else.
+- Never close the gap between the candidate and the posting by asserting something the
+  profile does not show. An unsupported claim is discarded and the original kept, so a
+  bullet that reaches too far is simply a wasted bullet.
+
+House style, enforced on every line you return:""" + HOUSE_STYLE
+                     + "\n" + behuman.RULES)
+
+
+def system_for(mode: str) -> str:
+    """The instructions for a mode. `off` never reaches here — it makes no call."""
+    return AGGRESSIVE_SYSTEM if mode == "aggressive" else REWRITE_SYSTEM
 
 
 def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
-           use_llm: bool = True, max_bullets: int = MAX_ROLE_BULLETS,
+           use_llm: bool = True, mode: str | None = None,
+           max_bullets: int = MAX_ROLE_BULLETS,
            max_projects: int | None = None,
            log: Callable[[str], None] = print) -> dict[str, Any]:
-    """Select, order and (optionally) rewrite content for this posting."""
+    """
+    Select, order and (optionally) rewrite content for this posting.
+
+    `mode` is one of MODES. `use_llm=False` is the same thing as `mode="off"`
+    and is kept because several callers already pass it.
+    """
+    mode = (mode or DEFAULT_MODE).strip().lower()
+    if mode not in MODES:
+        mode = DEFAULT_MODE
+    if not use_llm:
+        mode = "off"
+
     raw = getattr(content, "_raw", None)
     hint_tags = active_tags(jd_text, raw)
     if hint_tags:
@@ -381,10 +444,16 @@ def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
                   for s in (raw.get("skills") or []) if s.get("line")}
         content.skills.sort(key=lambda l: -len(hint_tags.intersection(tagged.get(l, []))))
 
-    result: dict[str, Any] = {"llm": None, "rewritten": 0, "lint": []}
+    result: dict[str, Any] = {"llm": None, "rewritten": 0, "lint": [],
+                              "mode": mode, "changes": [],
+                              "needsReview": mode in FORCES_REVIEW}
 
-    if use_llm:
-        result.update(_llm_rewrite(content, jd_text, log=log))
+    if mode == "off":
+        log("[latex] tailoring mode: off — the curated resume goes out unchanged")
+    else:
+        result.update(_llm_rewrite(content, jd_text, mode=mode, log=log))
+        result["mode"] = mode
+        result["needsReview"] = mode in FORCES_REVIEW
 
     # Final safety net regardless of who wrote the text.
     for block in content.experience + content.projects:
@@ -402,7 +471,7 @@ def tailor(content: ResumeContent, jd_text: str, jd: dict[str, Any], *,
     return result
 
 
-def _llm_rewrite(content: ResumeContent, jd_text: str, *,
+def _llm_rewrite(content: ResumeContent, jd_text: str, *, mode: str = DEFAULT_MODE,
                  log: Callable[[str], None]) -> dict[str, Any]:
     try:
         from agent import llm as provider
@@ -426,7 +495,7 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *,
         + "\n\nRewrite the summary for this posting and improve the bullets."
     )
     try:
-        data = provider.complete_json(prompt, REWRITE_SCHEMA, system=REWRITE_SYSTEM,
+        data = provider.complete_json(prompt, REWRITE_SCHEMA, system=system_for(mode),
                                       default={"summary": "", "bullets": []},
                                       purpose="tailor")
     except Exception as exc:
@@ -436,22 +505,48 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *,
     mapping = {_norm(x.get("original", "")): (x.get("revised") or "").strip()
                for x in (data.get("bullets") or []) if x.get("original") and x.get("revised")}
 
-    # A rewrite is only accepted if it passes the house style. `enforce()` fixes
-    # hyphens and dates mechanically at render time, but it cannot fix voice —
-    # a model that returns "Responsible for the frontend" or "I led the team"
-    # has produced a worse line than the one it replaced, so keep the original.
-    changed = rejected = 0
+    # What the candidate can actually claim. Built from the whole profile plus
+    # every original bullet, so a rewrite may restate anything they already
+    # said, in any shape, but may not add a fact from nowhere.
+    vocabulary = resume_facts.profile_vocabulary(
+        getattr(content, "_raw", None) or {},
+        content.summary,
+        [b.text for blk in content.experience + content.projects for b in blk.bullets],
+        content.skills, content.education, content.certifications, content.awards,
+    )
+
+    # A rewrite has to clear two gates.
+    #
+    # House style, because `enforce()` fixes hyphens and dates mechanically at
+    # render time but cannot fix voice: "Responsible for the frontend" is a
+    # worse line than the one it replaced.
+    #
+    # And the fact gate, because "never invent a metric" in a prompt is a
+    # request, not a guarantee, and this document goes to a real employer with
+    # the candidate's name on it.
+    changed = rejected = fabricated = 0
+    changes: list[dict[str, Any]] = []
     for block in content.experience + content.projects:
         for b in block.bullets:
             revised = mapping.get(_norm(b.text))
             if not revised or revised == b.text:
                 continue
+
             problems = resume_style.lint(resume_style.enforce(revised))
             if problems:
                 rejected += 1
                 log(f"[latex] kept the original bullet — rewrite broke house style "
                     f"({problems[0]})")
                 continue
+
+            invented = resume_facts.check_rewrite(b.text, revised, vocabulary)
+            if invented:
+                fabricated += 1
+                log(f"[latex] kept the original bullet — rewrite added a claim the "
+                    f"profile does not support ({invented[0]})")
+                continue
+
+            changes.append({"original": b.text, "revised": revised})
             b.text = revised
             changed += 1
 
@@ -460,14 +555,20 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *,
     # curated summary already fits, and the audit gate would bounce the PDF.
     new_summary = (data.get("summary") or "").strip()
     if (40 < len(new_summary) <= 230
-            and not resume_style.lint(resume_style.enforce(new_summary))):
+            and not resume_style.lint(resume_style.enforce(new_summary))
+            and not resume_facts.check_rewrite(content.summary, new_summary, vocabulary)):
+        changes.append({"original": content.summary, "revised": new_summary,
+                        "field": "summary"})
         content.summary = new_summary
 
-    log(f"[latex] LLM rewrote {changed} bullet(s) and the summary "
+    log(f"[latex] {mode} mode rewrote {changed} bullet(s) "
         f"({provider.config().get('model')})"
-        + (f"; {rejected} rejected on house style" if rejected else ""))
+        + (f"; {rejected} rejected on house style" if rejected else "")
+        + (f"; {fabricated} rejected for claiming what the profile does not show"
+           if fabricated else ""))
     return {"llm": {"ok": True, "model": provider.config().get("model")},
-            "rewritten": changed, "rejected": rejected}
+            "rewritten": changed, "rejected": rejected, "fabricated": fabricated,
+            "changes": changes}
 
 
 # --------------------------------------------------------------------------

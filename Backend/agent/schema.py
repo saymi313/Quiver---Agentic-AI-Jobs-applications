@@ -30,6 +30,9 @@ JOB_FIELDS = (
     # `recruiter_email` stays empty unless a real address was found and verified.
     "role_category", "recruiter_email", "recruiter_name", "description_source",
     "resume_path", "resume_version", "resume_built_at", "applied_at", "failure_reason",
+    # The tailoring the resume went through, and whether a human has signed it
+    # off. `resume_changes` is the before/after list the review screen shows.
+    "resume_mode", "resume_changes", "resume_approved",
 )
 
 # Rows written before the tracking columns existed simply do not carry them —
@@ -39,6 +42,7 @@ JOB_VIEW_DEFAULTS: dict[str, Any] = {
     "role_category": None, "recruiter_email": None, "recruiter_name": None,
     "description_source": None, "resume_path": None, "resume_version": None,
     "resume_built_at": None, "applied_at": None, "failure_reason": None,
+    "resume_mode": None, "resume_changes": None, "resume_approved": None,
 }
 
 
@@ -218,6 +222,21 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "min_years_experience": 1,
         "max_years_experience": 3,
         "allow_internships": False,
+    },
+    # How far the model may go when rewriting the resume for a posting, and
+    # whether the result needs a human's eyes before it can be used.
+    #
+    #   off         send the curated resume unchanged
+    #   honest      reword using only what the profile already says
+    #   aggressive  rewrite freely for keyword match; always needs review
+    #
+    # The fact gate applies in every mode: no rewrite may assert a number,
+    # employer or technology the profile does not carry. The mode governs how
+    # far the prose travels, never what it may claim.
+    "tailoring": {
+        "mode": "honest",
+        "auto_approve": True,
+        "review_form_before_submit": False,
     },
     "limits": {
         "max_applications_per_run": 10,

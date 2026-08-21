@@ -245,6 +245,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("jobs", "applied_at TEXT"),
     ("jobs", "failure_reason TEXT"),
     # Pipeline tracking, added with the inbox.
+    ("jobs", "resume_mode TEXT"),
+    ("jobs", "resume_changes TEXT"),
+    ("jobs", "resume_approved INTEGER"),
     ("applications", "tracker_status TEXT"),
     ("applications", "message_id TEXT"),
     ("applications", "last_message_at TEXT"),
@@ -638,10 +641,28 @@ def set_job_recruiter(job_id: int, email: str, name: str = "") -> None:
                   (email, name or "", job_id))
 
 
-def set_job_resume(job_id: int, path: str, version: str) -> None:
+def set_job_resume(job_id: int, path: str, version: str, *,
+                   mode: str | None = None,
+                   changes: list[dict[str, Any]] | None = None,
+                   approved: bool | None = None) -> None:
     with tx() as c:
         c.execute("UPDATE jobs SET resume_path = ?, resume_version = ?, "
-                  "resume_built_at = ? WHERE id = ?", (path, version, now(), job_id))
+                  "resume_built_at = ?, resume_mode = ?, resume_changes = ?, "
+                  "resume_approved = ? WHERE id = ?",
+                  (path, version, now(), mode,
+                   json.dumps(changes or []),
+                   None if approved is None else (1 if approved else 0),
+                   job_id))
+
+
+def approve_job_resume(job_id: int, changes: list[dict[str, Any]] | None = None) -> None:
+    """Sign off a tailored resume. `changes` carries any edits the user made."""
+    with tx() as c:
+        if changes is None:
+            c.execute("UPDATE jobs SET resume_approved = 1 WHERE id = ?", (job_id,))
+        else:
+            c.execute("UPDATE jobs SET resume_approved = 1, resume_changes = ? WHERE id = ?",
+                      (json.dumps(changes), job_id))
 
 
 def set_job_applied(job_id: int, *, resume_version: str = "") -> None:
@@ -662,6 +683,14 @@ def job(job_id: int) -> dict[str, Any] | None:
     row = _row(_conn().execute(
         "SELECT j.*, c.name AS company_name, c.domain, c.region, c.ats_platform FROM jobs j "
         "LEFT JOIN companies c ON c.id = j.company_id WHERE j.id = ?", (job_id,)).fetchone())
+    return with_job_defaults(row) if row else None
+
+
+def job_by_url(url: str) -> dict[str, Any] | None:
+    """A job already tracked at this URL. The url column is unique."""
+    row = _row(_conn().execute(
+        "SELECT j.*, c.name AS company_name FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id WHERE j.url = ?", (url,)).fetchone())
     return with_job_defaults(row) if row else None
 
 

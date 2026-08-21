@@ -697,6 +697,7 @@ class SettingsPatch(BaseModel):
     limits: dict[str, Any] | None = None
     llm: dict[str, Any] | None = None
     schedule: dict[str, Any] | None = None
+    tailoring: dict[str, Any] | None = None
 
 
 @app.post("/api/agent/settings")
@@ -736,6 +737,152 @@ def agent_screenshot(name: str):
     if not path.is_file():
         raise HTTPException(404, "Screenshot not found.")
     return FileResponse(str(path), media_type="image/png")
+
+
+# --------------------------------------------------------------------------
+# Prep: tailoring modes, the change review, and adding a job by URL
+# --------------------------------------------------------------------------
+
+class AddJobRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/agent/job-from-url")
+def agent_job_from_url(req: AddJobRequest) -> dict[str, Any]:
+    """
+    Track one job from its URL, without waiting for discovery to find it.
+
+    Detects the portal, fetches the description, classifies the role and scores
+    it against the profile — the same pipeline a discovered job goes through,
+    entered at the point where the URL is already known.
+    """
+    from agent import categories, jobdesc, matcher, sources, store as agent_store
+
+    agent_store.init()
+    url = (req.url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(400, "That does not look like a job URL.")
+
+    existing = agent_store.job_by_url(url)
+    if existing:
+        return {"ok": True, "id": existing["id"], "created": False,
+                "title": existing.get("title"), "status": existing.get("status"),
+                "message": "Already tracked."}
+
+    portal, _token = sources.portal_from_url(url)
+    row: dict[str, Any] = {"url": url, "apply_url": url,
+                           "source": portal or "manual", "title": "", "description": ""}
+
+    text, origin = jobdesc.fetch_description(row, log=lambda _: None)
+    if origin == "closed":
+        raise HTTPException(
+            410, "That posting is closed — the board says it is no longer open. "
+                 "Nothing was added.")
+    if not text:
+        raise HTTPException(
+            422, "Could not read that page. It may need a login, or the posting may be "
+                 "closed. Paste the description into the Resume screen instead.")
+    # Reaching here with a board index means the posting was not found: the id
+    # is stale, or the link points at the board itself. Storing it would put a
+    # row in the table whose description is the company blurb and whose title
+    # is whichever vacancy happened to be listed first.
+    if jobdesc.LOOKS_LIKE_A_BOARD.search(text[:600]):
+        raise HTTPException(
+            422, "That link opens a job board rather than a single posting — the role "
+                 "may have been taken down. Open the board and paste the link to the "
+                 "specific job.")
+
+    row["description"] = text
+    row["description_source"] = origin
+    # The page's own heading beats scanning the body text, which on a board
+    # page picks up whichever vacancy happens to be listed first.
+    title = jobdesc.fetch_page_title(url)
+    if not title or jobdesc.LOOKS_LIKE_A_BOARD.search(title):
+        title = jobdesc.guess_title(text, url)
+    row["title"] = title or "Untitled role"
+
+    company_name = sources.company_from_url(url) or "Unknown"
+    company_id = agent_store.upsert_company({"name": company_name, "source": "manual",
+                                             "domain": sources.domain_of(url)})
+    row["company_id"] = company_id
+    row["role_category"] = categories.classify(row["title"], text)
+    row["dedupe_hash"] = sources.dedupe_hash(company_name, row["title"], "", url=url)
+
+    job_id = agent_store.upsert_job(row, company_name=company_name)
+    if not job_id:
+        raise HTTPException(500, "Could not store that job.")
+    scored = matcher.score_pending(limit=5, log=lambda _: None)
+    fresh = agent_store.job(int(job_id)) or {}
+    return {"ok": True, "id": int(job_id), "created": True,
+            "title": fresh.get("title"), "company": company_name,
+            "category": fresh.get("role_category"),
+            "fitScore": fresh.get("fit_score"), "fitReason": fresh.get("fit_reason"),
+            "status": fresh.get("status"), "scored": scored.get("matched", 0)}
+
+
+@app.get("/api/agent/resume/{job_id}/changes")
+def agent_resume_changes(job_id: int) -> dict[str, Any]:
+    """What the rewrite changed, for the review screen."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    row = agent_store.job(job_id)
+    if not row:
+        raise HTTPException(404, "No such job.")
+
+    raw = row.get("resume_changes")
+    changes: list[dict[str, Any]] = []
+    if isinstance(raw, str) and raw.strip():
+        try:
+            changes = json.loads(raw)
+        except json.JSONDecodeError:
+            changes = []
+    elif isinstance(raw, list):
+        changes = raw
+
+    return {
+        "id": job_id,
+        "title": row.get("title"),
+        "company": row.get("company_name"),
+        "mode": row.get("resume_mode"),
+        "approved": row.get("resume_approved"),
+        "hasResume": bool(row.get("resume_path")),
+        "version": row.get("resume_version"),
+        "changes": changes,
+    }
+
+
+class ApproveRequest(BaseModel):
+    # Present only when the user edited a line before approving.
+    changes: list[dict[str, Any]] | None = None
+
+
+@app.post("/api/agent/resume/{job_id}/approve")
+def agent_approve_resume(job_id: int, req: ApproveRequest) -> dict[str, Any]:
+    """
+    Sign off a tailored resume so it can be sent.
+
+    When the user edited a line, the resume is rebuilt from the edited text
+    rather than approved as-is — approving text that differs from the compiled
+    PDF would ship the version nobody read.
+    """
+    from agent import store as agent_store, tailor
+
+    agent_store.init()
+    row = agent_store.job(job_id)
+    if not row:
+        raise HTTPException(404, "No such job.")
+
+    edits = req.changes or []
+    edited = [c for c in edits if (c.get("edited") or "").strip()
+              and c.get("edited") != c.get("revised")]
+    if edited:
+        rebuilt = tailor.rebuild_with_edits(row, edits, log=lambda _: None)
+        if not rebuilt["ok"]:
+            raise HTTPException(422, rebuilt.get("reason") or "Could not rebuild the resume.")
+
+    agent_store.approve_job_resume(job_id, edits or None)
+    return {"ok": True, "id": job_id, "approved": True, "rebuilt": bool(edited)}
 
 
 # --------------------------------------------------------------------------

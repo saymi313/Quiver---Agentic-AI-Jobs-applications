@@ -215,10 +215,10 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-F1 (P0).** Discovery runs on a schedule without the user present, recording
   per-source counts and duration for every run. *Partly built: the scheduler
   exists, per-source telemetry does not.*
-- **FR-F2 (P0).** Every tracked job carries a match score and a readable reason for
+- **FR-F2 (P0) [DONE].** Every tracked job carries a match score and a readable reason for
   that score, both visible in the jobs table. *Score exists; `fit_reason` is stored
   but only surfaced on skipped rows.*
-- **FR-F3 (P0).** The user can paste a job URL and have Quiver detect the ATS,
+- **FR-F3 (P0) [DONE].** The user can paste a job URL and have Quiver detect the ATS,
   fetch the description, score it and queue it, without that job coming from a
   discovery source. Equivalent to Tsenta's `POST /detect`.
 - **FR-F4 (P1).** Expand ATS board readers from 6 towards the 28 systems in section
@@ -237,14 +237,14 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 ### 5.2 Prep
 
-- **FR-P1 (P0).** Three tailoring modes exactly as Tsenta defines them: **Off**,
+- **FR-P1 (P0) [DONE].** Three tailoring modes exactly as Tsenta defines them: **Off**,
   **Honest** (reword using only what the profile already contains), **Aggressive**
   (rewrite freely for keyword match). Aggressive requires review before submission.
   *Quiver has one mode today, closest to Honest.*
-- **FR-P2 (P0).** A per-application diff view: original bullet, rewritten bullet, a
+- **FR-P2 (P0) [DONE].** A per-application diff view: original bullet, rewritten bullet, a
   change count, and Edit and Approve controls. Nothing may be submitted from an
   unapproved tailored document while auto-approve is off.
-- **FR-P3 (P0).** An auto-approve toggle, independent of the review-the-form toggle
+- **FR-P3 (P0) [DONE].** An auto-approve toggle, independent of the review-the-form toggle
   in FR-A4.
 - **FR-P4 (P1).** Multiple named resume profiles: create, duplicate, import, mark a
   default, and choose which profile an application uses. *Quiver has one
@@ -257,7 +257,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   exist; custom sections do not.*
 - **FR-P7 (P0).** Every tailored document must pass the house-style audit before it
   can be attached to an application. *Built; keep it.*
-- **FR-P8 (P0).** No tailoring mode, Aggressive included, may introduce an employer,
+- **FR-P8 (P0) [DONE].** No tailoring mode, Aggressive included, may introduce an employer,
   technology, metric, date or credential absent from the profile. This is a
   mechanical gate, not a prompt instruction.
 
@@ -420,7 +420,7 @@ Scope decisions taken on 2026-08-21:
 |---|---|---|---|
 | **0** | Apple design foundation | Motion primitives, press feedback, typography, retrofit of the existing tabs | **Completed 2026-08-21** |
 | **1** | Close the loop (Track) | FR-T1, FR-T2, FR-T3, FR-T4, FR-T5, FR-T7, FR-A2, FR-A3, FR-S1 | **Completed 2026-08-21** |
-| **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | Not started |
+| **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | **Completed 2026-08-22** |
 | **3** | Reach | FR-A1, FR-F4, FR-A5, FR-A10, NFR-4 | Not started |
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | Not started |
 
@@ -493,6 +493,57 @@ applier had been capturing it all along with nowhere to read it.
 Verified end to end against the live mailbox: 16 messages read in 19 seconds,
 2 linked, the Interfere rejection detected and the stage moved. 75 tests, with
 25 new ones covering the linker, the rule classifier and the ATS-mailer case.
+
+### Phase 2 — what was built
+
+Three tailoring modes exactly as Tsenta defines them, in
+`settings.tailoring.mode`. **Off** makes no model call at all. **Honest** is
+what Quiver already did. **Aggressive** gets its own prompt that may restructure
+a bullet and reach for the posting's vocabulary, and always requires review.
+
+The important part is what the modes do *not* change. `api/resume_facts.py` is a
+mechanical gate applied identically in every mode: a rewritten bullet may not
+contain a number, employer or technology that the profile does not carry. "Never
+invent a metric" has been in the rewrite prompt since the beginning and models
+mostly obey it, but a resume goes to a real employer with the user's name on it,
+and "mostly" is the wrong standard. A rewrite that fails the gate is discarded
+and the original kept.
+
+Getting that gate right took three passes, and each failure is worth recording.
+Exact token matching rejected "European clients" becoming "clients across
+Europe", which is ordinary rewording and would have made the gate something you
+switch off. Relaxing it to stem matching then let sentence-initial verbs read as
+proper nouns, so "Mentored 10 developers" was flagged. Skipping the first word
+fixed that and opened a hole in the one position nobody checks: "Stripe payments
+were integrated" sailed through. The first word is now skipped only when it is
+actually verb-shaped. Numbers stay matched exactly, because 4M and 4.2M are
+different claims.
+
+`auto_approve` off means a rewritten resume is recorded unapproved and
+`apply_to_ids` refuses to send it — otherwise the setting would be decorative.
+The Jobs table shows a **review** link on any resume that is waiting, opening a
+per-bullet before/after where each line can be edited. Approving after an edit
+rebuilds the PDF rather than approving as-is: the file on disk still carries the
+model's wording until it does, and approving text that differs from the compiled
+document would ship the version nobody read.
+
+`POST /api/agent/job-from-url` tracks a job from a pasted link, running the same
+pipeline a discovered job goes through. Testing it against real postings found
+two things worth having. Greenhouse's `job-boards` host renders client side, so a
+plain GET returns the board's *index* — long enough to pass the length check, so
+the first attempt stored the company blurb as the description and a neighbouring
+vacancy's title as the job. Content that reads as a board index now goes to the
+renderer however long it is. And a posting that has been taken down is now told
+apart from a page that could not be read: the first returns 410 and stores
+nothing, the second suggests pasting the description by hand.
+
+`fit_reason` is now shown on every row rather than only on filtered-out ones — a
+score with no reasoning behind it is not something anyone can act on. And the
+`Field` component wires each label to its control automatically; before this the
+labels were decoration, focusing nothing when clicked and leaving every input
+unnamed to a screen reader.
+
+91 tests. Both storage backends still expose 59 identically-signed functions.
 
 ---
 
