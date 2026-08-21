@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
-import { AnimatePresence, motion as m } from 'motion/react'
-import { springFor } from '../lib/motion'
 import ResumeReview from './ResumeReview'
+import { CategoryChip, Segmented, SelectionBar } from './apple'
 import { Button, Empty, Icon, Input, Section, Select, Status, Table, Tag, Td, Tr } from './ui'
 
 /*
@@ -115,19 +114,16 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
           w-full by design, and overriding that from a className is a
           specificity coin-toss that Tailwind lost here at least once. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-        <div className="w-40">
-          <Select
-            value={filters.status}
-            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-            aria-label="Filter by application status"
-          >
-            {STATUS_FILTERS.map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {/* Five mutually exclusive views, all visible: a dropdown would hide
+            four of them behind a click and tell you nothing about what is in
+            them. */}
+        <Segmented
+          size="sm"
+          ariaLabel="Filter by application status"
+          value={filters.status}
+          onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+          options={STATUS_FILTERS.map(([value, label]) => ({ value, label }))}
+        />
 
         <div className="w-44">
           <Select
@@ -172,45 +168,31 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
 
       {toolbar ? <div className="border-b border-line px-4 py-2.5">{toolbar}</div> : null}
 
-      <AnimatePresence initial={false}>
-        {reviewing ? (
-          <m.div
-            key={reviewing}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={springFor()}
-            className="overflow-hidden border-b border-line bg-raised"
-          >
-            <div className="p-4">
-              <ResumeReview
-                jobId={reviewing}
-                onDone={() => {
-                  setReviewing(null)
-                  load()
-                }}
-                onClose={() => setReviewing(null)}
-              />
-            </div>
-          </m.div>
-        ) : null}
-      </AnimatePresence>
+      <ResumeReview
+        jobId={reviewing}
+        onDone={() => {
+          setReviewing(null)
+          load()
+        }}
+        onClose={() => setReviewing(null)}
+      />
 
-      {/* Selection bar replaces the toolbar row rather than stacking under it. */}
-      {chosen.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raised px-4 py-2.5">
-          <span className="text-tiny text-n-300">{chosen.length} selected</span>
-          <Button size="sm" variant="primary" disabled={busy} onClick={() => onApply(ids)}>
-            Apply
-          </Button>
-          <Button size="sm" disabled={busy} onClick={() => onGenerate(ids)}>
-            Generate resumes
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-            Clear
-          </Button>
-        </div>
-      ) : null}
+      {/* What you can do with a selection floats over the list rather than
+          opening inside it, so picking a row never moves the next one. */}
+      <SelectionBar open={chosen.length > 0}>
+        <span className="text-tiny text-n-300">
+          {chosen.length} selected
+        </span>
+        <Button size="sm" variant="primary" disabled={busy} onClick={() => onApply(ids)}>
+          Apply
+        </Button>
+        <Button size="sm" disabled={busy} onClick={() => onGenerate(ids)}>
+          Generate resumes
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+          Clear
+        </Button>
+      </SelectionBar>
 
       {/* ------------------------------------------------------------ table */}
       {loading && !data ? (
@@ -324,9 +306,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                   ) : null}
                 </Td>
                 <Td>
-                  {r.role_category ? (
-                    <Tag className="whitespace-nowrap">{r.role_category.replace(/_/g, ' ')}</Tag>
-                  ) : null}
+                  <CategoryChip slug={r.role_category} />
                 </Td>
                 <Td className="text-n-500">{r.source || '—'}</Td>
 

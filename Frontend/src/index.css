@@ -68,6 +68,37 @@
   --color-tint-3: #eeecfb;
   --color-tint-4: #fceceb;
 
+  /* ---------- the hue palette ----------
+     Ten tint/ink pairs, named for the colour rather than for what currently
+     wears it. This is colour that identifies rather than decorates: you learn
+     to spot an AI role by its violet the way you learn a Finder tag, and the
+     same pair can label a message class without inheriting a job-category
+     name that would then be a lie.
+
+     Each ink value was walked down in lightness until it cleared 4.5:1
+     against its own tint — a chip sits on its tint, not on white. Anything
+     added here gets the same treatment before it ships. */
+  --color-hue-blue: #ebf2fb;
+  --color-hue-blue-fg: #166cce;
+  --color-hue-teal: #ebfbf9;
+  --color-hue-teal-fg: #0e8071;
+  --color-hue-purple: #f0ebfb;
+  --color-hue-purple-fg: #4e16ce;
+  --color-hue-green: #ebfbf2;
+  --color-hue-green-fg: #0e803d;
+  --color-hue-violet: #f6ebfb;
+  --color-hue-violet-fg: #9716ce;
+  --color-hue-pink: #fbebf6;
+  --color-hue-pink-fg: #c9168e;
+  --color-hue-orange: #fbf2eb;
+  --color-hue-orange-fg: #a95912;
+  --color-hue-red: #fbebee;
+  --color-hue-red-fg: #ce163b;
+  --color-hue-amber: #fbf7eb;
+  --color-hue-amber-fg: #896b0f;
+  --color-hue-cyan: #ebf8fb;
+  --color-hue-cyan-fg: #107892;
+
   /* ---------- semantic ---------- */
   --color-canvas: var(--color-n-950);
   --color-surface: var(--color-n-950);
@@ -204,15 +235,48 @@ body {
   bigger surface reads as thicker, so the sidebar carries more blur than the
   header. Never stacked — no translucent surface sits on another.
 */
+/* Do not add `-webkit-backdrop-filter` by hand. Lightning CSS prefixes for the
+   browserslist targets on its own, and when it finds the prefixed property
+   already written it emits *only* that one — which current Chromium ignores,
+   since it no longer honours the alias. The glass silently stopped rendering
+   for exactly that reason once; the unprefixed property alone is correct. */
+.material-thin {
+  background: color-mix(in srgb, var(--color-n-950) 60%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+}
 .material {
   background: color-mix(in srgb, var(--color-n-950) 72%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 .material-thick {
-  background: color-mix(in srgb, var(--color-n-850) 82%, transparent);
-  backdrop-filter: saturate(180%) blur(30px);
-  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  background: color-mix(in srgb, var(--color-n-950) 80%, transparent);
+  backdrop-filter: saturate(190%) blur(30px);
+  box-shadow: var(--shadow-pop);
+}
+
+/* The bright top edge is light catching the surface — the single detail that
+   makes a translucent panel read as a material rather than a low-opacity box. */
+.material-edge {
+  border-top: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+/*
+  Vibrancy.
+
+  Flat grey text over a blurred surface loses its footing when whatever is
+  behind it changes. Apple's answer is not more opacity but more contrast:
+  a heavier weight, a darker value and a touch more tracking, so the letters
+  hold their own against a moving ground.
+*/
+.vibrant {
+  color: var(--color-n-100);
+  font-weight: 500;
+  letter-spacing: 0.006em;
+}
+.vibrant-secondary {
+  color: var(--color-n-300);
+  font-weight: 450;
+  letter-spacing: 0.008em;
 }
 
 /*
@@ -312,7 +376,6 @@ body {
   .material-thick {
     background: var(--color-n-950);
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
   .material-thick {
     background: var(--color-n-850);
@@ -328,7 +391,6 @@ body {
   .material,
   .material-thick {
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     background: var(--color-n-950);
   }
 }

@@ -3,6 +3,7 @@ import { motion as m } from 'motion/react'
 import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
 import { Button, Icon } from './ui'
+import { CategoryChip, ScoreRing } from './apple'
 
 /*
   The best few roles, as cards.
@@ -19,51 +20,6 @@ import { Button, Icon } from './ui'
 
 const TINTS = ['bg-tint-1', 'bg-tint-2', 'bg-tint-3', 'bg-tint-4']
 const SHOWN = 4
-
-/** The score as a ring. A number in a table is read; a ring is seen. */
-function ScoreRing({ value }) {
-  const size = 42
-  const stroke = 3.5
-  const r = (size - stroke) / 2
-  const circumference = 2 * Math.PI * r
-  const pct = Math.max(0, Math.min(value || 0, 100)) / 100
-
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          className="text-n-100/12"
-        />
-        <m.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          className="text-n-100"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: circumference * (1 - pct) }}
-          transition={springFor()}
-        />
-      </svg>
-      <span
-        className="absolute inset-0 grid place-items-center text-micro font-semibold
-          tabular-nums text-n-100"
-      >
-        {Math.round(value || 0)}
-      </span>
-    </div>
-  )
-}
 
 export default function TopMatches({ refreshKey, busy, onApply }) {
   const [rows, setRows] = useState(null)
@@ -121,6 +77,7 @@ export default function TopMatches({ refreshKey, busy, onApply }) {
                 {r.location ? (
                   <p className="mt-1 truncate text-micro text-n-400">{r.location}</p>
                 ) : null}
+                <CategoryChip slug={r.role_category} className="mt-2" />
               </div>
               <ScoreRing value={r.fit_score} />
             </div>

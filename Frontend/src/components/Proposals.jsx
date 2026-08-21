@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion as m } from 'motion/react'
 import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
-import { Button, Empty, Note, Section, Status, Table, Tag, Td, Tr } from './ui'
+import { Button, Empty, Note, Section, Status, Table, Td, Tr } from './ui'
+import { CategoryChip, ScoreRing } from './apple'
 
 /*
   Auto Apply's review queue.
@@ -152,14 +153,14 @@ export default function Proposals({ busy, onApply, refreshKey }) {
                         {r.title}
                       </a>
                       {r.role_category ? (
-                        <Tag className="ml-2">{r.role_category.replace(/_/g, ' ')}</Tag>
+                        <CategoryChip slug={r.role_category} className="ml-2" />
                       ) : null}
                     </Td>
                     <Td className="max-w-[11rem] truncate text-n-400" title={r.company_name || ''}>
                       {r.company_name || '—'}
                     </Td>
-                    <Td className="tabular-nums text-n-300">
-                      {r.fit_score ? Math.round(r.fit_score) : '—'}
+                    <Td>
+                      {r.fit_score ? <ScoreRing value={r.fit_score} size={34} stroke={3} /> : '—'}
                     </Td>
                     <Td className="max-w-[22rem] text-tiny leading-snug text-n-500">
                       {r.proposal_reason || ''}

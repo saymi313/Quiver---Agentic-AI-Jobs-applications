@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
 import { useJobStream } from '../lib/useJobStream'
 import Console from '../components/Console'
+import { MessageChip, Segmented, StageBar } from '../components/apple'
 import {
   Button,
   Empty,
@@ -32,8 +33,8 @@ import {
 */
 
 const STAGES = [
-  { key: 'applied', label: 'Applied', tone: 'info' },
-  { key: 'interviewing', label: 'Interviewing', tone: 'accent' },
+  { key: 'applied', label: 'Applied', tone: 'blue' },
+  { key: 'interviewing', label: 'Interviewing', tone: 'blue' },
   { key: 'offer', label: 'Offer', tone: 'ok' },
   { key: 'rejected', label: 'Rejected', tone: 'bad' },
   { key: 'ghosted', label: 'Ghosted', tone: 'neutral' },
@@ -51,14 +52,6 @@ const CLASS_LABEL = {
   other: 'Everything else',
 }
 
-const CLASS_TONE = {
-  interview: 'accent',
-  assessment: 'accent',
-  offer: 'ok',
-  rejection: 'bad',
-  bounce: 'warn',
-  reminder: 'warn',
-}
 
 function when(iso) {
   if (!iso) return '—'
@@ -144,13 +137,18 @@ export default function TrackTab() {
           inbox?.unread ? <Status tone="accent">{inbox.unread} unread</Status> : null
         }
       >
-        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {STAGES.map((s) => (
-            <Metric
-              key={s.key}
-              label={s.label}
-              value={counts[s.key] ?? 0}
-              hint={s.key === 'ghosted' ? 'no reply' : undefined}
+        {/* The count answers "how many"; the bar answers "what proportion",
+            which is the question you actually have when scanning five stages
+            at once. */}
+        <div className="grid gap-5 sm:grid-cols-3 lg:grid-cols-5">
+          {STAGES.map((stage) => (
+            <StageBar
+              key={stage.key}
+              label={stage.label}
+              value={counts[stage.key] ?? 0}
+              total={rows.length || 1}
+              tone={stage.tone}
+              hint={stage.key === 'ghosted' ? 'no reply' : undefined}
             />
           ))}
         </div>
@@ -261,9 +259,7 @@ export default function TrackTab() {
                   className={`px-4 py-3 ${msg.read_at ? 'opacity-60' : ''}`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <Status tone={CLASS_TONE[msg.klass] || 'neutral'} dot={false}>
-                      {CLASS_LABEL[msg.klass] || msg.klass || 'unsorted'}
-                    </Status>
+                    <MessageChip klass={msg.klass} label={CLASS_LABEL[msg.klass]} />
                     <span className="min-w-0 flex-1 truncate text-sm text-n-200">
                       {msg.subject || '(no subject)'}
                     </span>

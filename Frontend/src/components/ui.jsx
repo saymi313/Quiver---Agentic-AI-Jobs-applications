@@ -21,7 +21,7 @@
       CSS, because they resolve in one step.
 */
 
-import { cloneElement, isValidElement, useId } from 'react'
+import { cloneElement, isValidElement, useEffect, useId, useState } from 'react'
 import { AnimatePresence, motion as m } from 'motion/react'
 
 import { springFor } from '../lib/motion'
@@ -32,16 +32,56 @@ import { usePress } from '../lib/usePress'
 /** Page header. Every screen opens with exactly one, so the user always
  *  knows where they are and what the screen is for. */
 export function PageHead({ title, description, actions }) {
+  // iOS's large title, on the web. At the top of a page the heading is a full
+  // display line with its description; once you scroll past it, it collapses
+  // into a compact material bar carrying just the title and the actions.
+  //
+  // The compact bar is the fix for a real problem, not decoration: a sticky
+  // heading two lines tall left a band of the page showing through itself, so
+  // "Settings" and a status chip could be read straight through the word
+  // "Jobs". Floating chrome has to be short enough to be chrome.
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setCollapsed(window.scrollY > 72)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 pb-6">
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-semibold text-n-100">{title}</h1>
-        {description ? (
-          <p className="mt-1.5 text-base leading-relaxed text-n-400">{description}</p>
+    <>
+      <AnimatePresence>
+        {collapsed ? (
+          <m.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={springFor()}
+            className="material material-edge fixed inset-x-0 top-0 z-40 border-b border-line
+              md:left-56"
+          >
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-2.5
+              lg:px-10">
+              <span className="vibrant truncate text-base font-semibold">{title}</span>
+              {actions ? (
+                <div className="flex shrink-0 items-center gap-2">{actions}</div>
+              ) : null}
+            </div>
+          </m.div>
         ) : null}
+      </AnimatePresence>
+
+      <div className="flex flex-wrap items-end justify-between gap-4 pb-6">
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-semibold text-n-100">{title}</h1>
+          {description ? (
+            <p className="mt-1.5 text-base leading-relaxed text-n-400">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-    </div>
+    </>
   )
 }
 
@@ -456,7 +496,7 @@ export function Table({ columns, rows, renderRow, empty, maxHeight = 'max-h-[32r
       <table className="w-full table-fixed border-collapse text-left text-tiny">
         {/* Uppercase micro headers on a tinted strip: they read as furniture
             rather than as a first row of data. */}
-        <thead className="sticky top-0 z-10 bg-n-850">
+        <thead className="material-thin sticky top-0 z-10 backdrop-saturate-150">
           <tr className="border-b border-line">
             {columns.map((c, i) => (
               <th
