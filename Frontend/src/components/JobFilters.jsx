@@ -66,6 +66,14 @@ const RESUMES = [
   ['no', 'No resume yet'],
 ]
 
+const SALARIES = [
+  ['', 'Any pay'],
+  ['60000', '60k and above'],
+  ['90000', '90k and above'],
+  ['120000', '120k and above'],
+  ['150000', '150k and above'],
+]
+
 /** The empty filter set. Anything equal to this is "no filter", which is what
  *  the chip row and the count both key off. */
 export const NO_FILTERS = {
@@ -76,9 +84,11 @@ export const NO_FILTERS = {
   company: '',
   location: '',
   minScore: '',
+  minSalary: '',
   age: '',
   place: '',
   resume: '',
+  saved: false,
   sort: 'recent',
 }
 
@@ -92,9 +102,11 @@ export function toQuery(f, limit = 400) {
   if (f.company) out.company = f.company
   if (f.location) out.location = f.location
   if (f.minScore) out.min_score = f.minScore
+  if (f.minSalary) out.min_salary = f.minSalary
   if (f.age) out.posted_within_days = f.age
   if (f.place) out.remote = f.place === 'remote'
   if (f.resume) out.has_resume = f.resume === 'yes'
+  if (f.saved) out.saved = true
   if (f.sort && f.sort !== 'recent') out.sort = f.sort
   return out
 }
@@ -109,6 +121,8 @@ function extras(f) {
   if (f.company) on.push(['company', `company: ${f.company}`])
   if (f.location) on.push(['location', `in: ${f.location}`])
   if (f.minScore) on.push(['minScore', `match ${f.minScore}+`])
+  if (f.minSalary) on.push(['minSalary', `pay ${Math.round(f.minSalary / 1000)}k+`])
+  if (f.saved) on.push(['saved', 'saved'])
   if (f.age) on.push(['age', AGES.find(([v]) => v === f.age)?.[1] || ''])
   if (f.place) on.push(['place', PLACES.find(([v]) => v === f.place)?.[1] || ''])
   if (f.resume) on.push(['resume', RESUMES.find(([v]) => v === f.resume)?.[1] || ''])
@@ -137,7 +151,7 @@ export default function JobFilters({
   }
 
   const clearOne = (key) =>
-    set({ [key]: Array.isArray(value[key]) ? [] : '' })
+    set({ [key]: Array.isArray(value[key]) ? [] : typeof value[key] === 'boolean' ? false : '' })
 
   return (
     <div className="border-b border-line">
@@ -173,6 +187,23 @@ export default function JobFilters({
             ))}
           </Select>
         </div>
+
+        {/* Saved is a first-class view, not a buried option: it is where a
+            hand-built shortlist lives, so it earns a place in the always-on row. */}
+        <button
+          onClick={() => set({ saved: !value.saved })}
+          aria-pressed={value.saved}
+          title="Show only saved jobs"
+          className={`press inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-tiny
+            font-medium ${
+              value.saved
+                ? 'bg-n-100 text-n-950'
+                : 'text-n-400 ring-1 ring-line hover:text-n-100'
+            }`}
+        >
+          <Icon.Bookmark filled={value.saved} className="size-3.5" />
+          Saved
+        </button>
 
         <Button size="sm" variant={open ? 'default' : 'ghost'} onClick={() => onToggleOpen(!open)}>
           <Icon.Sliders />
@@ -232,6 +263,13 @@ export default function JobFilters({
                   <Select value={value.minScore} onChange={(e) => set({ minScore: e.target.value })}
                           aria-label="Minimum match score" className="h-8 py-0">
                     {SCORES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </Select>
+                </Labelled>
+
+                <Labelled label="Salary">
+                  <Select value={value.minSalary} onChange={(e) => set({ minSalary: e.target.value })}
+                          aria-label="Minimum salary" className="h-8 py-0">
+                    {SALARIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </Select>
                 </Labelled>
 

@@ -1,5 +1,6 @@
 import { useAgentRun } from '../lib/useAgentRun'
 import Console from '../components/Console'
+import ScanLine from '../components/ScanLine'
 import Pipeline from '../components/Pipeline'
 import Proposals from '../components/Proposals'
 import TopMatches from '../components/TopMatches'
@@ -53,6 +54,8 @@ export default function DashboardTab({ onOpenJobs }) {
         </Note>
       ) : null}
 
+      <ScanLine lines={stream.lines} active={busy} />
+
       {!overview.llm.available ? (
         <Note tone="warn" title="No AI provider configured">
           {overview.llm.reason} Finding and scoring roles still works; tailored resumes and form
@@ -68,7 +71,12 @@ export default function DashboardTab({ onOpenJobs }) {
 
       <Proposals busy={busy} onApply={applyToJobs} refreshKey={refreshKey} />
 
-      <TopMatches refreshKey={refreshKey} busy={busy} onApply={applyToJobs} />
+      <TopMatches
+        refreshKey={refreshKey}
+        busy={busy}
+        onApply={applyToJobs}
+        onGenerate={run.generateResumes}
+      />
 
       <Pipeline
         stats={overview.stats}

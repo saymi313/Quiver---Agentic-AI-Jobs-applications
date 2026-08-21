@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import ResumeReview from './ResumeReview'
 import { CategoryChip, SelectionBar } from './apple'
 import JobFilters, { NO_FILTERS, toQuery } from './JobFilters'
+import JobDetail from './JobDetail'
 import { Button, Empty, Icon, Section, Status, Table, Tag, Td, Tr } from './ui'
 
 /*
@@ -56,6 +57,8 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   const [filtersOpen, setFiltersOpen] = useState(false)
   // Which job's rewrite is open for review, if any.
   const [reviewing, setReviewing] = useState(null)
+  // Which job's detail panel is open, if any.
+  const [viewing, setViewing] = useState(null)
 
   useEffect(() => {
     const t = setTimeout(() => setFilters((f) => (f.q === search ? f : { ...f, q: search })), 300)
@@ -76,6 +79,25 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   }, [filters])
 
   useEffect(() => load(), [load, refreshKey])
+
+  const saveJob = useCallback(
+    (job) => {
+      const next = !job.saved
+      // Reflect the bookmark at once — a toggle that waits for the network to
+      // confirm feels dead, and the request rarely fails.
+      setViewing((v) => (v && v.id === job.id ? { ...v, saved: next } : v))
+      api.agentSaveJob(job.id, next).then(load).catch(() => {})
+    },
+    [load],
+  )
+
+  const passJob = useCallback(
+    (job) => {
+      setViewing(null)
+      api.agentPassJob(job.id).then(load).catch(() => {})
+    },
+    [load],
+  )
 
   const rows = data?.rows || []
   const categories = (data?.categories || []).filter((c) => c.count > 0)
@@ -133,6 +155,23 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
           load()
         }}
         onClose={() => setReviewing(null)}
+      />
+
+      <JobDetail
+        job={viewing}
+        busy={busy}
+        onClose={() => setViewing(null)}
+        onApply={(ids) => {
+          setViewing(null)
+          onApply(ids)
+        }}
+        onGenerate={onGenerate}
+        onReview={(id) => {
+          setViewing(null)
+          setReviewing(id)
+        }}
+        onSave={saveJob}
+        onPass={passJob}
       />
 
       {/* What you can do with a selection floats over the list rather than
@@ -207,16 +246,31 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                 </Td>
 
                 <Td>
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm font-medium text-n-100 hover:text-blue-500"
-                  >
-                    {r.title}
-                  </a>
+                  <span className="flex items-center gap-1.5">
+                    {/* The title opens the parsed detail rather than jumping
+                        straight out to the board — the panel is where the
+                        salary, level and skills live, and the original posting
+                        is one click further in. */}
+                    <button
+                      onClick={() => setViewing(r)}
+                      className="press text-left text-sm font-medium text-n-100 hover:text-blue-500"
+                    >
+                      {r.title}
+                    </button>
+                    <button
+                      onClick={() => saveJob(r)}
+                      aria-pressed={r.saved}
+                      aria-label={r.saved ? 'Remove bookmark' : 'Save job'}
+                      title={r.saved ? 'Saved' : 'Save'}
+                      className={`press shrink-0 rounded p-0.5 ${
+                        r.saved ? 'text-blue-500' : 'text-n-400 hover:text-n-200'
+                      }`}
+                    >
+                      <Icon.Bookmark filled={r.saved} className="size-3.5" />
+                    </button>
+                  </span>
                   {r.fit_score ? (
-                    <span className="ml-1.5 text-micro text-n-500">{Math.round(r.fit_score)}</span>
+                    <span className="text-micro text-n-500">{Math.round(r.fit_score)}</span>
                   ) : null}
                   {/* Why this score, on every row rather than only on the ones
                       that were filtered out. A number with no reasoning behind

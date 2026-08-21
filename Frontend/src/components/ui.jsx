@@ -630,6 +630,41 @@ export const Icon = {
       <path d="M12 5v14M5 12h14" />
     </svg>
   ),
+  Bookmark: ({ filled = false, ...p }) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"
+         {...stroke} fill={filled ? 'currentColor' : 'none'} {...p}>
+      <path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1Z" />
+    </svg>
+  ),
+  Pin: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  ),
+  Coin: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v8M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.6c0 2-5 1-5 3 0 1 1 1.6 2.5 1.6s2.5-.5 2.5-1.5" />
+    </svg>
+  ),
+  Steps: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M4 19h4v-4h4v-4h4V7h4" />
+    </svg>
+  ),
+  Clock: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4l3 2" />
+    </svg>
+  ),
+  Calendar: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <rect x="4" y="5" width="16" height="16" rx="2" />
+      <path d="M4 9h16M8 3v4M16 3v4" />
+    </svg>
+  ),
   Logo: (p) => (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true" {...p}
          fill="none" stroke="currentColor" strokeWidth="1.8"

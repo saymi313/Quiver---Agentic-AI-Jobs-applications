@@ -77,6 +77,12 @@ export const api = {
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
 
+  agentSaveJob: (jobId, saved = true) =>
+    fetch(`${BASE}/api/agent/job/${jobId}/save?saved=${saved}`, { method: 'POST' }).then(handle),
+
+  agentPassJob: (jobId) =>
+    fetch(`${BASE}/api/agent/job/${jobId}/pass`, { method: 'POST' }).then(handle),
+
   agentScreenshotUrl: (name) => `${BASE}/api/agent/screenshot/${encodeURIComponent(name)}`,
 
   agentResumeUrl: (jobId, fmt = 'pdf', download = false) =>

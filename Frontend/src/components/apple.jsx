@@ -86,6 +86,90 @@ export function Sheet({ open, onClose, title, description, children, footer, wid
 }
 
 /**
+ * A detail panel that slides in from the right.
+ *
+ * A sheet arrives from nowhere in the centre; a detail panel comes from a side,
+ * and the design language is strict about the consequence: it must leave the
+ * same way it came. Enter from the right, dismiss to the right — in-from-right,
+ * out-the-bottom reads as two unrelated animations. The panel materializes
+ * (blur clearing as it translates) rather than merely sliding, so it reads as a
+ * real surface arriving.
+ *
+ * It dims the page behind it, because reading one role and then acting on it is
+ * a focused task, not a glance — the scrim says "attend to this", and clicking
+ * it dismisses.
+ */
+export function SidePanel({ open, onClose, title, subtitle, badge, children, footer }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => e.key === 'Escape' && onClose?.()
+    document.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
+    }
+  }, [open, onClose])
+
+  const reduced = prefersReducedMotion()
+
+  return (
+    <AnimatePresence>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <m.div
+            className="absolute inset-0 bg-n-100/25"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={FADE}
+            onClick={onClose}
+          />
+          <m.aside
+            role="dialog"
+            aria-modal="true"
+            aria-label={typeof title === 'string' ? title : 'Details'}
+            className="material-thick material-edge relative flex h-full w-full max-w-lg flex-col
+              overflow-hidden border-l border-line"
+            initial={reduced ? { opacity: 0 } : { opacity: 0, x: 40, filter: 'blur(12px)' }}
+            animate={reduced ? { opacity: 1 } : { opacity: 1, x: 0, filter: 'blur(0px)' }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, x: 40, filter: 'blur(10px)' }}
+            transition={springFor()}
+          >
+            <header className="scroll-edge relative flex items-start gap-3 border-b border-line/70
+              px-5 py-4">
+              <div className="min-w-0 flex-1">
+                {badge ? <div className="pb-1.5">{badge}</div> : null}
+                <h2 className="vibrant text-lg leading-tight font-semibold">{title}</h2>
+                {subtitle ? (
+                  <p className="vibrant-secondary mt-0.5 truncate text-tiny">{subtitle}</p>
+                ) : null}
+              </div>
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="press -mr-1 shrink-0 rounded-full p-1.5 text-n-400 hover:bg-n-850
+                  hover:text-n-100"
+              >
+                <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor"
+                     strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
+            {footer ? (
+              <footer className="shrink-0 border-t border-line/70 px-5 py-3">{footer}</footer>
+            ) : null}
+          </m.aside>
+        </div>
+      ) : null}
+    </AnimatePresence>
+  )
+}
+
+/**
  * Apple's segmented control.
  *
  * For a handful of mutually exclusive views this beats a dropdown on every
