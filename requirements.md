@@ -1,8 +1,14 @@
 # Quiver requirements: reach feature parity with Tsenta
 
-Researched from tsenta.com and docs.tsenta.com on 2026-08-21. Every claim about
-Tsenta in section 2 comes from their marketing site or public documentation, not
-from inference. Quoted phrases are verbatim.
+Researched from tsenta.com and docs.tsenta.com on 2026-08-21, and re-checked
+against the same sources on 2026-08-22 — including the developer docs, which are
+more precise than the marketing pages and corrected the ATS count from 28 to 29.
+Every claim about Tsenta in section 2 comes from their public site or docs, not
+from inference; quoted phrases are verbatim. Nothing here came from a signed-in
+session, so anything visible only inside the product is absent by construction.
+
+Section 9 is the audit: every requirement re-read against the code that claims to
+satisfy it, rather than trusting the `[DONE]` markers. Two did not survive it.
 
 ---
 
@@ -43,16 +49,44 @@ Supporting detail worth copying:
 
 ### 2.2 Supported application systems
 
-Tsenta's docs list **28 supported application-system types**:
+*Re-checked 2026-08-22 against `docs.tsenta.com/developers/supported-systems`,
+which is more precise than the product page: **29 systems**, each flagged for
+whether it can pause for review before submitting.*
 
-Workday, Greenhouse, Lever, Ashby, ADP, iCIMS, SmartRecruiters, Oracle Recruiting,
-Workable, Rippling, Paylocity, JazzHR, BambooHR, Jobvite, Breezy HR, UltiPro/UKG,
-Zoho Recruit, Dover, Gem, SuccessFactors, Dayforce, Phenom, Teamtailor, Recruitee,
-Pinpoint, Polymer, Hireology, Join.com.
+| System | Review before submit | System | Review before submit |
+|---|---|---|---|
+| ADP | no | Workday | **yes** |
+| Ashby | **yes** | Greenhouse | **yes** |
+| BambooHR | **yes** | Lever | **yes** |
+| BrassRing | **yes** | Oracle Cloud | **yes** |
+| BreezyHR | **yes** | Paylocity | **yes** |
+| Dayforce | no | Phenom | no |
+| Dover | **yes** | Pinpoint | no |
+| Gem | **yes** | Polymer | no |
+| Hireology | no | Recruitee | no |
+| iCIMS | no | Rippling | **yes** |
+| JazzHR | **yes** | SAP SuccessFactors | no |
+| Jobvite | **yes** | SmartRecruiters | **yes** |
+| Join | no | Teamtailor | no |
+| UKG (UltiPro) | **yes** | Workable | **yes** |
+| Zoho Recruit | **yes** | | |
 
-Their caveat is worth adopting as a rule rather than a disclaimer: "Tsenta may
-recognize a job page even when that page does not have an active submission
-workflow." Detection and submission are tracked as separate capabilities.
+Eighteen of the twenty-nine can pause for review. That number matters: it is the
+ceiling on FR-A4, and it says the review step is a per-ATS capability rather
+than a global setting — which is exactly the mistake Quiver currently makes (see
+the audit in section 9).
+
+Two caveats from the same docs, both worth adopting as rules rather than
+disclaimers:
+
+- "Tsenta may recognize a job page even when that page does not have an active
+  submission workflow." Detection and submission are separate capabilities.
+- "Support is evaluated again for each role when you apply." A system-level
+  capability table is a prediction, not a guarantee; the authority is the
+  attempt itself.
+
+Indeed and Naukri are explicitly excluded, because they "apply as the
+candidate's own logged-in account."
 
 ### 2.3 Profile and tailoring model
 
@@ -72,7 +106,20 @@ Three tailoring modes:
 - **Aggressive**: "Rewrite more freely to maximize keyword match."
 
 Two independent review gates: auto-approve tailored materials on or off, and
-review-the-filled-form-before-submit on supported systems.
+review-the-filled-form-before-submit on supported systems. The docs are explicit
+that these "operate independently", and recommend starting with auto-approve
+*off* to watch what the tailoring does before trusting it.
+
+*Added 2026-08-22:*
+
+- A **completeness indicator** on the profile, flagging missing fields and ones
+  employers commonly require.
+- A **separate application password**, set during onboarding, used for the
+  accounts the agent creates on employer systems. Workday and iCIMS require an
+  account before they will take an application; this is how Tsenta owns that
+  without touching the user's own passwords.
+- DOCX import preserves supported formatting when rendering the tailored PDF,
+  with the honest caveat that "complex layouts may not carry over perfectly".
 
 ### 2.4 Tracking model
 
@@ -81,9 +128,20 @@ Tracker statuses: **Applied, Interviewing, Offer, Rejected, Ghosted.**
 Inbox message classes: **acknowledgments, interviews, assessments, offers,
 rejections, reminders, verification messages.**
 
-Applications can be created by Tsenta itself, added manually, or imported from CSV.
+Applications can be created by Tsenta itself, added manually (company, title,
+status, date, link, notes), or imported from CSV.
 "When a message is linked with high confidence, Tsenta may update the associated
 tracker status", and the user can always correct it by hand.
+
+*Added 2026-08-22:*
+
+- The tracker is a **board**: "drag a card from one column to the next as things
+  progress, or update its status from the card itself."
+- **Search the tracker by company**, and a **pipeline flow chart** showing
+  progression between stages.
+- The inbox is a real mail client, not a list of snippets: **read threads,
+  search, view attachments, and reply** inside it.
+- An application in flight shows an **in-progress status** while it runs.
 
 ### 2.5 Surfaces
 
@@ -99,6 +157,19 @@ short-lived auto-refreshing tokens. Installed with:
 MCP capabilities: role discovery with filters, single and batch application
 submission, resume profile management, application tracking and import, inbox
 reading and unread count, profile editing, remaining-allowance check.
+
+*Added 2026-08-22 — the onboarding and feed, which the first pass skipped:*
+
+- Sign-up takes an email or Google, plus a PDF resume under 10 MB. Extraction
+  into the profile takes 30–60 seconds.
+- The feed shows matched roles **with a match score**, and is worked through by
+  **swipe or tap to apply or skip** — a triage gesture, not a table.
+- Feed filters: **location, salary, role type, and work setting.** Salary is the
+  one Quiver cannot currently offer, because it never captures it.
+- The Chrome extension **does not fill the form in your tab**. It extracts the
+  posting and hands it to the same cloud worker the dashboard uses. Worth
+  knowing before treating the extension as a different apply path — it is the
+  same path with a different front door.
 
 ### 2.6 Developer API
 
@@ -232,13 +303,28 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-F5 (P1).** Keep a persistent company-to-board registry so career pages are
   re-scanned on a cadence rather than rediscovered every run, with `last_scanned_at`
   per board. *Partly built.*
-- **FR-F6 (P1).** Search and filter tracked jobs by title, location, salary where
-  published, work arrangement, category, portal and match score. *Partly built:
-  category, portal, status and free text exist.*
+- **FR-F6 (P1) [DONE except salary].** Search and filter tracked jobs by title,
+  location, work arrangement, category, portal and match score.
+  *Built in phase 5: multiple categories, multiple portals, posted-within,
+  minimum match, remote or on-site, company, place name, free text and four sort
+  orders, each shown as a chip that clears itself. Salary is the one filter
+  Tsenta has that Quiver cannot offer, because no source parses it into a field —
+  see FR-F9.*
 - **FR-F7 (P2).** Notify the user when a high-match role appears, by desktop
   notification or email, within one scan cycle of publication.
 - **FR-F8 (P2).** Show a live scan line during discovery ("scanning X... n new"),
   matching Tsenta's Find display. The SSE console already carries the data.
+
+- **FR-F9 (P1).** Capture salary where a posting publishes it, and filter on it.
+  This is the only feed filter Tsenta has that Quiver cannot offer at all: no
+  source parses a compensation range into a field, so there is nothing to filter.
+  Needs a `salary_min` / `salary_max` / `salary_currency` trio on the job row and
+  a parser per source, most of which publish it as free text.
+- **FR-F10 (P2).** Saved jobs: a shortlist that is neither applied to nor
+  discarded, surviving the retention purge.
+- **FR-F11 (P2).** A triage gesture over the feed — Tsenta's swipe or tap to
+  apply or skip. Quiver's table answers "what is there"; it has no fast way to
+  work down a list making one decision per role.
 
 ### 5.2 Prep
 
@@ -266,6 +352,13 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   technology, metric, date or credential absent from the profile. This is a
   mechanical gate, not a prompt instruction.
 
+- **FR-P9 (P1).** A profile completeness indicator: which fields are missing, and
+  which of those employers commonly require. Quiver has the data to compute this
+  and never shows it, so a profile gap is only discovered when an application
+  stops on it.
+- **FR-P10 (P2).** Import a resume from DOCX as well as YAML, preserving what
+  formatting survives into the tailored PDF.
+
 ### 5.3 Apply
 
 - **FR-A1 (P0) [DONE].** Submission works across the systems in 2.2, tracked as a per-ATS
@@ -278,12 +371,23 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A3 (P0) [DONE].** Every application produces a receipt: fields filled, fields
   skipped, generated answers, documents submitted, final result, viewable
   afterwards. *Data is captured; there is no receipt view.*
-- **FR-A4 (P1).** Optional review of the filled form before submit, on systems where
-  the form can be paused.
-- **FR-A5 (P1) [DONE].** Handle logins and one-time codes instead of failing on them.
-  Tsenta exposes this as `POST /applications/{id}/otp` with an
-  `application.needs_otp` webhook. Quiver records a login wall as a terminal failure
-  today.
+- **FR-A4 (P1) [NOT BUILT — dead setting].** Optional review of the filled form
+  before submit, on systems where the form can be paused.
+  *Audited 2026-08-22: `review_form_before_submit` exists in
+  `schema.DEFAULT_SETTINGS` and is read by nothing. A setting that is offered and
+  then ignored is worse than an absent one, because it reads as a promise. Either
+  wire it or remove it. When wiring it, note from 2.2 that only 18 of 29 systems
+  can pause at all — this belongs in the per-ATS capability table, not as a global
+  toggle.*
+- **FR-A5 (P1) [PARTLY DONE].** Handle logins and one-time codes instead of failing
+  on them. Tsenta exposes this as `POST /applications/{id}/otp` with an
+  `application.needs_otp` webhook, and its worker "signs in when needed".
+  *Audited 2026-08-22: Quiver detects both — `OTP_MARKERS` and `LOGIN_MARKERS` in
+  `agent/applier.py` — and parks the run as `needs_review` with an instruction
+  naming what the site asked for. That is the detection half. There is no way to
+  hand the code back to a waiting session, so the application is finished, not
+  paused: the user completes it themselves and re-runs. Downgraded from [DONE],
+  which overstated it.*
 - **FR-A6 (P0).** Never submit twice to the same posting; keep the `dedupe_hash`
   guard. *Built.*
 - **FR-A7 (P0).** Never guess a factual answer. A required question the profile
@@ -298,6 +402,13 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   opt-in, capped and revocable.
 - **FR-A10 (P1) [DONE].** Apply to several jobs in parallel with a bounded worker pool,
   instead of strictly one at a time.
+
+- **FR-A11 (P1).** An employer-account credential store. Workday and iCIMS will
+  not take an application without an account first, which is why Tsenta sets a
+  **separate application password** during onboarding and creates accounts with
+  it. Quiver stops at these systems today. Any implementation must keep the
+  secret out of the repository and out of the settings JSON — `Backend/.env` or
+  the OS keychain, never the store.
 
 ### 5.4 Track
 
@@ -321,6 +432,16 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-T8 (P2).** Pipeline view: counts by stage, reply rate and interview rate by
   source, category and match decile. *Counts by stage are built; the rates need
   more applications than exist to mean anything yet.*
+
+- **FR-T9 (P1).** The tracker as a board, with a card dragged from one column to
+  the next. Quiver has the stages and a per-row dropdown; the gesture Tsenta
+  leads with is missing.
+- **FR-T10 (P1).** The inbox as a mail client: full thread bodies, search,
+  attachments. *Reply landed in phase 5; the other three did not. Quiver stores a
+  snippet per message and never fetches the body, so there is nothing to thread
+  or search yet.*
+- **FR-T11 (P2).** An in-progress indicator on an application while its run is
+  still going, rather than only in the console.
 
 ### 5.5 Surfaces
 
@@ -379,7 +500,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   enforced by the shared schema module.
 - **NFR-6.** Retention and privacy: application data stays local, is never sold or
   sent anywhere except the employer's own form, and is deletable on request.
-- **NFR-7.** The test suite stays green and grows with each area. Current count: 48.
+- **NFR-7.** The test suite stays green and grows with each area. *48 at the time of writing; **131** as of 2026-08-22.*
 
 ---
 
@@ -726,3 +847,134 @@ Stated plainly so nobody plans around it.
   challenge and stops, which stays correct.
 - **LinkedIn and Indeed ingestion.** Blocked by anti-bot measures and their terms.
   Not attempted.
+
+---
+
+## 9. Audit: what is actually built, verified 2026-08-22
+
+Section 5's `[DONE]` markers were written by whoever finished each phase. This
+section is the check on them: every requirement re-read against the code that
+claims to satisfy it, on the day. Two markers did not survive it.
+
+Scope note: this audit treats the multi-tenant items (5.6 Developer API, 5.7
+accounts and billing, plus FR-S5 and FR-S6) as **out of scope by your decision** —
+Quiver is for one person, so allowances, plan tiers and per-user isolation have
+nothing to isolate. They are listed as *excluded*, not as gaps.
+
+### Find
+
+| Req | Status | Evidence |
+|---|---|---|
+| FR-F1 scheduled discovery | **built** | `api/scheduler.py`, `discover_every_hours`, quiet hours |
+| FR-F2 score + reason on every row | **built** | `fit_score` / `fit_reason`, shown in the table |
+| FR-F3 paste a URL | **built** | `AddJobByUrl` → `/api/agent/job-from-url` |
+| FR-F4 more board readers | **partial** | 8 readers against Tsenta's 29 systems |
+| FR-F5 company→board registry | **built** | `companies.ats_platform` / `ats_token` |
+| FR-F6 search and filter | **built, less salary** | phase 5 filter bar; see FR-F9 |
+| FR-F7 high-match notification | **not built** | nothing in the tree; the word only appears in unrelated regexes |
+| FR-F8 live scan line | **not built** | the SSE console carries the data; nothing renders a scan line |
+| FR-F9 salary capture | **not built** | new requirement |
+| FR-F10 saved jobs | **not built** | new requirement |
+| FR-F11 triage gesture | **not built** | new requirement |
+
+### Prep
+
+| Req | Status | Evidence |
+|---|---|---|
+| FR-P1 three tailoring modes | **built** | `latex_resume.MODES` |
+| FR-P2 per-bullet diff | **built** | `ResumeReview`, now a sheet |
+| FR-P3 auto-approve toggle | **built** | `tailoring.auto_approve` |
+| FR-P4 multiple resume profiles | **built** | `api/resume_profiles.py`, Profiles screen |
+| FR-P5 cover letters | **built** | `applier.cover_letter()` |
+| FR-P6 full profile section set | **built** | `schema.DEFAULT_SETTINGS["profile"]` |
+| FR-P7 house-style audit gate | **built** | `api/resume_audit.py`, hard gate |
+| FR-P8 mechanical fact gate | **built** | `api/resume_facts.py` |
+| FR-P9 completeness indicator | **not built** | new requirement |
+| FR-P10 DOCX import | **not built** | new requirement |
+
+### Apply
+
+| Req | Status | Evidence |
+|---|---|---|
+| FR-A1 per-ATS capability table | **built** | `agent/portals.py`, 38 entries, `detects` / `submits` |
+| FR-A2 Tsenta's status machine | **built** | queued / running / needs_review / submitted / failed |
+| FR-A3 receipt per application | **built** | `fields_filled`, `unanswered`, `screenshot` |
+| **FR-A4 review the filled form** | **not built — dead setting** | `review_form_before_submit` is defined and read by nothing |
+| **FR-A5 logins and OTP** | **partial — was marked done** | detects and parks; cannot take the code back |
+| FR-A6 never submit twice | **built** | `applied_hashes()` checked in `applier.py:1298` |
+| FR-A7 never guess an answer | **built** | `unanswered` stops the run |
+| FR-A8 batch apply | **built** | `job_ids` list through one run |
+| FR-A9 Auto Apply | **built, deliberately weaker** | proposes; a human approves. See below. |
+| FR-A10 bounded worker pool | **built** | `ThreadPoolExecutor`, `--workers` |
+| FR-A11 employer-account password | **not built** | new requirement; blocks Workday and iCIMS |
+
+### Track
+
+| Req | Status | Evidence |
+|---|---|---|
+| FR-T1 five tracker stages | **built** | `TRACKER_STATUSES` |
+| FR-T2 IMAP read | **built** | `agent/inbox.py` |
+| FR-T3 classify messages | **built** | rules first, LLM only for linked messages |
+| FR-T4 advance only on confidence | **built** | `LINK_CONFIDENCE_THRESHOLD` |
+| FR-T5 grouped inbox with unread | **built** | Track screen, hue-coded classes |
+| FR-T6 manual add and CSV import | **not built** | confirmed absent |
+| FR-T7 bounce detection | **built** | `_demote_bounced_pattern` |
+| FR-T8 reply and interview rates | **not built** | stage counts exist; rates do not |
+| FR-T9 board with drag | **not built** | new requirement |
+| FR-T10 inbox as a mail client | **reply only** | phase 5 added reply; no bodies, search or attachments |
+| FR-T11 in-progress indicator | **not built** | new requirement |
+
+### Surfaces and cross-cutting
+
+| Req | Status | Evidence |
+|---|---|---|
+| FR-S1 web dashboard | **built, beyond spec** | seven screens after phase 5, not four |
+| FR-S2 Chrome extension | **built** | `Extension/`, MV3 |
+| FR-S3 MCP server | **built, deliberately weaker** | 14 tools, **no submit tool**. See below. |
+| FR-S4 CLI parity | **partial** | `runner.py` covers the modes, not the whole tool surface |
+| NFR-1 no agent framework | **held** | plain Python |
+| NFR-2 every call budgeted | **held** | `agent/llm.py`, per-purpose shares |
+| NFR-3 honest failure reporting | **held** | reasons recorded and surfaced |
+| NFR-4 offline ATS fixtures | **partial** | one fixture, Greenhouse; NFR-4 asks for one per system |
+| NFR-5 backend parity | **held** | enforced by `tests/test_store_parity.py` |
+| NFR-6 data stays local | **held** | nothing leaves the machine but LLM calls and applications |
+| NFR-7 suite green and growing | **held** | 131 passing |
+
+### Two places Quiver is deliberately not at parity
+
+Both are choices, not gaps, and both should stay:
+
+- **Auto Apply proposes; it does not submit.** Tsenta's auto-applies within your
+  filters and daily cap. Quiver's shortlists and waits for a human to approve the
+  batch. `agent_apply` refuses to run without explicit job ids, so this is
+  structural rather than a promise — no misconfiguration can make it submit
+  something nobody saw.
+- **The MCP server has no submit tool.** Tsenta's connector can "apply to a
+  single role or a batch" from inside an assistant. Quiver's exposes 14 tools and
+  none of them send an application, for the same reason.
+
+### The honest summary
+
+Counted from the tables above: **54 in scope — 36 built, 5 partial, 13 not
+built.** The excluded multi-tenant set is 13 more (FR-D1–D6, FR-B1–B5, FR-S5,
+FR-S6), giving 67 requirements in total.
+
+The five partials are FR-F4 (8 readers of 29), FR-A5 (detects a login wall,
+cannot answer it), FR-T10 (reply works, bodies and search do not), FR-S4 (the
+runner covers the modes, not the whole tool surface) and NFR-4 (one recorded
+fixture, not one per system).
+
+Nothing in Find, Prep or Apply's core path is missing. What is missing clusters
+in three places, in the order they are worth your time:
+
+1. **Reach.** FR-A11 (employer accounts) and FR-F4 (more readers) are what stand
+   between 8 systems and Tsenta's 29. FR-A11 is the bigger of the two: Workday
+   and iCIMS are among the largest employers' systems and both need an account
+   before they will take an application.
+2. **The tracker as a workspace.** FR-T6, FR-T9, FR-T10 — manual entry, CSV
+   import, a board, and an inbox that holds whole messages rather than snippets.
+3. **The feed as a feed.** FR-F7, FR-F8, FR-F10, FR-F11, FR-F9 — alerting, a
+   scan line, saved jobs, a triage gesture, salary.
+
+And one thing to fix rather than build: **FR-A4's setting is offered and
+ignored.** That is a false promise in the product today.
