@@ -4,12 +4,16 @@ import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
 import { useJobStream } from '../lib/useJobStream'
 import Console from '../components/Console'
-import QuickReply from '../components/QuickReply'
+import Kanban from '../components/Kanban'
+import MessageReader from '../components/MessageReader'
+import Compose from '../components/Compose'
+import AddApplication from '../components/AddApplication'
 import { MessageChip, Segmented, StageBar } from '../components/apple'
 import {
   Button,
   Empty,
   Icon,
+  Input,
   Metric,
   Note,
   PageHead,
@@ -73,17 +77,33 @@ export default function TrackTab() {
   const [klass, setKlass] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Which panels are open, and how the pipeline is shown.
+  const [view, setView] = useState('board')
+  const [reading, setReading] = useState(null) // message id in the reader
+  const [composing, setComposing] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [search, setSearch] = useState('')
+  const [q, setQ] = useState('')
+
+  // Debounce the inbox search so a query fires once the typing settles.
+  useEffect(() => {
+    const t = setTimeout(() => setQ(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   const refresh = useCallback(() => {
     setError('')
-    return Promise.all([api.agentTracker(), api.agentInbox({ klass: klass || undefined })])
+    return Promise.all([
+      api.agentTracker(),
+      api.agentInbox({ klass: klass || undefined, q: q || undefined }),
+    ])
       .then(([t, i]) => {
         setTracker(t)
         setInbox(i)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [klass])
+  }, [klass, q])
 
   useEffect(() => {
     refresh()
@@ -153,12 +173,91 @@ export default function TrackTab() {
             />
           ))}
         </div>
+
+        {/* The two numbers a pipeline is judged on: how often an application
+            drew any reply, and how often it reached a conversation. */}
+        {tracker?.rates?.total ? (
+          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-3">
+            <span className="text-tiny text-n-400">
+              <span className="font-semibold tabular-nums text-n-100">
+                {tracker.rates.replyRate}%
+              </span>{' '}
+              reply rate
+              <span className="text-n-500"> · {tracker.rates.replied} of {tracker.rates.total}</span>
+            </span>
+            <span className="text-tiny text-n-400">
+              <span className="font-semibold tabular-nums text-n-100">
+                {tracker.rates.interviewRate}%
+              </span>{' '}
+              reached a conversation
+              <span className="text-n-500"> · {tracker.rates.interviews} of {tracker.rates.total}</span>
+            </span>
+            {tracker.rates.offers ? (
+              <span className="text-tiny text-ok-400">
+                <span className="font-semibold tabular-nums">{tracker.rates.offers}</span> offer
+                {tracker.rates.offers === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </Section>
 
       {/* --------------------------------------------------- applications */}
-      <Section title="Applications" description="Set a stage by hand and the agent will not overrule it." flush>
+      <Section
+        title="Applications"
+        description="Drag a card between columns, or set a stage by hand — the agent never overrules it."
+        flush
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              size="sm"
+              ariaLabel="Pipeline view"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'board', label: 'Board' },
+                { value: 'table', label: 'Table' },
+              ]}
+            />
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Icon.Plus />
+              Add
+            </Button>
+            <a
+              href={api.agentExportApplicationsUrl()}
+              className="press inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-tiny
+                font-medium text-n-400 ring-1 ring-line hover:text-n-100"
+            >
+              <Icon.Download />
+              Export
+            </a>
+          </div>
+        }
+      >
         {loading && !tracker ? (
           <Empty title="Loading" />
+        ) : view === 'board' ? (
+          rows.length ? (
+            <div className="p-4">
+              <Kanban
+                columns={STAGES.map((s) => ({
+                  key: s.key,
+                  label: s.label,
+                  tone: s.key === 'offer' ? 'ok' : s.key === 'rejected' ? 'bad'
+                    : s.key === 'ghosted' ? 'neutral' : 'accent',
+                }))}
+                cards={rows.map((r) => ({ ...r, stage: r.tracker_status || 'applied' }))}
+                onMove={(id, stage) =>
+                  api.agentSetStage(id, stage).then(refresh).catch((e) => setError(e.message))
+                }
+              />
+            </div>
+          ) : (
+            <Empty title="Nothing applied yet">
+              Applications appear here once one is submitted from the Jobs screen, or add one by
+              hand.
+            </Empty>
+          )
         ) : (
           <Table
             columns={[
@@ -218,23 +317,39 @@ export default function TrackTab() {
       {/* ------------------------------------------------------ the inbox */}
       <Section
         title="Replies"
-        description="Matched to an application where the link is certain enough to trust."
+        description="Open one to read it in full and answer in the same thread."
         flush
         actions={
-          <div className="w-48">
-            <Select
-              value={klass}
-              onChange={(e) => setKlass(e.target.value)}
-              aria-label="Filter replies by kind"
-            >
-              <option value="">Everything</option>
-              {Object.entries(CLASS_LABEL).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                  {inbox?.counts?.[key] ? ` (${inbox.counts[key]})` : ''}
-                </option>
-              ))}
-            </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-40">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                aria-label="Search messages"
+                className="h-8 py-0"
+              />
+            </div>
+            <div className="w-40">
+              <Select
+                value={klass}
+                onChange={(e) => setKlass(e.target.value)}
+                aria-label="Filter replies by kind"
+                className="h-8 py-0"
+              >
+                <option value="">Everything</option>
+                {Object.entries(CLASS_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                    {inbox?.counts?.[key] ? ` (${inbox.counts[key]})` : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button size="sm" onClick={() => setComposing(true)}>
+              <Icon.Send className="size-3.5" />
+              Compose
+            </Button>
           </div>
         }
       >
@@ -257,46 +372,44 @@ export default function TrackTab() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={springFor()}
-                  className={`px-4 py-3 ${msg.read_at ? 'opacity-60' : ''}`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <MessageChip klass={msg.klass} label={CLASS_LABEL[msg.klass]} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-n-200">
-                      {msg.subject || '(no subject)'}
-                    </span>
-                    <span className="shrink-0 text-tiny text-n-500">
-                      {when(msg.received_at)}
-                    </span>
-                    <button
-                      className="press shrink-0 text-tiny text-blue-500 hover:underline"
-                      onClick={() =>
-                        api.agentMarkRead(msg.id, !msg.read_at).then(refresh).catch(() => {})
-                      }
-                    >
-                      {msg.read_at ? 'unread' : 'read'}
-                    </button>
-                  </div>
-                  <p className="mt-1 text-tiny text-n-500">
-                    {msg.from_addr}
-                    {msg.company_name ? (
-                      <>
-                        {' · '}
-                        <span className="text-n-400">{msg.company_name}</span>
-                        {msg.title ? ` — ${msg.title}` : ''}
-                      </>
-                    ) : (
-                      // An unmatched message is worth saying so about: it is
-                      // the difference between "no reply" and "a reply we
-                      // could not place".
-                      <span className="text-warn-400"> · not matched to an application</span>
-                    )}
-                  </p>
-                  {msg.snippet ? (
-                    <p className="mt-1 line-clamp-2 text-tiny leading-relaxed text-n-400">
-                      {msg.snippet}
+                  {/* The whole row opens the message — reading it in full and
+                      replying happen in the panel, not inline. An unread one
+                      keeps a dot and full contrast until it is opened. */}
+                  <button
+                    onClick={() => setReading(msg.id)}
+                    className={`press block w-full px-4 py-3 text-left hover:bg-raised ${
+                      msg.read_at ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!msg.read_at ? (
+                        <span className="size-1.5 shrink-0 rounded-full bg-blue-500" />
+                      ) : null}
+                      <MessageChip klass={msg.klass} label={CLASS_LABEL[msg.klass]} />
+                      <span className="min-w-0 flex-1 truncate text-sm text-n-200">
+                        {msg.subject || '(no subject)'}
+                      </span>
+                      <span className="shrink-0 text-tiny text-n-500">{when(msg.received_at)}</span>
+                    </div>
+                    <p className="mt-1 text-tiny text-n-500">
+                      {msg.from_addr}
+                      {msg.company_name ? (
+                        <>
+                          {' · '}
+                          <span className="text-n-400">{msg.company_name}</span>
+                          {msg.title ? ` — ${msg.title}` : ''}
+                        </>
+                      ) : (
+                        <span className="text-warn-400"> · not matched to an application</span>
+                      )}
                     </p>
-                  ) : null}
-                  <QuickReply message={msg} onSent={refresh} />
+                    {msg.snippet ? (
+                      <p className="mt-1 line-clamp-1 text-tiny leading-relaxed text-n-400">
+                        {msg.snippet}
+                      </p>
+                    ) : null}
+                  </button>
                 </m.li>
               ))}
             </AnimatePresence>
@@ -305,6 +418,10 @@ export default function TrackTab() {
       </Section>
 
       <Console lines={stream.lines} job={stream.job} onStop={stream.stop} onClear={stream.clear} />
+
+      <MessageReader messageId={reading} onClose={() => setReading(null)} onChanged={refresh} />
+      <Compose open={composing} onClose={() => setComposing(false)} onSent={refresh} />
+      <AddApplication open={adding} onClose={() => setAdding(false)} onAdded={refresh} />
     </div>
   )
 }

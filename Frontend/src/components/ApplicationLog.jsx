@@ -4,7 +4,13 @@ import { Disclosure, Status } from './ui'
 
 /* ------------------------------------------------------- application log */
 
-const APP_TONE = { submitted: 'ok', filled: 'info', failed: 'bad', skipped: 'warn' }
+const APP_TONE = {
+  submitted: 'ok', filled: 'info', failed: 'bad', skipped: 'warn',
+  running: 'accent', queued: 'info', needs_review: 'warn',
+}
+
+// A friendlier word than the machine status for the two in-flight states.
+const IN_FLIGHT = { running: 'applying', queued: 'queued' }
 
 export default function ApplicationLog({ refreshKey }) {
   const [rows, setRows] = useState([])
@@ -36,7 +42,14 @@ export default function ApplicationLog({ refreshKey }) {
         <ul className="divide-y divide-line">
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 first:pt-0">
-              <Status tone={APP_TONE[r.status] || 'neutral'}>{r.status}</Status>
+              {/* An application still in flight pulses, so a run in progress
+                  reads at a glance rather than only in the console. */}
+              <Status
+                tone={APP_TONE[r.status] || 'neutral'}
+                pulse={r.status === 'running'}
+              >
+                {IN_FLIGHT[r.status] || r.status}
+              </Status>
               <span className="text-sm text-n-200">{r.title || 'Unknown role'}</span>
               <span className="text-tiny text-n-500">{r.company_name || ''}</span>
               {r.dry_run ? <span className="text-micro text-n-500">dry run</span> : null}

@@ -1164,13 +1164,19 @@ def record_message(data: dict[str, Any]) -> int | None:
 
 
 def list_messages(limit: int = 200, klass: str | None = None,
-                  unread_only: bool = False) -> list[dict[str, Any]]:
+                  unread_only: bool = False, q: str | None = None) -> list[dict[str, Any]]:
     db = _connect()
     query: dict[str, Any] = {}
     if klass:
         query["klass"] = klass
     if unread_only:
         query["read_at"] = None
+    if q:
+        rx = {"$regex": re.escape(q), "$options": "i"}
+        # `company_name` is joined after the fetch, so it cannot be part of the
+        # query; the fields on the message document itself are searched here and
+        # the company filter is applied over the rows below.
+        query["$or"] = [{"subject": rx}, {"from_addr": rx}, {"snippet": rx}, {"body": rx}]
     rows = _cleaned(db.messages.find(query).sort("received_at", -1).limit(int(limit)))
     jobs, companies = _job_titles(), _company_names()
     stages = {int(a["id"]): a.get("tracker_status")

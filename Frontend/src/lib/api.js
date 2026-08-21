@@ -100,12 +100,37 @@ export const api = {
   // ---- track ----
   agentTracker: (limit = 300) => fetch(`${BASE}/api/agent/tracker?limit=${limit}`).then(handle),
 
-  agentInbox: ({ limit = 100, klass, unread } = {}) => {
+  agentInbox: ({ limit = 100, klass, unread, q } = {}) => {
     const p = new URLSearchParams({ limit: String(limit) })
     if (klass) p.set('klass', klass)
     if (unread) p.set('unread', 'true')
+    if (q) p.set('q', q)
     return fetch(`${BASE}/api/agent/inbox?${p}`).then(handle)
   },
+
+  agentMessage: (id) => fetch(`${BASE}/api/agent/message/${id}`).then(handle),
+
+  agentCompose: (to, subject, text) =>
+    fetch(`${BASE}/api/agent/compose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject: subject || null, text }),
+    }).then(handle),
+
+  agentAddApplication: (body) =>
+    fetch(`${BASE}/api/agent/applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  agentImportApplications: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${BASE}/api/agent/applications/import`, { method: 'POST', body: form }).then(handle)
+  },
+
+  agentExportApplicationsUrl: () => `${BASE}/api/agent/applications/export`,
 
   agentMailbox: () => fetch(`${BASE}/api/agent/mailbox`).then(handle),
 

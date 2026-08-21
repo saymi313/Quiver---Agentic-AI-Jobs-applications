@@ -274,6 +274,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("applications", "url TEXT"),
     ("applications", "notes TEXT"),
     ("applications", "applied_on TEXT"),
+    # The full message text, so the inbox is a mail client rather than a list
+    # of snippets — read the whole thing, and search it.
+    ("messages", "body TEXT"),
 ]
 
 
@@ -1279,7 +1282,7 @@ def record_message(data: dict[str, Any]) -> int | None:
 
 
 def list_messages(limit: int = 200, klass: str | None = None,
-                  unread_only: bool = False) -> list[dict[str, Any]]:
+                  unread_only: bool = False, q: str | None = None) -> list[dict[str, Any]]:
     sql = ("SELECT m.*, j.title, c.name AS company_name, a.tracker_status "
            "FROM messages m "
            "LEFT JOIN applications a ON a.id = m.application_id "
@@ -1291,6 +1294,10 @@ def list_messages(limit: int = 200, klass: str | None = None,
         args.append(klass)
     if unread_only:
         where.append("m.read_at IS NULL")
+    if q:
+        where.append("(m.subject LIKE ? OR m.from_addr LIKE ? OR m.snippet LIKE ? "
+                     "OR m.body LIKE ? OR c.name LIKE ?)")
+        args += [f"%{q}%"] * 5
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY COALESCE(m.received_at, m.created_at) DESC LIMIT ?"

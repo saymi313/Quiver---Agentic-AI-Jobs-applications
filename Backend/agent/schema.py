@@ -190,6 +190,9 @@ MESSAGE_FIELDS = (
     "application_id", "job_id", "company_id", "message_id", "thread_id",
     "from_addr", "from_domain", "subject", "snippet", "klass", "confidence",
     "received_at", "read_at", "linked_by",
+    # The full message text (capped when fetched), so the inbox can show and
+    # search whole messages rather than only the snippet it leads with.
+    "body",
 )
 
 # Below this, a link is a guess: the message is stored for the user to read but
@@ -340,6 +343,47 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "quiet_hours": [1, 7],
     },
 }
+
+
+# The profile fields an application form asks for most, in the order a form
+# usually asks them. Completeness is measured against these rather than every
+# field, because a missing portfolio link never stops an application and a
+# missing work authorization answer does.
+PROFILE_IMPORTANT: tuple[tuple[str, str], ...] = (
+    ("full_name", "Full name"),
+    ("email", "Email"),
+    ("phone", "Phone"),
+    ("location", "Location"),
+    ("current_title", "Current title"),
+    ("years_experience", "Years of experience"),
+    ("work_authorization", "Work authorisation"),
+    ("linkedin", "LinkedIn"),
+    ("highest_degree", "Highest degree"),
+    ("university", "University"),
+    ("default_resume", "Default resume"),
+)
+
+
+def profile_completeness(profile: dict[str, Any]) -> dict[str, Any]:
+    """
+    How ready the profile is to be poured into a form, and what is missing.
+
+    A percentage over the commonly-required fields, plus the list of the ones
+    still blank — the same "N% complete" a form-filler wants to see before it
+    discovers a gap mid-application rather than the user discovering it there.
+    """
+    profile = profile or {}
+    missing = [{"key": key, "label": label}
+               for key, label in PROFILE_IMPORTANT
+               if not str(profile.get(key) or "").strip()]
+    total = len(PROFILE_IMPORTANT)
+    filled = total - len(missing)
+    return {
+        "percent": round(filled / total * 100) if total else 100,
+        "filled": filled,
+        "total": total,
+        "missing": missing,
+    }
 
 
 def merge_settings(stored: dict[str, Any]) -> dict[str, Any]:

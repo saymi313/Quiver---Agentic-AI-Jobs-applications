@@ -548,7 +548,7 @@ def sync(days: int = 30, limit: int = 200, *, use_llm: bool = True,
         row_id = store.record_message({
             **{k: msg.get(k) for k in
                ("message_id", "from_addr", "from_domain", "subject", "snippet",
-                "received_at")},
+                "body", "received_at")},
             "application_id": link["application_id"],
             "job_id": link["job_id"],
             "company_id": link["company_id"],
@@ -705,3 +705,48 @@ def reply(message_id: int, body: str, *, subject: str | None = None,
 
     log(f"[inbox] replied to {to}")
     return {"ok": True, "to": to, "subject": line, "threaded": bool(ref)}
+
+
+def compose(to: str, subject: str, body: str, *,
+            log: Callable[[str], None] = print) -> dict[str, Any]:
+    """
+    Send a new message — a follow-up, a nudge, a thank-you — not a reply.
+
+    The inbox is where the user already reads recruiter mail, so composing from
+    the same place, over the same credentials, is one less context switch than
+    opening Gmail to send a single line. It starts a fresh thread; `reply()`
+    remains the way to answer an existing one.
+    """
+    to = (to or "").strip()
+    text = (body or "").strip()
+    if "@" not in to:
+        return {"ok": False, "error": "That is not an email address."}
+    if not text:
+        return {"ok": False, "error": "The message is empty."}
+
+    address, password = credentials()
+    if not address or not password:
+        return {"ok": False, "error": ("GMAIL_ADDRESS and GMAIL_APP_PASS are not set in "
+                                       "Backend/.env, so nothing can be sent.")}
+
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["From"] = address
+    msg["To"] = to
+    msg["Subject"] = (subject or "").strip() or "(no subject)"
+    msg.set_content(text)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465,
+                              context=ssl.create_default_context(), timeout=30) as server:
+            server.login(address, password)
+            server.send_message(msg)
+    except Exception as exc:
+        log(f"[inbox] compose to {to} failed: {exc}")
+        return {"ok": False, "error": str(exc)}
+
+    log(f"[inbox] sent a message to {to}")
+    return {"ok": True, "to": to, "subject": msg["Subject"]}

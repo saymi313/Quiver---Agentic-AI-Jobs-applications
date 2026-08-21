@@ -30,6 +30,7 @@ def fresh_store():
     store.init()
     with sqlite_store.tx() as c:
         for table in ("applications", "outreach", "tasks", "jobs", "people",
-                      "companies", "runs", "llm_usage", "llm_cache", "settings"):
+                      "companies", "runs", "llm_usage", "llm_cache", "settings",
+                      "messages"):
             c.execute(f"DELETE FROM {table}")
     return store

@@ -23,7 +23,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -589,11 +589,15 @@ def agent_overview() -> dict[str, Any]:
     ok, reason = agent_llm.available()
     resume = matcher.resume_path()
     running = manager.active()
+    from agent.schema import profile_completeness
+
+    settings = agent_store.all_settings()
     return {
         "stats": agent_store.stats(),
         "schedule": scheduler.status(),
         "queue": agent_store.task_stats(),
-        "settings": agent_store.all_settings(),
+        "settings": settings,
+        "profileCompleteness": profile_completeness(settings.get("profile", {})),
         "store": agent_store.backend_status(),
         "llm": {"available": ok, "reason": reason, **agent_llm.config(), "api_key": ""},
         "resume": {"path": str(resume) if resume else None, "name": resume.name if resume else None},
@@ -1082,29 +1086,69 @@ def agent_tracker(limit: int = 300) -> dict[str, Any]:
 
     agent_store.init()
     ok, reason = inbox.available()
+    rows = agent_store.tracked_applications(max(1, min(limit, 1000)))
+
+    # Two figures a pipeline is actually judged on. Reply rate is how often an
+    # application drew any response at all; interview rate is how often it
+    # reached a conversation. Both are over applications that reached an
+    # employer — the denominator is the row set itself.
+    total = len(rows)
+    replied = sum(1 for r in rows if (r.get("message_count") or 0) > 0)
+    reached_interview = sum(1 for r in rows
+                            if r.get("tracker_status") in ("interviewing", "offer"))
+    offers = sum(1 for r in rows if r.get("tracker_status") == "offer")
+
+    def pct(n: int) -> int:
+        return round(n / total * 100) if total else 0
+
     return {
-        "rows": agent_store.tracked_applications(max(1, min(limit, 1000))),
+        "rows": rows,
         "counts": agent_store.tracker_counts(),
         "messageCounts": agent_store.message_counts(),
         "unread": agent_store.unread_count(),
         "stages": list(TRACKER_STATUSES),
         "classes": list(MESSAGE_CLASSES),
         "mailbox": {"available": ok, "reason": reason},
+        "rates": {
+            "total": total,
+            "replied": replied,
+            "replyRate": pct(replied),
+            "interviews": reached_interview,
+            "interviewRate": pct(reached_interview),
+            "offers": offers,
+        },
     }
 
 
 @app.get("/api/agent/inbox")
 def agent_inbox(limit: int = 100, klass: str | None = None,
-                unread: bool = False) -> dict[str, Any]:
+                unread: bool = False, q: str | None = None) -> dict[str, Any]:
     from agent import store as agent_store
 
     agent_store.init()
     return {
         "rows": agent_store.list_messages(max(1, min(limit, 500)),
-                                          klass=klass, unread_only=unread),
+                                          klass=klass, unread_only=unread, q=q),
         "unread": agent_store.unread_count(),
         "counts": agent_store.message_counts(),
     }
+
+
+@app.get("/api/agent/message/{message_id}")
+def agent_message(message_id: int) -> dict[str, Any]:
+    """One message, with its full body — what the reading pane shows."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    row = agent_store.get_message(message_id)
+    if not row:
+        raise HTTPException(404, "No such message.")
+    # Opening a message is reading it. Mark it so the unread count is honest,
+    # then report the fresh count so the badge updates without a refetch.
+    if row.get("read_at") is None:
+        agent_store.mark_message_read(message_id, True)
+        row["read_at"] = row.get("read_at") or "just now"
+    return {"message": row, "unread": agent_store.unread_count()}
 
 
 class TrackerPatch(BaseModel):
@@ -1130,6 +1174,126 @@ def agent_mark_read(message_id: int, read: bool = True) -> dict[str, Any]:
     agent_store.init()
     agent_store.mark_message_read(message_id, read)
     return {"ok": True, "unread": agent_store.unread_count()}
+
+
+class ManualApplication(BaseModel):
+    title: str
+    company_name: str | None = None
+    url: str | None = None
+    notes: str | None = None
+    tracker_status: str = "applied"
+    applied_on: str | None = None
+
+
+@app.post("/api/agent/applications")
+def agent_add_application(body: ManualApplication) -> dict[str, Any]:
+    """
+    Add an application made outside Quiver.
+
+    A tracker that only knows what the agent submitted is only half a tracker —
+    the roles you applied to by hand belong in the same pipeline. Recorded as
+    submitted with source=manual, so it counts in the figures and is marked as
+    yours rather than the applier's.
+    """
+    from agent import store as agent_store
+
+    agent_store.init()
+    if not (body.title or "").strip():
+        raise HTTPException(400, "A role title is required.")
+    app_id = agent_store.add_manual_application(body.model_dump())
+    return {"ok": True, "id": app_id}
+
+
+@app.post("/api/agent/applications/import")
+async def agent_import_applications(file: UploadFile = File(...)) -> dict[str, Any]:
+    """
+    Import a tracker from CSV.
+
+    Columns are matched by name, case- and space-insensitively, so a sheet
+    exported from anywhere with columns like "Company", "Role/Title", "Status",
+    "Date", "Link" imports without being reshaped first. A row with no company
+    and no title is skipped rather than stored as an empty application.
+    """
+    import csv
+    import io
+
+    from agent import store as agent_store
+    from agent.schema import TRACKER_STATUSES
+
+    agent_store.init()
+    raw = (await file.read()).decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(raw))
+
+    def pick(row: dict[str, str], *names: str) -> str:
+        norm = {re.sub(r"[^a-z]", "", (k or "").lower()): v for k, v in row.items()}
+        for name in names:
+            value = norm.get(re.sub(r"[^a-z]", "", name.lower()))
+            if value and value.strip():
+                return value.strip()
+        return ""
+
+    added = 0
+    skipped = 0
+    for row in reader:
+        title = pick(row, "title", "role", "roletitle", "position", "job")
+        company = pick(row, "company", "companyname", "employer", "organisation", "organization")
+        if not title and not company:
+            skipped += 1
+            continue
+        stage = pick(row, "status", "stage", "trackerstatus").lower()
+        agent_store.add_manual_application({
+            "title": title or "Untitled role",
+            "company_name": company,
+            "url": pick(row, "url", "link", "posting", "joburl"),
+            "notes": pick(row, "notes", "note", "comments"),
+            "tracker_status": stage if stage in TRACKER_STATUSES else "applied",
+            "applied_on": pick(row, "appliedon", "date", "applieddate", "dateapplied"),
+        })
+        added += 1
+    return {"ok": True, "added": added, "skipped": skipped}
+
+
+@app.get("/api/agent/applications/export")
+def agent_export_applications() -> Any:
+    """The tracker as a CSV download — the mirror of the import above."""
+    import csv
+    import io
+
+    from agent import store as agent_store
+
+    agent_store.init()
+    rows = agent_store.tracked_applications(2000)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Company", "Title", "Status", "Applied", "Replies", "URL", "Source"])
+    for r in rows:
+        writer.writerow([
+            r.get("company_name") or "", r.get("title") or "",
+            r.get("tracker_status") or "", r.get("applied_on") or r.get("submitted_at") or "",
+            r.get("message_count") or 0, r.get("url") or "",
+            r.get("source") or "agent",
+        ])
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=quiver-tracker.csv"})
+
+
+class ComposeRequest(BaseModel):
+    to: str
+    subject: str | None = None
+    text: str
+
+
+@app.post("/api/agent/compose")
+def agent_compose(body: ComposeRequest) -> dict[str, Any]:
+    """Send a new message from the inbox — a follow-up, not a reply."""
+    from agent import inbox
+
+    out = inbox.compose(body.to, body.subject or "", body.text, log=lambda _m: None)
+    if not out.get("ok"):
+        raise HTTPException(400, out.get("error", "Could not send the message."))
+    return out
 
 
 class ReplyRequest(BaseModel):

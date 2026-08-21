@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { motion as m } from 'motion/react'
+import { springFor } from '../lib/motion'
 import { api } from '../lib/api'
 import Settings from '../components/Settings'
 import Portals from '../components/Portals'
@@ -45,6 +47,8 @@ export default function SettingsTab() {
         description="What the agent searches for, which application systems it can reach, the answers it puts in forms, and the mailbox it reads replies from."
       />
 
+      <ProfileCompleteness data={overview.profileCompleteness} onEdit={() => setPanel('agent')} />
+
       <SearchSettings
         overview={overview}
         onSaved={refresh}
@@ -62,6 +66,59 @@ export default function SettingsTab() {
         open={panel === 'agent'}
         onToggle={(v) => setPanel(v ? 'agent' : '')}
       />
+    </div>
+  )
+}
+
+/*
+  How ready the profile is to be poured into a form.
+
+  A form-filler wants to know a field is missing before it hits a form that
+  needs it, not after. So the gaps are named up front, as a bar and a list of
+  exactly which commonly-required fields are still blank — and it steps out of
+  the way entirely once the profile is complete, because a green 100% banner is
+  just noise.
+*/
+function ProfileCompleteness({ data, onEdit }) {
+  if (!data || data.percent >= 100) return null
+  const tone = data.percent >= 75 ? 'ok' : data.percent >= 50 ? 'warn' : 'bad'
+  const fill = { ok: 'bg-ok-400', warn: 'bg-warn-400', bad: 'bg-bad-400' }[tone]
+
+  return (
+    <div className="material material-edge overflow-hidden rounded-md border border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-n-100">
+            Profile is {data.percent}% complete
+          </p>
+          <p className="mt-0.5 text-tiny text-n-500">
+            {data.filled} of {data.total} commonly-required fields filled. What forms ask for most:
+          </p>
+        </div>
+        <button onClick={onEdit} className="press text-tiny font-medium text-blue-500 hover:underline">
+          Complete it →
+        </button>
+      </div>
+
+      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-n-800">
+        <m.div
+          className={`h-full rounded-full ${fill}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${data.percent}%` }}
+          transition={springFor()}
+        />
+      </div>
+
+      {data.missing?.length ? (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {data.missing.map((f) => (
+            <span key={f.key}
+                  className="rounded-full bg-warn-tint px-2 py-0.5 text-micro font-medium text-warn-400">
+              {f.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
