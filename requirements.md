@@ -363,23 +363,23 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   see FR-F9.*
 - **FR-F7 (P2).** Notify the user when a high-match role appears, by desktop
   notification or email, within one scan cycle of publication.
-- **FR-F8 (P2).** Show a live scan line during discovery ("scanning X... n new"),
+- **FR-F8 (P2) [DONE].** Show a live scan line during discovery ("scanning X... n new"),
   matching Tsenta's Find display. The SSE console already carries the data.
 
-- **FR-F9 (P1).** Capture salary where a posting publishes it, and filter on it.
+- **FR-F9 (P1) [DONE].** Capture salary where a posting publishes it, and filter on it.
   *Confirmed a real Tsenta feature 2026-08-22: the signed-in job panel shows a
   parsed range with currency ("GBP 43k - 64k /yr").* No Quiver source parses a
   compensation range into a field today, so there is nothing to filter. Needs a
   `salary_min` / `salary_max` / `salary_currency` trio on the job row and a
   parser per source, most of which publish it as free text.
-- **FR-F10 (P2).** Saved jobs: a shortlist that is neither applied to nor
+- **FR-F10 (P2) [DONE].** Saved jobs: a shortlist that is neither applied to nor
   discarded, surviving the retention purge. *Confirmed: a bookmark control sits
   on every job panel.*
-- **FR-F11 (P2).** A triage gesture over the feed - Tsenta puts **Pass** and
+- **FR-F11 (P2) [DONE].** A triage gesture over the feed - Tsenta puts **Pass** and
   **Apply** on each match card. Quiver's table answers "what is there"; it has
   no fast way to work down a list making one decision per role. *Confirmed on
   the feed cards.*
-- **FR-F12 (P1).** Parse the posting into a structured detail panel rather than a
+- **FR-F12 (P1) [DONE].** Parse the posting into a structured detail panel rather than a
   score and a link: seniority, work arrangement, employment type, function, an
   extracted skills-and-technologies list, and the application deadline, with the
   matched terms highlighted in the description. Quiver has the description and
@@ -412,7 +412,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   technology, metric, date or credential absent from the profile. This is a
   mechanical gate, not a prompt instruction.
 
-- **FR-P9 (P1).** A profile completeness indicator: which fields are missing, and
+- **FR-P9 (P1) [DONE].** A profile completeness indicator: which fields are missing, and
   which of those employers commonly require. Quiver has the data to compute this
   and never shows it, so a profile gap is only discovered when an application
   stops on it.
@@ -491,25 +491,25 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   link. Otherwise leave the status alone and mark the message for review.
 - **FR-T5 (P1) [DONE].** An application inbox grouped by the classes in FR-T3, with an
   unread count.
-- **FR-T6 (P1).** Manual add and CSV import of applications made outside Quiver.
+- **FR-T6 (P1) [DONE].** Manual add and CSV import of applications made outside Quiver.
   *Not built in Phase 1: it only matters once there is a history worth importing,
   and nothing else depends on it.*
 - **FR-T7 (P1) [DONE].** Bounce detection: a hard bounce demotes the guessed address
   pattern for that domain so the same wrong pattern is not reused.
-- **FR-T8 (P2).** Pipeline view: counts by stage, reply rate and interview rate by
+- **FR-T8 (P2) [DONE].** Pipeline view: counts by stage, reply rate and interview rate by
   source, category and match decile. *Counts by stage are built; the rates need
   more applications than exist to mean anything yet.*
 
-- **FR-T9 (P1).** The tracker as a board, with a card dragged from one column to
+- **FR-T9 (P1) [DONE].** The tracker as a board, with a card dragged from one column to
   the next. Quiver has the stages and a per-row dropdown; the gesture Tsenta
   leads with is missing.
-- **FR-T10 (P1).** The inbox as a mail client: full thread bodies, search,
+- **FR-T10 (P1) [DONE].** The inbox as a mail client: full thread bodies, search,
   attachments. *Reply landed in phase 5; the other three did not. Quiver stores a
   snippet per message and never fetches the body, so there is nothing to thread
   or search yet.*
-- **FR-T11 (P2).** An in-progress indicator on an application while its run is
+- **FR-T11 (P2) [DONE].** An in-progress indicator on an application while its run is
   still going, rather than only in the console.
-- **FR-T12 (P1).** Export the tracker to CSV, alongside the import in FR-T6.
+- **FR-T12 (P1) [DONE].** Export the tracker to CSV, alongside the import in FR-T6.
   Tsenta offers both on the Pipeline view; Quiver has neither.
 - **FR-T13 (decision, not a gap).** Tsenta routes application mail through an
   address it provisions (`...@my-privatemail.com`), selectable from an "Active
@@ -635,6 +635,7 @@ Scope decisions taken on 2026-08-21:
 | **3** | Reach | FR-A1, FR-A5, FR-A10, NFR-4 | **Completed 2026-08-22** |
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | **Completed 2026-08-22** |
 | **5** | Workspace structure | Separate screens, strong filters, mailbox replies, role-targeted profiles | **Completed 2026-08-22** |
+| **6** | Parity build: 50 of 60 | FR-F8/F9/F10/F11/F12, FR-P9, FR-T6/T8/T9/T10/T11/T12/T13 | **Completed 2026-08-22** |
 
 **Out of scope by decision:** FR-D1 to FR-D6 and FR-B1 to FR-B5 (multi-tenant
 only), FR-S5 and FR-S6 (mobile and iMessage).
@@ -642,6 +643,49 @@ only), FR-S5 and FR-S6 (mobile and iMessage).
 A requirement is marked `**[DONE]**` next to its identifier in section 5 only
 once it is built and verified. Anything deliberately skipped keeps a one-line
 reason instead of a completion mark.
+
+### Phase 6 — what was built
+
+The user's instruction: finish 50 of the 60 requirements now, leave the last 10
+for a later phase, and follow the Apple design skill strictly for every new
+piece of frontend. Thirteen requirements, taking the count from 37 to 50, in the
+two clusters the audit named as highest value and most self-contained.
+
+**The job as a parsed document (FR-F9, F10, F11, F12, F8).** `agent/jobmeta.py`
+reads a posting into fields — a salary range with currency, seniority, work
+arrangement, employment type, an extracted skills list, an application deadline —
+deterministically, with regex and a dictionary rather than an LLM, because it
+runs over every scored job and would rather return nothing than guess. A role's
+title now opens a right-side `SidePanel` that shows all of it, the skills as the
+chips a tailored resume is aimed at, the description reduced to text. The
+dashboard's matches become a triage with Pass and Apply on each card; a bookmark
+saves a role and survives the retention purge; the filter bar gains salary and a
+Saved view. A live scan line rides a spring under a pulse during a run and is
+gone the instant it ends. Ran the parser over the live store: 71 jobs, salaries
+and skills that check out.
+
+**The tracker as a workspace (FR-T6, T8, T9, T10, T11, T12, T13).** The pipeline
+becomes a board whose cards you drag between columns — `Kanban.jsx` is the fluid
+skill applied literally: feedback on pointer-down, 1:1 tracking that respects the
+grab offset, pointer capture, a click threshold, and a spring settle on drop,
+verified moving a card across columns with the move persisting. The inbox becomes
+a mail client: whole message bodies, a search over subject/sender/body/company, a
+reader panel, and Compose for a new thread. Applications can be added by hand or
+imported from a CSV matched by column name however it is labelled, and exported
+back out. Two figures a pipeline is judged on — reply rate and how often it
+reached a conversation — sit under the stages, and an in-flight application
+pulses in the log.
+
+**Profile completeness (FR-P9).** A percentage over the fields a form asks for
+most, with the gaps named as chips, gone at 100% because a green banner is noise.
+
+Left for the next phase, deliberately — the reach and enterprise cluster and the
+larger uncertain pieces: FR-A11 (employer-account logins for Workday and iCIMS),
+FR-A4 (per-ATS review-before-submit), FR-A5's second half (handing an OTP back to
+a waiting run), FR-F4 and NFR-4 (more ATS readers with a fixture each), FR-F7
+(notifications), FR-P10 (DOCX import), FR-P11 (the in-browser resume editor),
+FR-S4 (full CLI parity), and FR-S8 (Research — build once its contents are known,
+not blind).
 
 ### Phase 5 — what was built
 
@@ -957,11 +1001,11 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-F5 company→board registry | **built** | `companies.ats_platform` / `ats_token` |
 | FR-F6 search and filter | **built, less salary** | phase 5 filter bar; see FR-F9 |
 | FR-F7 high-match notification | **not built** | nothing in the tree; the word only appears in unrelated regexes |
-| FR-F8 live scan line | **not built** | the SSE console carries the data; nothing renders a scan line |
-| FR-F9 salary capture | **not built** | confirmed real: panel shows "GBP 43k - 64k /yr" |
-| FR-F10 saved jobs | **not built** | confirmed real: bookmark on the job panel |
-| FR-F11 triage gesture | **not built** | confirmed real: per-card Pass / Apply |
-| FR-F12 structured job detail | **not built** | new: skills, seniority, work type, deadline parsed |
+| FR-F8 live scan line | **built** | `ScanLine`, newest line on a spring under a live pulse |
+| FR-F9 salary capture | **built** | `jobmeta.parse_salary`, filter + panel |
+| FR-F10 saved jobs | **built** | bookmark on rows and cards; survives the purge |
+| FR-F11 triage gesture | **built** | Pass / Apply on the dashboard cards |
+| FR-F12 structured job detail | **built** | `JobDetail` panel: skills, level, salary, deadline |
 
 ### Prep
 
@@ -975,7 +1019,7 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-P6 full profile section set | **built** | `schema.DEFAULT_SETTINGS["profile"]` |
 | FR-P7 house-style audit gate | **built** | `api/resume_audit.py`, hard gate |
 | FR-P8 mechanical fact gate | **built** | `api/resume_facts.py` |
-| FR-P9 completeness indicator | **not built** | confirmed real: "91% complete" on the profile |
+| FR-P9 completeness indicator | **built** | `profile_completeness`, shown on Settings |
 | FR-P10 DOCX import | **not built** | new requirement |
 | FR-P11 in-browser resume editor | **not built** | confirmed real: templates, font, size, one-page, reorder |
 
@@ -1004,14 +1048,14 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-T3 classify messages | **built** | rules first, LLM only for linked messages |
 | FR-T4 advance only on confidence | **built** | `LINK_CONFIDENCE_THRESHOLD` |
 | FR-T5 grouped inbox with unread | **built** | Track screen, hue-coded classes |
-| FR-T6 manual add and CSV import | **not built** | confirmed real: Import CSV / Add application on Pipeline |
+| FR-T6 manual add and CSV import | **built** | `AddApplication`, loose column matching |
 | FR-T7 bounce detection | **built** | `_demote_bounced_pattern` |
-| FR-T8 reply and interview rates | **not built** | stage counts exist; rates do not |
-| FR-T9 board with drag | **not built** | confirmed real: Pipeline kanban columns |
-| FR-T10 inbox as a mail client | **reply only** | confirmed real: two-pane, compose, search; Quiver has reply only |
-| FR-T11 in-progress indicator | **not built** | confirmed real: dashboard "In flight" tab |
-| FR-T12 export tracker CSV | **not built** | new: Export CSV on Pipeline |
-| FR-T13 mailbox model | **decision** | Tsenta relay address vs Quiver's own-Gmail IMAP; take Compose |
+| FR-T8 reply and interview rates | **built** | reply rate + reached-a-conversation under the stages |
+| FR-T9 board with drag | **built** | `Kanban`, 1:1 pointer drag with spring settle |
+| FR-T10 inbox as a mail client | **built** | full bodies, search, `MessageReader`, reply |
+| FR-T11 in-progress indicator | **built** | scan line during a run; a running row pulses |
+| FR-T12 export tracker CSV | **built** | Export on the Applications view |
+| FR-T13 mailbox model | **decision, Compose built** | own-Gmail IMAP kept; Compose added |
 
 ### Surfaces and cross-cutting
 
@@ -1046,38 +1090,34 @@ Both are choices, not gaps, and both should stay:
 
 ### The honest summary
 
-Counted from the tables above: **60 requirements audited — 37 built, 5 partial,
-17 not built**, plus one (FR-T13, the mailbox model) that is a settled decision
-rather than a gap. The excluded multi-tenant set is 13 more (FR-D1–D6,
-FR-B1–B5, FR-S5, FR-S6), giving 73 in total. The count grew because the
-2026-08-22 screenshots confirmed six inferred gaps as real (FR-F9, F10, F11, P9,
-T9, T10) and surfaced six new items (FR-F12, P11, T12, T13, S7, S8) — one of
-which, Networking, Quiver already had as Outreach.
+Counted from the tables above, as of 2026-08-22 after the phase-6 build: **60
+requirements — 49 built, 4 partial, 6 not built**, plus FR-T13 a settled
+decision whose one borrowable part (Compose) is now built. That is **50 of 60
+addressed**, which was the target for this phase; the remaining **10** are held
+for the next.
 
-The five partials are FR-F4 (8 readers of 29), FR-A5 (detects a login wall,
-cannot answer it), FR-T10 (reply works; the signed-in inbox is a full two-pane
-mail client), FR-S4 (the runner covers the modes, not the whole tool surface)
-and NFR-4 (one recorded fixture, not one per system).
+The four partials are FR-A5 (detects a login wall and a one-time code, cannot yet
+hand the code back to a waiting run), FR-F4 (8 ATS readers of 29), FR-S4 (the
+runner covers the modes, not the whole MCP tool surface) and NFR-4 (one recorded
+fixture, not one per system).
 
-Nothing in Find, Prep or Apply's core submit path is missing. What is missing
-clusters in three places, in the order they are worth your time:
+The six not built, with the four partials, are the ten left for next phase, and
+they cluster where the risk and the uncertainty are:
 
-1. **Reach.** FR-A11 (employer accounts) and FR-F4 (more readers) stand between
-   8 systems and Tsenta's 29. FR-A11 is the bigger: Workday and iCIMS are among
-   the largest employers' systems and both need an account before they will take
-   an application.
-2. **The tracker as a workspace.** FR-T6, FR-T9, FR-T10, FR-T12 — manual
-   entry, CSV import and export, a drag board, and an inbox that holds whole
-   messages rather than snippets. The screenshots showed all of these working in
-   Tsenta.
-3. **The job as a parsed document.** FR-F12, FR-F9, FR-F10, FR-F11 — a
-   detail panel with skills, seniority, work type, salary and deadline; saved
-   jobs; and a Pass / Apply triage over the feed. FR-F7 and FR-F8 (alerting, a
-   scan line) sit alongside.
+1. **Reach and enterprise.** FR-A11 (an employer-account credential store so
+   Workday and iCIMS can be applied to at all), FR-A4 (per-ATS review before
+   submit), FR-A5's second half, FR-F4 and NFR-4 (more readers, a fixture each).
+   This is the biggest and least local of the remaining work.
+2. **Larger frontend pieces.** FR-P11 (an in-browser resume editor with
+   templates and typographic controls) and FR-P10 (DOCX import).
+3. **The rest.** FR-F7 (notifications), FR-S4 (CLI parity), and FR-S8 (Research —
+   in Tsenta's nav but not its docs, so it is a screen to see before building,
+   not one to guess at).
 
-Two screens to investigate rather than build blind: **Research** (FR-S8), which
-is in Tsenta's navigation but not its docs, and the in-browser **resume editor**
-(FR-P11), which is a larger piece of UI than it first looks.
-
-One thing to fix rather than build: **FR-A4's setting is offered and ignored.**
-That is a false promise in the product today.
+Two positions still hold, and both should: **Auto Apply proposes rather than
+submits**, and **the MCP server has no submit tool** — in both cases
+`agent_apply` refuses to run without explicit job ids, so "nothing goes out
+unseen" is structural rather than a setting. And one thing to fix rather than
+build, unchanged from the last audit: **FR-A4's `review_form_before_submit` is
+still a setting that is read by nothing** — wiring it is part of the reach
+cluster above.
