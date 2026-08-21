@@ -6,6 +6,7 @@ The agent loop.
   apply     fill and submit the forms for specific jobs the user chose
   outreach  research each verified contact, write a personal email, send it
   tasks     drain the retry queue: failed JD fetches, resume builds, greylists
+  inbox     read replies, link them to applications, move the pipeline on
 
 Applying is user-triggered only. Discovery and resume generation are safe to
 automate; submitting an application on someone's behalf without them asking is
@@ -29,8 +30,8 @@ import time
 import traceback
 from typing import Any, Callable
 
-from . import (applier, categories, experience, jobdesc, matcher, outreach,
-               people as people_mod, sources, store, tailor)
+from . import (applier, categories, experience, inbox as inbox_mod, jobdesc,
+               matcher, outreach, people as people_mod, sources, store, tailor)
 
 
 # A bare Windows console defaults to cp1252 and chokes on anything non-ASCII
@@ -509,7 +510,8 @@ def drain_tasks(limit: int = 50, *, log: Callable[[str], None] = _log) -> dict[s
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
-    ap.add_argument("mode", choices=["discover", "apply", "resumes", "outreach", "tasks"])
+    ap.add_argument("mode",
+                    choices=["discover", "apply", "resumes", "outreach", "tasks", "inbox"])
     ap.add_argument("--sources", default="yc,hn,remote,hidden",
                     help="comma list: yc, hn, remote, hidden")
     ap.add_argument("--limit", type=int, default=25)
@@ -561,6 +563,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "tasks":
             _log(_rule("Draining the retry queue"))
             stats["tasks"] = drain_tasks(limit=max(args.limit, 50))
+
+        if args.mode == "inbox":
+            _log(_rule("Reading replies"))
+            stats["inbox"] = inbox_mod.sync(days=args.max_age or 30,
+                                            limit=max(args.limit, 50))
 
         if args.mode == "outreach":
             _log(_rule("Cold outreach"))

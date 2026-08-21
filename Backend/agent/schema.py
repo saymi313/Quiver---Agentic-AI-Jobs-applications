@@ -88,7 +88,81 @@ PERSON_FIELDS = (
 APPLICATION_FIELDS = (
     "job_id", "company_id", "job_hash", "status", "resume_path", "cover_letter",
     "fields_filled", "unanswered", "screenshot", "error", "dry_run",
+    # Where this application sits in the hiring pipeline, and the thread that
+    # moved it there. `tracker_status` is the user's view; `status` above is
+    # the machine's record of the submission attempt itself.
+    "tracker_status", "message_id", "last_message_at",
 )
+
+# --------------------------------------------------------------------------
+# Application lifecycle
+# --------------------------------------------------------------------------
+#
+# The submission attempt, as a state machine. Terminal means terminal: an
+# application ends `submitted` or `failed` and nothing else, so a caller can
+# stop polling on either without wondering whether a third outcome exists.
+#
+# `needs_review` is the state that previously had no name. A form the agent
+# filled but could not honestly finish — an unanswerable required question, a
+# login wall, a one-time code — was recorded as `failed`, which conflated "we
+# tried and the site rejected it" with "we stopped and are waiting for you".
+
+APPLICATION_STATUSES = ("queued", "running", "needs_review", "submitted", "failed")
+
+APPLICATION_STATUS_HELP: dict[str, str] = {
+    "queued": "Accepted, not started.",
+    "running": "In progress.",
+    "needs_review": "Paused. Answers are waiting on your decision.",
+    "submitted": "Terminal, success. The form was accepted.",
+    "failed": "Terminal. Nothing was submitted.",
+}
+
+TERMINAL_APPLICATION_STATUSES = ("submitted", "failed")
+
+# Rows written before the state machine existed carry the old vocabulary.
+LEGACY_APPLICATION_STATUS: dict[str, str] = {
+    "pending": "queued",
+    "filled": "needs_review",
+    "skipped": "failed",
+}
+
+# --------------------------------------------------------------------------
+# Pipeline tracking
+# --------------------------------------------------------------------------
+#
+# Where an application has got to, from the candidate's point of view. This is
+# the column the user edits by hand; the agent only advances it when it links a
+# message to an application with high confidence, and never overrides a value
+# the user set themselves.
+
+TRACKER_STATUSES = ("applied", "interviewing", "offer", "rejected", "ghosted")
+
+# What an incoming message *is*. Classified rules-first, because a phrase table
+# answers the large majority for nothing and the LLM budget is small.
+MESSAGE_CLASSES = (
+    "acknowledgment", "interview", "assessment", "offer",
+    "rejection", "reminder", "verification", "bounce", "other",
+)
+
+# A class maps to a pipeline stage only where the meaning is unambiguous. An
+# assessment or a reminder says nothing certain about the stage, so it moves
+# nothing.
+CLASS_TO_TRACKER: dict[str, str] = {
+    "interview": "interviewing",
+    "assessment": "interviewing",
+    "offer": "offer",
+    "rejection": "rejected",
+}
+
+MESSAGE_FIELDS = (
+    "application_id", "job_id", "company_id", "message_id", "thread_id",
+    "from_addr", "from_domain", "subject", "snippet", "klass", "confidence",
+    "received_at", "read_at", "linked_by",
+)
+
+# Below this, a link is a guess: the message is stored for the user to read but
+# moves nothing on its own.
+LINK_CONFIDENCE_THRESHOLD = 0.75
 
 OUTREACH_FIELDS = (
     "person_id", "company_id", "to_email", "subject", "body", "research_notes",
@@ -179,6 +253,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "enabled": False,
         "discover_every_hours": 6,
         "tasks_every_minutes": 30,
+        # Reading the mailbox is cheap and the answer is time-sensitive: an
+        # interview invitation sitting unseen for six hours is the one failure
+        # mode this whole feature exists to prevent.
+        "inbox_every_minutes": 20,
         "sources": ["yc", "hn", "remote", "hidden"],
         "discover_limit": 25,
         # Local hours [start, end) during which nothing fires.

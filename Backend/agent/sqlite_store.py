@@ -32,7 +32,8 @@ from typing import Any, Iterable, Iterator
 from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
-                     OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now, retry_policy,
+                     LEGACY_APPLICATION_STATUS, MESSAGE_FIELDS, OUTREACH_FIELDS,
+                     PERSON_FIELDS, TRACKER_STATUSES, merge_settings, now, retry_policy,
                      with_job_defaults)
 
 # Overridable so the test suite can point the store at a throwaway file.
@@ -176,6 +177,26 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at      TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id  INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+    job_id          INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+    company_id      INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+    message_id      TEXT,                   -- RFC 5322 Message-ID, the join key
+    thread_id       TEXT,                   -- In-Reply-To / References root
+    from_addr       TEXT,
+    from_domain     TEXT,
+    subject         TEXT,
+    snippet         TEXT,
+    klass           TEXT,                   -- see schema.MESSAGE_CLASSES
+    confidence      REAL,                   -- 0-1 that the link is right
+    linked_by       TEXT,                   -- thread | domain | company | none
+    received_at     TEXT,
+    read_at         TEXT,
+    created_at      TEXT NOT NULL,
+    UNIQUE(message_id)
+);
+
 CREATE TABLE IF NOT EXISTS llm_usage (
     day             TEXT NOT NULL,          -- UTC date, YYYY-MM-DD
     purpose         TEXT NOT NULL,          -- apply | classify | tailor | ...
@@ -203,6 +224,9 @@ CREATE INDEX IF NOT EXISTS idx_people_status ON people(email_status);
 CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach(status);
 CREATE INDEX IF NOT EXISTS idx_app_hash ON applications(job_hash);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_messages_app ON messages(application_id);
+CREATE INDEX IF NOT EXISTS idx_messages_klass ON messages(klass, received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_tracker ON applications(tracker_status);
 """
 
 # Columns added after the first release, applied to existing databases on open.
@@ -220,6 +244,10 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("jobs", "resume_built_at TEXT"),
     ("jobs", "applied_at TEXT"),
     ("jobs", "failure_reason TEXT"),
+    # Pipeline tracking, added with the inbox.
+    ("applications", "tracker_status TEXT"),
+    ("applications", "message_id TEXT"),
+    ("applications", "last_message_at TEXT"),
 ]
 
 
@@ -831,7 +859,13 @@ def record_application(data: dict[str, Any]) -> int:
     for key in ("fields_filled", "unanswered"):
         if isinstance(payload.get(key), (dict, list)):
             payload[key] = json.dumps(payload[key])
+    payload["status"] = LEGACY_APPLICATION_STATUS.get(payload.get("status") or "",
+                                                      payload.get("status"))
     payload["dry_run"] = 1 if payload.get("dry_run") else 0
+    # A submitted application enters the pipeline at "applied"; anything else
+    # has not reached an employer, so it has no pipeline stage at all.
+    if not payload.get("tracker_status") and payload.get("status") == "submitted":
+        payload["tracker_status"] = "applied"
     payload["created_at"] = now()
     payload["submitted_at"] = now() if payload.get("status") == "submitted" else None
 
@@ -871,6 +905,138 @@ def list_outreach(limit: int = 100) -> list[dict[str, Any]]:
         "LEFT JOIN people p ON p.id = o.person_id "
         "LEFT JOIN companies c ON c.id = o.company_id "
         "ORDER BY o.created_at DESC LIMIT ?", (limit,)))
+
+
+# --------------------------------------------------------------------------
+# Pipeline tracking
+# --------------------------------------------------------------------------
+
+def application(app_id: int) -> dict[str, Any] | None:
+    return _row(_conn().execute(
+        "SELECT a.*, j.title, j.url, j.location, c.name AS company_name, c.domain "
+        "FROM applications a "
+        "LEFT JOIN jobs j ON j.id = a.job_id "
+        "LEFT JOIN companies c ON c.id = a.company_id "
+        "WHERE a.id = ?", (app_id,)).fetchone())
+
+
+def set_application_status(app_id: int, status: str, error: str | None = None) -> None:
+    """Move an application along its submission state machine."""
+    status = LEGACY_APPLICATION_STATUS.get(status, status)
+    with tx() as c:
+        c.execute(
+            "UPDATE applications SET status=?, error=COALESCE(?, error), "
+            "submitted_at=CASE WHEN ?='submitted' THEN ? ELSE submitted_at END, "
+            "tracker_status=CASE WHEN ?='submitted' AND tracker_status IS NULL "
+            "                    THEN 'applied' ELSE tracker_status END "
+            "WHERE id=?",
+            (status, error, status, now(), status, app_id))
+
+
+def set_tracker_status(app_id: int, status: str) -> bool:
+    """Set the pipeline stage. Returns False for a status outside the set."""
+    if status not in TRACKER_STATUSES:
+        return False
+    with tx() as c:
+        c.execute("UPDATE applications SET tracker_status=? WHERE id=?", (status, app_id))
+    return True
+
+
+def tracked_applications(limit: int = 500) -> list[dict[str, Any]]:
+    """Every application that reached an employer, newest first."""
+    return _rows(_conn().execute(
+        "SELECT a.*, j.title, j.url, j.location, j.role_category, "
+        "       c.name AS company_name, c.domain, "
+        "       (SELECT COUNT(*) FROM messages m WHERE m.application_id = a.id) AS message_count "
+        "FROM applications a "
+        "LEFT JOIN jobs j ON j.id = a.job_id "
+        "LEFT JOIN companies c ON c.id = a.company_id "
+        "WHERE a.status = 'submitted' OR a.tracker_status IS NOT NULL "
+        "ORDER BY COALESCE(a.last_message_at, a.submitted_at, a.created_at) DESC "
+        "LIMIT ?", (limit,)))
+
+
+def applications_for_linking() -> list[dict[str, Any]]:
+    """The candidate set an incoming message could belong to.
+
+    Deliberately every submitted application rather than a recent window: a
+    rejection can arrive months later, and matching it to the wrong company is
+    worse than matching it late."""
+    return _rows(_conn().execute(
+        "SELECT a.id, a.job_id, a.company_id, a.message_id, a.tracker_status, "
+        "       a.submitted_at, j.title, c.name AS company_name, c.domain "
+        "FROM applications a "
+        "LEFT JOIN jobs j ON j.id = a.job_id "
+        "LEFT JOIN companies c ON c.id = a.company_id "
+        "WHERE a.status = 'submitted'"))
+
+
+def record_message(data: dict[str, Any]) -> int | None:
+    """Store one inbox message. Idempotent on Message-ID."""
+    payload = {k: data.get(k) for k in MESSAGE_FIELDS}
+    payload["created_at"] = now()
+    cols = ", ".join(payload)
+    marks = ", ".join("?" for _ in payload)
+    with tx() as c:
+        cur = c.execute(
+            f"INSERT INTO messages ({cols}) VALUES ({marks}) "
+            f"ON CONFLICT(message_id) DO NOTHING", tuple(payload.values()))
+        if not cur.rowcount:
+            return None
+        if payload.get("application_id"):
+            c.execute(
+                "UPDATE applications SET last_message_at=? WHERE id=?",
+                (payload.get("received_at") or now(), payload["application_id"]))
+        return int(cur.lastrowid)
+
+
+def list_messages(limit: int = 200, klass: str | None = None,
+                  unread_only: bool = False) -> list[dict[str, Any]]:
+    sql = ("SELECT m.*, j.title, c.name AS company_name, a.tracker_status "
+           "FROM messages m "
+           "LEFT JOIN applications a ON a.id = m.application_id "
+           "LEFT JOIN jobs j ON j.id = m.job_id "
+           "LEFT JOIN companies c ON c.id = m.company_id")
+    where, args = [], []
+    if klass:
+        where.append("m.klass = ?")
+        args.append(klass)
+    if unread_only:
+        where.append("m.read_at IS NULL")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY COALESCE(m.received_at, m.created_at) DESC LIMIT ?"
+    args.append(limit)
+    return _rows(_conn().execute(sql, args))
+
+
+def unread_count() -> int:
+    row = _conn().execute("SELECT COUNT(*) FROM messages WHERE read_at IS NULL").fetchone()
+    return int(row[0]) if row else 0
+
+
+def mark_message_read(message_row_id: int, read: bool = True) -> None:
+    with tx() as c:
+        c.execute("UPDATE messages SET read_at=? WHERE id=?",
+                  (now() if read else None, message_row_id))
+
+
+def known_message_ids() -> set[str]:
+    """Message-IDs already stored, so a re-scan costs no parsing."""
+    return {r[0] for r in
+            _conn().execute("SELECT message_id FROM messages WHERE message_id IS NOT NULL")
+            if r[0]}
+
+
+def tracker_counts() -> dict[str, int]:
+    return {str(r[0]): int(r[1]) for r in _conn().execute(
+        "SELECT tracker_status, COUNT(*) FROM applications "
+        "WHERE tracker_status IS NOT NULL GROUP BY tracker_status")}
+
+
+def message_counts() -> dict[str, int]:
+    return {str(r[0]): int(r[1]) for r in _conn().execute(
+        "SELECT klass, COUNT(*) FROM messages WHERE klass IS NOT NULL GROUP BY klass")}
 
 
 # --------------------------------------------------------------------------

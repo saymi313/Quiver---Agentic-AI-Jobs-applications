@@ -77,6 +77,15 @@ RUNNABLE = {
                        "us to retry later.",
         "flags": ["limit"],
     },
+    "agent_inbox": {
+        "label": "Read replies",
+        "module": "agent.runner",
+        "subcommand": "inbox",
+        "description": "Read your mailbox, match each employer reply to the application it "
+                       "belongs to, work out whether it is an interview, an assessment, an "
+                       "offer or a rejection, and move the pipeline on.",
+        "flags": ["limit", "max_age"],
+    },
     "agent_outreach": {
         "label": "Cold email founders",
         "module": "agent.runner",

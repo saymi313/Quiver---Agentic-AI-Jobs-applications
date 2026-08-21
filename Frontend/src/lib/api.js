@@ -78,4 +78,28 @@ export const api = {
     }).then(handle),
 
   agentLlmTest: () => fetch(`${BASE}/api/agent/llm-test`, { method: 'POST' }).then(handle),
+
+  // ---- track ----
+  agentTracker: (limit = 300) => fetch(`${BASE}/api/agent/tracker?limit=${limit}`).then(handle),
+
+  agentInbox: ({ limit = 100, klass, unread } = {}) => {
+    const p = new URLSearchParams({ limit: String(limit) })
+    if (klass) p.set('klass', klass)
+    if (unread) p.set('unread', 'true')
+    return fetch(`${BASE}/api/agent/inbox?${p}`).then(handle)
+  },
+
+  agentSetStage: (appId, status) =>
+    fetch(`${BASE}/api/agent/application/${appId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).then(handle),
+
+  agentMarkRead: (messageId, read = true) =>
+    fetch(`${BASE}/api/agent/message/${messageId}/read?read=${read}`, {
+      method: 'POST',
+    }).then(handle),
+
+  agentReceipt: (appId) => fetch(`${BASE}/api/agent/receipt/${appId}`).then(handle),
 }

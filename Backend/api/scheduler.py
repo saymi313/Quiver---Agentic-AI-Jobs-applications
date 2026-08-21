@@ -12,7 +12,8 @@ Safety properties, enforced structurally rather than by configuration:
 
   * Only the tasks in SCHEDULABLE can ever be dispatched. `agent_apply` is not
     in the tuple, so no schedule, however misconfigured, can submit a real
-    application. Applying stays a human decision.
+    application. Applying stays a human decision. Reading the mailbox is in the
+    tuple because it only ever reads: the IMAP connection is opened readonly.
   * Off by default. `schedule.enabled` starts False; turning on unattended
     runs is a decision the user makes in Settings, not a side effect.
   * One job at a time. If anything is already running — scheduled or manual —
@@ -33,7 +34,7 @@ from .jobs import manager
 
 # The complete set of schedulable work. Everything else — applying above all —
 # is structurally unreachable from here.
-SCHEDULABLE = ("agent_discover", "agent_tasks")
+SCHEDULABLE = ("agent_discover", "agent_tasks", "agent_inbox")
 
 POLL_S = 60
 _STATE_KEY = "schedule_state"
@@ -73,6 +74,8 @@ def _due(kind: str, sched: dict[str, Any], state: dict[str, Any],
     last = _parse(state.get(f"last_{kind}_at"))
     if kind == "discover":
         interval_s = max(1, int(sched.get("discover_every_hours") or 6)) * 3600
+    elif kind == "inbox":
+        interval_s = max(1, int(sched.get("inbox_every_minutes") or 20)) * 60
     else:
         interval_s = max(1, int(sched.get("tasks_every_minutes") or 30)) * 60
     return last is None or (now - last).total_seconds() >= interval_s
@@ -108,6 +111,19 @@ def _tick() -> None:
         state["last_discover_at"] = now.isoformat()
         store.set_setting(_STATE_KEY, state)
         return
+
+    # Replies before retries. An interview invitation is time-sensitive in a
+    # way a failed JD fetch is not, and reading the mailbox is cheap.
+    if _due("inbox", sched, state, now):
+        from agent import inbox
+
+        ok, _ = inbox.available()
+        if ok:
+            _dispatch("agent_inbox", {"limit": 100, "max_age": 14})
+        state["last_inbox_at"] = now.isoformat()
+        store.set_setting(_STATE_KEY, state)
+        if ok:
+            return
 
     if _due("tasks", sched, state, now):
         # Skip the subprocess entirely when the queue has nothing due-able.

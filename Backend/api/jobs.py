@@ -100,6 +100,8 @@ class JobManager:
 
         if "limit" in allowed and options.get("limit") is not None:
             cmd += ["--limit", str(max(1, min(int(options["limit"]), 500)))]
+        if "max_age" in allowed and options.get("max_age") is not None:
+            cmd += ["--max-age", str(max(1, min(int(options["max_age"]), 365)))]
         if "delay" in allowed and options.get("delay") is not None:
             cmd += ["--delay", str(max(0, min(int(options["delay"]), 3600)))]
         if "vertical" in allowed and options.get("vertical"):

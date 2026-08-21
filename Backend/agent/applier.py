@@ -1102,9 +1102,11 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             result["screenshot"] = shot.name
 
             if blocking:
-                # A failure, not a skip. The user needs to see which question
-                # stopped it so they can add the answer to their profile.
-                result["status"] = "failed"
+                # Not a failure and not a skip: the agent filled what it could
+                # and stopped at a question it cannot answer truthfully. That
+                # is `needs_review` — it is waiting on the user, and saying
+                # "failed" made a pause look like a rejection.
+                result["status"] = "needs_review"
                 result["error"] = ("unsupported form: required question(s) the profile cannot "
                                    "answer truthfully — "
                                    + "; ".join(f.get("label", "?")[:60] for f in blocking[:3]))
@@ -1112,7 +1114,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 return result
 
             if dry_run:
-                result["status"] = "filled"
+                result["status"] = "needs_review"
                 log(f"[apply]   DRY RUN — form complete, not submitted ({shot.name})")
                 return result
 
@@ -1145,7 +1147,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     log(f"[apply]   submit input was not clickable ({type(exc).__name__})")
 
             if not submitted:
-                result["status"] = "filled"
+                result["status"] = "needs_review"
                 result["error"] = "Form filled but no submit button was found."
                 log("[apply]   filled but could not find a submit button")
                 return result
@@ -1236,8 +1238,11 @@ def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
         store.set_job_applied(job_id, resume_version=job.get("resume_version") or "")
     elif status == "failed":
         store.mark_job_failed(job_id, result.get("error") or "could not complete the form")
-    elif status == "filled":
-        # Dry run, or filled but no submit button. Either way it is not applied.
+    elif status == "needs_review":
+        # The agent filled what it could and stopped: a dry run by design, an
+        # unanswerable required question, or no submit button. The job goes
+        # back to the actionable pool rather than being written off, because
+        # the next attempt may well succeed once the profile answers it.
         store.set_job_status(job_id, "tracked" if dry_run else "failed")
         if not dry_run:
             store.mark_job_failed(job_id, result.get("error")

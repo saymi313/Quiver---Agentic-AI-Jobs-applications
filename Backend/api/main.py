@@ -739,6 +739,117 @@ def agent_screenshot(name: str):
 
 
 # --------------------------------------------------------------------------
+# Track: the pipeline and the reply inbox
+# --------------------------------------------------------------------------
+
+@app.get("/api/agent/tracker")
+def agent_tracker(limit: int = 300) -> dict[str, Any]:
+    """Every application that reached an employer, with its pipeline stage."""
+    from agent import inbox, store as agent_store
+    from agent.schema import MESSAGE_CLASSES, TRACKER_STATUSES
+
+    agent_store.init()
+    ok, reason = inbox.available()
+    return {
+        "rows": agent_store.tracked_applications(max(1, min(limit, 1000))),
+        "counts": agent_store.tracker_counts(),
+        "messageCounts": agent_store.message_counts(),
+        "unread": agent_store.unread_count(),
+        "stages": list(TRACKER_STATUSES),
+        "classes": list(MESSAGE_CLASSES),
+        "mailbox": {"available": ok, "reason": reason},
+    }
+
+
+@app.get("/api/agent/inbox")
+def agent_inbox(limit: int = 100, klass: str | None = None,
+                unread: bool = False) -> dict[str, Any]:
+    from agent import store as agent_store
+
+    agent_store.init()
+    return {
+        "rows": agent_store.list_messages(max(1, min(limit, 500)),
+                                          klass=klass, unread_only=unread),
+        "unread": agent_store.unread_count(),
+        "counts": agent_store.message_counts(),
+    }
+
+
+class TrackerPatch(BaseModel):
+    status: str
+
+
+@app.patch("/api/agent/application/{app_id}/status")
+def agent_set_tracker(app_id: int, patch: TrackerPatch) -> dict[str, Any]:
+    """Move an application by hand. The agent never overrides this."""
+    from agent import store as agent_store
+    from agent.schema import TRACKER_STATUSES
+
+    agent_store.init()
+    if not agent_store.set_tracker_status(app_id, patch.status):
+        raise HTTPException(400, f"Status must be one of {', '.join(TRACKER_STATUSES)}.")
+    return {"ok": True, "id": app_id, "status": patch.status}
+
+
+@app.post("/api/agent/message/{message_id}/read")
+def agent_mark_read(message_id: int, read: bool = True) -> dict[str, Any]:
+    from agent import store as agent_store
+
+    agent_store.init()
+    agent_store.mark_message_read(message_id, read)
+    return {"ok": True, "unread": agent_store.unread_count()}
+
+
+@app.get("/api/agent/receipt/{app_id}")
+def agent_receipt(app_id: int) -> dict[str, Any]:
+    """
+    What was actually submitted, after the fact.
+
+    The applier has always captured this; until now there was nowhere to read
+    it. An application you cannot inspect is one you have to take on trust.
+    """
+    from agent import store as agent_store
+    from agent.schema import APPLICATION_STATUS_HELP
+
+    agent_store.init()
+    row = agent_store.application(app_id)
+    if not row:
+        raise HTTPException(404, "No such application.")
+
+    def _parsed(value: Any) -> Any:
+        if isinstance(value, str) and value.strip().startswith(("{", "[")):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return value
+        return value
+
+    filled = _parsed(row.get("fields_filled")) or {}
+    unanswered = _parsed(row.get("unanswered")) or []
+    return {
+        "id": row.get("id"),
+        "status": row.get("status"),
+        "statusHelp": APPLICATION_STATUS_HELP.get(row.get("status") or "", ""),
+        "trackerStatus": row.get("tracker_status"),
+        "title": row.get("title"),
+        "company": row.get("company_name"),
+        "url": row.get("url"),
+        "submittedAt": row.get("submitted_at"),
+        "dryRun": bool(row.get("dry_run")),
+        "resume": Path(row["resume_path"]).name if row.get("resume_path") else None,
+        "coverLetter": row.get("cover_letter") or "",
+        "error": row.get("error"),
+        "screenshot": row.get("screenshot"),
+        "fields": filled if isinstance(filled, dict) else {},
+        "unanswered": unanswered if isinstance(unanswered, list) else [],
+        "counts": {
+            "filled": len(filled) if isinstance(filled, dict) else 0,
+            "skipped": len(unanswered) if isinstance(unanswered, list) else 0,
+        },
+    }
+
+
+# --------------------------------------------------------------------------
 # Static build (production: `npm run build` inside ../Frontend)
 # --------------------------------------------------------------------------
 

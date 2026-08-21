@@ -3,18 +3,24 @@ import { AnimatePresence, motion as m } from 'motion/react'
 import JobsTab from './tabs/JobsTab'
 import ResumeTab from './tabs/ResumeTab'
 import OutreachTab from './tabs/OutreachTab'
+import TrackTab from './tabs/TrackTab'
 import { api } from './lib/api'
 import { springFor } from './lib/motion'
 import { Note, Status } from './components/ui'
 
 /*
-  Three screens, named for the job they do rather than for the machinery
-  behind them. The old labels ("Agent AI", "Auto Mode") described the
-  implementation, which left the user guessing what each page was for.
+  Four screens, named for the job they do rather than for the machinery behind
+  them. The old labels ("Agent AI", "Auto Mode") described the implementation,
+  which left the user guessing what each page was for.
+
+  They are in the order the work happens: find a role, aim a resume at it,
+  watch what comes back, and reach out directly where there is someone to
+  reach.
 */
 const TABS = [
   { key: 'jobs', label: 'Jobs' },
   { key: 'resume', label: 'Resume' },
+  { key: 'track', label: 'Track' },
   { key: 'outreach', label: 'Outreach' },
 ]
 
@@ -135,6 +141,8 @@ export default function App() {
                 <JobsTab />
               ) : tab === 'resume' ? (
                 <ResumeTab aiStatus={health?.ai} />
+              ) : tab === 'track' ? (
+                <TrackTab />
               ) : (
                 <OutreachTab />
               )}

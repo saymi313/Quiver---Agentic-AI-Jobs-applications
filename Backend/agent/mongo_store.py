@@ -29,6 +29,7 @@ from typing import Any, Iterable
 from api.config import BASE_DIR
 
 from .schema import (APPLICATION_FIELDS, COMPANY_FIELDS, DEFAULT_SETTINGS, JOB_FIELDS,
+                     LEGACY_APPLICATION_STATUS, MESSAGE_FIELDS, TRACKER_STATUSES,
                      with_job_defaults,
                      OUTREACH_FIELDS, PERSON_FIELDS, merge_settings, now,
                      retry_policy)
@@ -119,6 +120,11 @@ def _ensure_indexes(db) -> None:
     db.tasks.create_index([("id", ASCENDING)], unique=True)
     db.tasks.create_index([("dedupe_key", ASCENDING)], unique=True, sparse=True)
     db.tasks.create_index([("status", ASCENDING), ("next_run_at", ASCENDING)])
+    db.messages.create_index([("id", ASCENDING)], unique=True)
+    db.messages.create_index([("message_id", ASCENDING)], unique=True, sparse=True)
+    db.messages.create_index([("application_id", ASCENDING)])
+    db.messages.create_index([("klass", ASCENDING), ("received_at", DESCENDING)])
+    db.applications.create_index([("tracker_status", ASCENDING)])
 
 
 def init() -> None:
@@ -700,7 +706,11 @@ def record_application(data: dict[str, Any]) -> int:
     for key in ("fields_filled", "unanswered"):
         if isinstance(payload.get(key), (dict, list)):
             payload[key] = json.dumps(payload[key])
+    payload["status"] = LEGACY_APPLICATION_STATUS.get(payload.get("status") or "",
+                                                      payload.get("status"))
     payload["dry_run"] = 1 if payload.get("dry_run") else 0
+    if not payload.get("tracker_status") and payload.get("status") == "submitted":
+        payload["tracker_status"] = "applied"
     doc = {**payload, "id": _next_id("applications"), "created_at": now(),
            "submitted_at": now() if payload.get("status") == "submitted" else None}
     _connect().applications.insert_one(doc)
@@ -790,3 +800,161 @@ def stats() -> dict[str, Any]:
         "outreachSent": db.outreach.count_documents({"status": "sent"}),
         "outreachReplied": db.outreach.count_documents({"status": "replied"}),
     }
+
+
+# --------------------------------------------------------------------------
+# Pipeline tracking — mirrors sqlite_store function for function
+# --------------------------------------------------------------------------
+
+def _job_titles() -> dict[int, dict[str, Any]]:
+    return {int(j["id"]): j for j in _connect().jobs.find(
+        {}, {"id": 1, "title": 1, "url": 1, "location": 1, "role_category": 1})}
+
+
+def application(app_id: int) -> dict[str, Any] | None:
+    row = _clean(_connect().applications.find_one({"id": int(app_id)}))
+    if not row:
+        return None
+    job = _job_titles().get(int(row.get("job_id") or -1)) or {}
+    company = _company_names().get(int(row.get("company_id") or -1)) or {}
+    row["title"] = job.get("title")
+    row["url"] = job.get("url")
+    row["location"] = job.get("location")
+    row["company_name"] = company.get("name")
+    row["domain"] = company.get("domain")
+    return row
+
+
+def set_application_status(app_id: int, status: str, error: str | None = None) -> None:
+    status = LEGACY_APPLICATION_STATUS.get(status, status)
+    updates: dict[str, Any] = {"status": status}
+    if error is not None:
+        updates["error"] = error
+    if status == "submitted":
+        updates["submitted_at"] = now()
+    db = _connect()
+    current = db.applications.find_one({"id": int(app_id)}, {"tracker_status": 1}) or {}
+    if status == "submitted" and not current.get("tracker_status"):
+        updates["tracker_status"] = "applied"
+    db.applications.update_one({"id": int(app_id)}, {"$set": updates})
+
+
+def set_tracker_status(app_id: int, status: str) -> bool:
+    if status not in TRACKER_STATUSES:
+        return False
+    _connect().applications.update_one(
+        {"id": int(app_id)}, {"$set": {"tracker_status": status}})
+    return True
+
+
+def tracked_applications(limit: int = 500) -> list[dict[str, Any]]:
+    db = _connect()
+    rows = _cleaned(db.applications.find(
+        {"$or": [{"status": "submitted"}, {"tracker_status": {"$ne": None}}]}))
+    counts: dict[int, int] = {}
+    for doc in db.messages.aggregate(
+            [{"$group": {"_id": "$application_id", "n": {"$sum": 1}}}]):
+        if doc["_id"] is not None:
+            counts[int(doc["_id"])] = int(doc["n"])
+    jobs, companies = _job_titles(), _company_names()
+    for r in rows:
+        job = jobs.get(int(r.get("job_id") or -1)) or {}
+        company = companies.get(int(r.get("company_id") or -1)) or {}
+        r["title"] = job.get("title")
+        r["url"] = job.get("url")
+        r["location"] = job.get("location")
+        r["role_category"] = job.get("role_category")
+        r["company_name"] = company.get("name")
+        r["domain"] = company.get("domain")
+        r["message_count"] = counts.get(int(r.get("id") or -1), 0)
+    rows.sort(key=lambda r: (r.get("last_message_at") or r.get("submitted_at")
+                             or r.get("created_at") or ""), reverse=True)
+    return rows[:int(limit)]
+
+
+def applications_for_linking() -> list[dict[str, Any]]:
+    db = _connect()
+    rows = _cleaned(db.applications.find(
+        {"status": "submitted"},
+        {"id": 1, "job_id": 1, "company_id": 1, "message_id": 1,
+         "tracker_status": 1, "submitted_at": 1}))
+    jobs, companies = _job_titles(), _company_names()
+    for r in rows:
+        job = jobs.get(int(r.get("job_id") or -1)) or {}
+        company = companies.get(int(r.get("company_id") or -1)) or {}
+        r["title"] = job.get("title")
+        r["company_name"] = company.get("name")
+        r["domain"] = company.get("domain")
+    return rows
+
+
+def record_message(data: dict[str, Any]) -> int | None:
+    db = _connect()
+    payload = {k: data.get(k) for k in MESSAGE_FIELDS}
+    if payload.get("message_id") and db.messages.find_one(
+            {"message_id": payload["message_id"]}, {"id": 1}):
+        return None
+    doc = {**payload, "id": _next_id("messages"), "created_at": now()}
+    try:
+        db.messages.insert_one(doc)
+    except Exception:
+        return None          # lost a race on the unique index
+    if payload.get("application_id"):
+        db.applications.update_one(
+            {"id": int(payload["application_id"])},
+            {"$set": {"last_message_at": payload.get("received_at") or now()}})
+    return int(doc["id"])
+
+
+def list_messages(limit: int = 200, klass: str | None = None,
+                  unread_only: bool = False) -> list[dict[str, Any]]:
+    db = _connect()
+    query: dict[str, Any] = {}
+    if klass:
+        query["klass"] = klass
+    if unread_only:
+        query["read_at"] = None
+    rows = _cleaned(db.messages.find(query).sort("received_at", -1).limit(int(limit)))
+    jobs, companies = _job_titles(), _company_names()
+    stages = {int(a["id"]): a.get("tracker_status")
+              for a in db.applications.find({}, {"id": 1, "tracker_status": 1})}
+    for r in rows:
+        job = jobs.get(int(r.get("job_id") or -1)) or {}
+        company = companies.get(int(r.get("company_id") or -1)) or {}
+        r["title"] = job.get("title")
+        r["company_name"] = company.get("name")
+        r["tracker_status"] = stages.get(int(r.get("application_id") or -1))
+    return rows
+
+
+def unread_count() -> int:
+    return int(_connect().messages.count_documents({"read_at": None}))
+
+
+def mark_message_read(message_row_id: int, read: bool = True) -> None:
+    _connect().messages.update_one(
+        {"id": int(message_row_id)}, {"$set": {"read_at": now() if read else None}})
+
+
+def known_message_ids() -> set[str]:
+    return {d["message_id"] for d in
+            _connect().messages.find({"message_id": {"$ne": None}}, {"message_id": 1})
+            if d.get("message_id")}
+
+
+def tracker_counts() -> dict[str, int]:
+    out: dict[str, int] = {}
+    for doc in _connect().applications.aggregate(
+            [{"$match": {"tracker_status": {"$ne": None}}},
+             {"$group": {"_id": "$tracker_status", "n": {"$sum": 1}}}]):
+        out[str(doc["_id"])] = int(doc["n"])
+    return out
+
+
+def message_counts() -> dict[str, int]:
+    out: dict[str, int] = {}
+    for doc in _connect().messages.aggregate(
+            [{"$match": {"klass": {"$ne": None}}},
+             {"$group": {"_id": "$klass", "n": {"$sum": 1}}}]):
+        out[str(doc["_id"])] = int(doc["n"])
+    return out

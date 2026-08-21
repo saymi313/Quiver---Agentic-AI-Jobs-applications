@@ -266,11 +266,11 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A1 (P0).** Submission works across the systems in 2.2, tracked as a per-ATS
   capability table with two independent flags, `detects` and `submits`. That table
   is visible in the UI so the user knows before selecting a job.
-- **FR-A2 (P0).** Adopt Tsenta's application status machine in place of Quiver's:
+- **FR-A2 (P0) [DONE].** Adopt Tsenta's application status machine in place of Quiver's:
   `queued`, `running`, `needs_review`, `submitted`, `failed`. Map the existing
   `pending/filled/submitted/failed/skipped` onto it. `needs_review` is the state
   Quiver currently has no name for and instead treats as failure.
-- **FR-A3 (P0).** Every application produces a receipt: fields filled, fields
+- **FR-A3 (P0) [DONE].** Every application produces a receipt: fields filled, fields
   skipped, generated answers, documents submitted, final result, viewable
   afterwards. *Data is captured; there is no receipt view.*
 - **FR-A4 (P1).** Optional review of the filled form before submit, on systems where
@@ -296,27 +296,30 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 ### 5.4 Track
 
-- **FR-T1 (P0).** Tracker statuses **Applied, Interviewing, Offer, Rejected,
+- **FR-T1 (P0) [DONE].** Tracker statuses **Applied, Interviewing, Offer, Rejected,
   Ghosted**, editable by hand at any time. *Not built.*
-- **FR-T2 (P0).** Read the user's mailbox over IMAP with the existing Gmail app
+- **FR-T2 (P0) [DONE].** Read the user's mailbox over IMAP with the existing Gmail app
   password and link each incoming message to the application it belongs to, by
   `Message-ID`, thread, sender domain and company name.
-- **FR-T3 (P0).** Classify each linked message as one of: acknowledgment, interview,
+- **FR-T3 (P0) [DONE].** Classify each linked message as one of: acknowledgment, interview,
   assessment, offer, rejection, reminder, verification. Rule-first with the LLM as
   fallback, to stay inside the daily budget.
-- **FR-T4 (P0).** Advance tracker status automatically only on a high-confidence
+- **FR-T4 (P0) [DONE].** Advance tracker status automatically only on a high-confidence
   link. Otherwise leave the status alone and mark the message for review.
-- **FR-T5 (P1).** An application inbox grouped by the classes in FR-T3, with an
+- **FR-T5 (P1) [DONE].** An application inbox grouped by the classes in FR-T3, with an
   unread count.
 - **FR-T6 (P1).** Manual add and CSV import of applications made outside Quiver.
-- **FR-T7 (P1).** Bounce detection: a hard bounce demotes the guessed address
+  *Not built in Phase 1: it only matters once there is a history worth importing,
+  and nothing else depends on it.*
+- **FR-T7 (P1) [DONE].** Bounce detection: a hard bounce demotes the guessed address
   pattern for that domain so the same wrong pattern is not reused.
 - **FR-T8 (P2).** Pipeline view: counts by stage, reply rate and interview rate by
-  source, category and match decile.
+  source, category and match decile. *Counts by stage are built; the rates need
+  more applications than exist to mean anything yet.*
 
 ### 5.5 Surfaces
 
-- **FR-S1 (P0).** Web dashboard covering Find, Prep, Apply and Track as four
+- **FR-S1 (P0) [DONE].** Web dashboard covering Find, Prep, Apply and Track as four
   first-class areas. *Three tabs exist; Track does not.*
 - **FR-S2 (P1).** Chrome extension: on any job posting, one click sends the URL to
   Quiver, which detects the ATS, tailors and applies. The highest-value surface
@@ -416,7 +419,7 @@ Scope decisions taken on 2026-08-21:
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
 | **0** | Apple design foundation | Motion primitives, press feedback, typography, retrofit of the existing tabs | **Completed 2026-08-21** |
-| **1** | Close the loop (Track) | FR-T1, FR-T2, FR-T3, FR-T4, FR-T5, FR-T6, FR-T7, FR-A2, FR-A3, FR-S1 | Not started |
+| **1** | Close the loop (Track) | FR-T1, FR-T2, FR-T3, FR-T4, FR-T5, FR-T7, FR-A2, FR-A3, FR-S1 | **Completed 2026-08-21** |
 | **2** | Control over what is sent | FR-P1, FR-P2, FR-P3, FR-P8, FR-F2, FR-F3 | Not started |
 | **3** | Reach | FR-A1, FR-F4, FR-A5, FR-A10, NFR-4 | Not started |
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | Not started |
@@ -451,6 +454,45 @@ because a transition always plays out to its target before accepting a new one.
 Verified by interrupting a Disclosure 90ms into opening: it reverses from 172px
 rather than completing first. Reduced motion verified separately — the press
 transform disappears, the opacity feedback stays.
+
+### Phase 1 — what was built
+
+A fourth screen, **Track**, and the machinery behind it. `agent/inbox.py` reads
+the mailbox over IMAP using the Gmail app password the outreach sender already
+uses, links each message to the application it belongs to, classifies it, and
+advances the pipeline. `python -m agent.runner inbox` runs it; the scheduler
+fires it every 20 minutes, ahead of the retry queue, because an interview
+invitation is time-sensitive in a way a failed JD fetch is not. The IMAP
+connection is opened read-only, which is why it was safe to make schedulable.
+
+Linking is ranked rather than guessed: a threaded reply scores 0.98, a matching
+sender domain 0.9, and a company name in the subject only 0.65 — too low to move
+anything. Only a link at or above 0.75 may advance a stage, and only for a class
+whose meaning is unambiguous; an acknowledgment or a reminder moves nothing.
+Stages never run backwards, and a stage set by hand is never overruled.
+
+Two things were found by running it against the real mailbox rather than
+fixtures. First, classifying every message through the model turned a
+seven-second scan into a four-minute one and would have drained a day's LLM
+budget on ordinary mail, so the model is now asked only about messages that
+already linked to an application, capped at eight per run. Second, and more
+important: almost no recruiting mail arrives from the employer's own domain.
+The real Interfere rejection came from `no-reply@ashbyhq.com`, scored 0.65 as a
+mere subject match, and moved nothing. Known ATS mailer domains are now
+recognised, because an ATS only writes to you about applications you actually
+made — with that fixed, the same message correctly moved the Interfere
+application to **rejected**.
+
+The application state machine moved to Tsenta's (`queued`, `running`,
+`needs_review`, `submitted`, `failed`). `needs_review` is the state that
+previously had no name: a form the agent filled but stopped on, which was being
+recorded as `failed` and so made a pause look like a rejection.
+`/api/agent/receipt/{id}` finally exposes what was actually submitted — the
+applier had been capturing it all along with nowhere to read it.
+
+Verified end to end against the live mailbox: 16 messages read in 19 seconds,
+2 linked, the Interfere rejection detected and the stage moved. 75 tests, with
+25 new ones covering the linker, the rule classifier and the ATS-mailer case.
 
 ---
 
