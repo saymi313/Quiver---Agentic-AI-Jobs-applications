@@ -10,6 +10,7 @@ no posting that closes underneath the test.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -157,3 +158,36 @@ def test_no_captcha_wall_on_a_normal_form(greenhouse_page):
     """The regression that mattered most: Greenhouse's invisible reCAPTCHA
     badge was read as a challenge, so every one of its forms was abandoned."""
     assert applier.diagnose_wall(greenhouse_page) is None
+
+
+# ------------------------------------------------------- no keys in fixtures
+
+# Shapes that secret scanners flag, and that a recorded page really can carry.
+# A live Greenhouse board ships eight of these in `window.ENV`, and the first
+# recording of one committed a Google Picker key straight into the repository.
+CREDENTIAL_SHAPES = re.compile(
+    r"AIza[A-Za-z0-9_-]{35}"                 # Google API key
+    r"|sk-[A-Za-z0-9]{20,}"                  # OpenAI-style
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"         # Slack
+    r"|gh[pousr]_[A-Za-z0-9]{36}"            # GitHub
+    r"|AKIA[0-9A-Z]{16}"                     # AWS access key id
+    r"|mongodb\+srv://[^:\s]+:[^@\s]+@"      # connection string with a password
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+)
+
+
+@pytest.mark.parametrize("path", sorted(FIXTURES.glob("*.html")),
+                         ids=lambda p: p.name)
+def test_recorded_fixtures_carry_no_credentials(path):
+    """
+    A fixture is a real page someone else served us, and real pages carry keys.
+
+    Redact them when re-recording. They belong to the company whose page it is,
+    they are public to every visitor of that site, and none of that stops a
+    scanner — or makes it our place to republish them.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    found = CREDENTIAL_SHAPES.findall(text)
+    assert not found, (
+        f"{path.name} carries {len(found)} credential-shaped value(s). "
+        f"Replace them with a placeholder before committing.")
