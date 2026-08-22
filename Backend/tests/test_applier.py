@@ -86,6 +86,29 @@ def test_apply_link_text_matches_german_labels():
         assert A.APPLY_LINK_TEXT.match(label), label
 
 
+def test_auth_urls_are_recognised_as_board_account_pages():
+    for url in ["https://weworkremotely.com/job-seekers/account/register",
+                "https://board.example.com/users/sign_in",
+                "https://x.com/login?next=/apply", "https://y.com/signup"]:
+        assert A.AUTH_URL.search(url), url
+    # An employer's real application path is not an account page.
+    assert not A.AUTH_URL.search("https://boards.greenhouse.io/acme/jobs/123")
+
+
+def test_board_wall_markers_catch_account_gating():
+    for text in ["Create an account to view full job details",
+                 "Sign up to apply for this role",
+                 "Log in to view the full job"]:
+        assert A.BOARD_WALL_MARKERS.search(text), text
+
+
+def test_a_board_wall_is_needs_you_not_a_failure():
+    bucket, _ = A._classify_outcome(
+        {"status": "failed", "board_wall": True, "error": "board needs an account"},
+        dry_run=False)
+    assert bucket == "needs_you"
+
+
 def test_outcome_classifier_buckets_each_result():
     c = A._classify_outcome
     assert c({"status": "submitted"}, dry_run=False)[0] == "submitted"

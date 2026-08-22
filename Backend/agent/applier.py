@@ -827,6 +827,64 @@ REVEAL_FORM_LABELS = re.compile(
     r"zur bewerbung|postuler)\s*$", re.I)
 
 
+# The board's own account plumbing. An "Apply" that leads here is a dead end —
+# a login or sign-up on the aggregator itself, not the employer's form — so it is
+# skipped when choosing what to follow, and recognised as an account wall when a
+# run lands on one.
+AUTH_URL = re.compile(
+    r"/(account|register|signup|sign[-_]?up|log[-_]?in|sign[-_]?in|signin|"
+    r"job[-_]?seekers?|auth|users?/sign|create[-_]?account|session)\b", re.I)
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlparse
+    try:
+        return (urlparse(url).netloc or "").lower().removeprefix("www.")
+    except Exception:
+        return ""
+
+
+# The board makes you join *it* before it will show the application.
+BOARD_WALL_MARKERS = re.compile(
+    r"create an account to (view|apply|see|access|unlock)|"
+    r"sign ?up to (view|apply|see|access)|register to (view|apply|see)|"
+    r"account (is )?required to (view|apply)|"
+    r"(log ?in|sign ?in) to (view|apply for) (the |this )?(full )?(job|role|position|listing)",
+    re.I)
+
+
+def _board_account_wall(page) -> bool:
+    """
+    Whether the application is gated behind the *board's own* account.
+
+    Some aggregators (WeWorkRemotely) will not show the employer's form at all
+    until you register with them — there is no external apply URL to follow, so
+    this is neither a reachable form nor a broken one. Detected two ways: the
+    page says so in as many words, or every "Apply" link on it points back into
+    the board's own login/sign-up.
+    """
+    try:
+        text = (page.inner_text("body") or "")[:4000]
+    except Exception:
+        text = ""
+    if BOARD_WALL_MARKERS.search(text):
+        return True
+    base = _host(page.url)
+    try:
+        hrefs = page.evaluate(
+            """(pattern) => {
+              const re = new RegExp(pattern, 'i');
+              return Array.from(document.querySelectorAll('a[href]'))
+                .filter(x => re.test((x.innerText || '').trim()))
+                .map(x => x.href);
+            }""", APPLY_LINK_TEXT.pattern)
+    except Exception:
+        hrefs = []
+    apply_hrefs = [h for h in hrefs if h]
+    return bool(apply_hrefs and all(
+        (not _host(h) or _host(h) == base) and AUTH_URL.search(h) for h in apply_hrefs))
+
+
 def looks_like_application(fields: list[dict[str, Any]]) -> bool:
     """
     Whether this set of fields plausibly belongs to a job application.
@@ -887,6 +945,7 @@ def follow_apply_link(page, context, *, log: Callable[[str], None] = print):
     `target=_blank` popup, and an anchor whose href is the employer's site.
     Returns the original page unchanged when there is nothing to follow.
     """
+    base = _host(page.url)
     for role in ("link", "button"):
         candidates = page.get_by_role(role, name=APPLY_LINK_TEXT)
         count = candidates.count()
@@ -896,6 +955,16 @@ def follow_apply_link(page, context, *, log: Callable[[str], None] = print):
                 if not item.is_visible():
                     continue
             except Exception:
+                continue
+
+            # Skip a link that only leads to the board's own account wall — its
+            # "Apply" is a sign-up, not the employer's form. Judged by href, so a
+            # button with no href is still tried.
+            try:
+                href = item.get_attribute("href") or ""
+            except Exception:
+                href = ""
+            if href and AUTH_URL.search(href) and (not _host(href) or _host(href) == base):
                 continue
 
             before = page.url
@@ -920,25 +989,42 @@ def follow_apply_link(page, context, *, log: Callable[[str], None] = print):
             except Exception:
                 pass
 
-    # Nothing clickable: fall back to the href of an apply-ish anchor.
+    # Nothing clickable: fall back to the href of an apply-ish anchor. Rank the
+    # candidates — the employer's own form lives off the aggregator's domain, so
+    # an off-site link is preferred, and the board's own account/login/register
+    # pages are dropped entirely. Following one of those (WeWorkRemotely's "Apply
+    # now" points at its own sign-up) is how a run ended up on a registration
+    # page with no form.
+    base = _host(page.url)
     try:
-        href = page.evaluate(
+        hrefs = page.evaluate(
             """(pattern) => {
               const re = new RegExp(pattern, 'i');
-              const a = Array.from(document.querySelectorAll('a[href]'))
-                .find(x => re.test((x.innerText || '').trim()));
-              return a ? a.href : '';
+              return Array.from(document.querySelectorAll('a[href]'))
+                .filter(x => re.test((x.innerText || '').trim()))
+                .map(x => x.href);
             }""", APPLY_LINK_TEXT.pattern)
     except Exception:
-        href = ""
-    if href and href != page.url:
+        hrefs = []
+
+    def rank(url: str) -> int:
+        off_domain = _host(url) and _host(url) != base
+        if AUTH_URL.search(url) and not off_domain:
+            return -1                    # the board's own account wall: never
+        return 2 if off_domain else 1    # employer's site first, same-site next
+
+    candidates = sorted({h for h in hrefs if h and h != page.url},
+                        key=rank, reverse=True)
+    for href in candidates:
+        if rank(href) < 0:
+            continue
         try:
             page.goto(href, wait_until="domcontentloaded", timeout=25000)
             page.wait_for_timeout(2000)
             log(f"[apply]   followed Apply link to {page.url[:90]}")
             return page
         except Exception:
-            pass
+            continue
     return page
 
 
@@ -1495,9 +1581,17 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 # A dead posting is not a failure to fix: say so plainly and let
                 # it leave the queue, rather than reading as "the agent broke".
                 closed = _posting_closed(page)
+                board_wall = bool(AUTH_URL.search(page.url or "")) or _board_account_wall(page)
                 if closed:
                     result["closed"] = True
                     result["error"] = closed
+                elif board_wall:
+                    result["board_wall"] = True
+                    result["error"] = (
+                        f"this board requires an account to see the application "
+                        f"({_host(page.url)} sign-up) — apply by hand, or add a login "
+                        f"for this board under Settings › Employer accounts so the agent "
+                        f"can sign in next time")
                 elif fields:
                     result["error"] = (
                         "no application form found — this listing sends applicants to an "
@@ -1510,7 +1604,8 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 shot = SHOT_DIR / f"job{job.get('id')}_noform.png"
                 page.screenshot(path=str(shot), full_page=True)
                 result["screenshot"] = shot.name
-                log(f"[apply]   {'CLOSED' if closed else 'FAILED'} — {result['error']}")
+                log(f"[apply]   {'CLOSED' if closed else 'BOARD WALL' if board_wall else 'FAILED'}"
+                    f" — {result['error']}")
                 return result
 
             filled: dict[str, str] = {}
@@ -1825,6 +1920,8 @@ def _classify_outcome(result: dict[str, Any], *, dry_run: bool) -> tuple[str, st
     error = (result.get("error") or "").strip()
     if result.get("closed"):
         return "closed", "posting taken down — removed from your queue"
+    if result.get("board_wall"):
+        return "needs_you", error or "this board needs an account — apply by hand or add a login"
     if status == "submitted":
         return "submitted", ""
     if status == "needs_review":

@@ -15,6 +15,7 @@ Score (0-100):
 from __future__ import annotations
 
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -218,17 +219,29 @@ def regate_experience(*, log=print) -> dict[str, int]:
     min_years = int(targeting.get("min_years_experience", 1))
     max_years = int(targeting.get("max_years_experience", 3))
     allow_interns = bool(targeting.get("allow_internships", False))
+    max_age_days = int(targeting.get("max_age_days", 3) or 0)
+    stale_cutoff = int(time.time() - max_age_days * 86400) if max_age_days > 0 else 0
 
     jobs = store.list_jobs(limit=2000, status="not_applied")
     demoted = 0
     for job in jobs:
+        posted = job.get("posted_ts")
+        if stale_cutoff and posted and posted < stale_cutoff:
+            days = int((time.time() - posted) / 86400)
+            store.set_job_fit(job["id"], 0.0,
+                              f"Freshness gate: posted {days} days ago", "skipped")
+            demoted += 1
+            log(f"[regate] skipped {job.get('company_name') or '?'} — "
+                f"{job['title'][:48]} (posted {days}d ago)")
+            continue
         fits, why = experience.verdict(job, min_years=min_years, max_years=max_years,
                                        allow_internships=allow_interns)
         if not fits:
             store.set_job_fit(job["id"], 0.0, f"Experience gate: {why}", "skipped")
             demoted += 1
             log(f"[regate] skipped {job.get('company_name') or '?'} — {job['title'][:48]} ({why})")
-    log(f"[regate] {demoted} of {len(jobs)} actionable job(s) now filtered out by the experience gate")
+    log(f"[regate] {demoted} of {len(jobs)} actionable job(s) now filtered out "
+        f"by the freshness and experience gates")
     return {"checked": len(jobs), "demoted": demoted}
 
 
@@ -244,11 +257,27 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
     min_years = int(targeting.get("min_years_experience", 1))
     max_years = int(targeting.get("max_years_experience", 3))
     allow_interns = bool(targeting.get("allow_internships", False))
+    max_age_days = int(targeting.get("max_age_days", 3) or 0)
+    stale_cutoff = int(time.time() - max_age_days * 86400) if max_age_days > 0 else 0
 
     jobs = store.jobs_needing_scoring(limit)
-    matched = skipped = out_of_range = 0
+    matched = skipped = out_of_range = stale = 0
 
     for job in jobs:
+        # Freshness is the first gate. A three-week-old posting has hundreds of
+        # applicants already in the pile, so it is filtered out of the actionable
+        # list here — not only at apply-selection, where the dashboard and a
+        # direct apply could still reach it. A posting with no date is left to
+        # the experience/fit gates rather than assumed stale.
+        posted = job.get("posted_ts")
+        if stale_cutoff and posted and posted < stale_cutoff:
+            days = int((time.time() - posted) / 86400)
+            stale += 1
+            store.set_job_fit(job["id"], 0.0,
+                              f"Freshness gate: posted {days} days ago, past your "
+                              f"{max_age_days}-day window", "skipped")
+            continue
+
         # Experience is a hard gate, checked before scoring: a role demanding
         # eight years is not a candidate no matter how well the keywords line up.
         fits, why = experience.verdict(job, min_years=min_years, max_years=max_years,
@@ -281,6 +310,7 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
             skipped += 1
 
     log(f"[match] {matched} matched, {skipped} below the {threshold:.0f} threshold, "
-        f"{out_of_range} outside the {min_years}-{max_years} year window")
+        f"{out_of_range} outside the {min_years}-{max_years} year window, "
+        f"{stale} past the {max_age_days}-day freshness window")
     return {"scored": len(jobs), "matched": matched, "skipped": skipped,
-            "outOfExperienceRange": out_of_range}
+            "outOfExperienceRange": out_of_range, "stale": stale}
