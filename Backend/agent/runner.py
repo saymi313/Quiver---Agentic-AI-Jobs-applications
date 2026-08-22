@@ -512,11 +512,79 @@ def drain_tasks(limit: int = 50, *, log: Callable[[str], None] = _log) -> dict[s
 # CLI
 # --------------------------------------------------------------------------
 
+QUERY_MODES = {"jobs", "job", "pipeline", "messages", "profile", "portals",
+               "proposals", "status", "track-url", "set-stage",
+               "resume-changes", "approve-resume"}
+
+
+def _run_query(args) -> int:
+    """
+    Dispatch a query command to the matching MCP tool and print what it returns.
+
+    Parity with the MCP surface is guaranteed by construction: these call the
+    exact functions the MCP server exposes, so a change to one changes both.
+    """
+    try:
+        from . import mcp_server as m
+    except Exception as exc:  # the mcp package is an optional dependency
+        _log(f"[agent] the query commands need the mcp package installed ({exc}).")
+        return 1
+
+    try:
+        if args.mode == "jobs":
+            out = m.list_jobs(status=args.status or "matched", category=args.category,
+                              limit=args.limit)
+        elif args.mode == "job":
+            out = m.get_job(args.id)
+        elif args.mode == "pipeline":
+            out = m.pipeline()
+        elif args.mode == "messages":
+            out = m.read_inbox(klass=args.klass, unread_only=args.unread, limit=args.limit)
+        elif args.mode == "profile":
+            out = m.get_profile()
+        elif args.mode == "portals":
+            out = m.supported_portals()
+        elif args.mode == "proposals":
+            out = m.list_proposals()
+        elif args.mode == "status":
+            out = m.status()
+        elif args.mode == "track-url":
+            if not args.url:
+                _log("[agent] track-url needs --url")
+                return 2
+            out = m.track_job_url(args.url)
+        elif args.mode == "set-stage":
+            if not args.id or not args.stage:
+                _log("[agent] set-stage needs --id and --stage")
+                return 2
+            out = m.set_stage(args.id, args.stage)
+        elif args.mode == "resume-changes":
+            out = m.resume_changes(args.id)
+        elif args.mode == "approve-resume":
+            out = m.approve_resume(args.id)
+        else:
+            _log(f"[agent] unknown query {args.mode}")
+            return 2
+    except Exception as exc:
+        _log(f"[agent] {args.mode} failed: {type(exc).__name__}: {exc}")
+        return 1
+
+    print(out)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
     ap.add_argument("mode",
                     choices=["discover", "apply", "resumes", "outreach", "tasks",
-                             "inbox", "propose"])
+                             "inbox", "propose",
+                             # Read/act commands that mirror the MCP tool surface,
+                             # so anything the agent can do over MCP can be done
+                             # from the shell (FR-S4). These dispatch to the same
+                             # mcp_server functions, so the two cannot drift.
+                             "jobs", "job", "pipeline", "messages", "profile",
+                             "portals", "proposals", "status", "track-url",
+                             "set-stage", "resume-changes", "approve-resume"])
     ap.add_argument("--sources", default="yc,hn,remote,hidden",
                     help="comma list: yc, hn, remote, hidden")
     ap.add_argument("--limit", type=int, default=25)
@@ -537,9 +605,23 @@ def main(argv: list[str] | None = None) -> int:
                     help="comma list of job ids to apply to (per-job or bulk apply)")
     ap.add_argument("--no-resumes", action="store_true",
                     help="discover without generating tailored resumes")
+    # Arguments for the query commands.
+    ap.add_argument("--status", default="", help="status filter for `jobs`")
+    ap.add_argument("--category", default="", help="category filter for `jobs`")
+    ap.add_argument("--klass", default="", help="message class filter for `messages`")
+    ap.add_argument("--unread", action="store_true", help="unread only, for `messages`")
+    ap.add_argument("--url", default="", help="job URL for `track-url`")
+    ap.add_argument("--id", type=int, default=0, help="a job or application id")
+    ap.add_argument("--stage", default="", help="pipeline stage for `set-stage`")
     args = ap.parse_args(argv)
 
     store.init()
+
+    # Query commands print and exit, without opening a run row — they read and
+    # act on the store exactly as the MCP tools do, because they call the very
+    # same functions.
+    if args.mode in QUERY_MODES:
+        return _run_query(args)
     which = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
     job_ids = [int(x) for x in args.job_ids.replace(" ", "").split(",") if x.strip().isdigit()]
     run_id = store.start_run(args.mode, vars(args))
