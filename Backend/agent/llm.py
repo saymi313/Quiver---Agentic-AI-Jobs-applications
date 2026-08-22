@@ -210,8 +210,75 @@ GEMINI_FALLBACKS = [
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
 ]
-GROQ_FALLBACKS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+# Verified live against this key, 2026-08: Groq has retired the Llama chat
+# models for this account and serves GPT-OSS and Qwen instead. Ordered strongest
+# first, with a smaller/faster one behind it.
+GROQ_FALLBACKS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
 OPENROUTER_FALLBACKS = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-2-9b-it:free"]
+
+# Where each provider's key is read from the environment. Groq accepts the
+# common "GROK" misspelling too — a key that starts with `gsk_` is a Groq key
+# whichever way the variable was named.
+_PROVIDER_ENV: dict[str, tuple[str, ...]] = {
+    "gemini": ("GEMINI_API_KEY",),
+    "groq": ("GROQ_API_KEY", "GROK_API_KEY"),
+    "openrouter": ("OPENROUTER_API_KEY",),
+}
+# The order fallback providers are tried in after the configured one.
+_FALLBACK_ORDER = ("gemini", "groq", "openrouter")
+
+
+def _env_key(provider: str) -> str:
+    """The API key for a provider from the environment, or empty."""
+    for name in _PROVIDER_ENV.get(provider, ()):
+        value = os.environ.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def _provider_chain(cfg: dict[str, Any]) -> list[tuple[str, str]]:
+    """
+    The providers to try, in order: the configured one, then every other free
+    provider whose key is present.
+
+    This is the cross-provider fallback — when Gemini's daily quota is spent, the
+    call rolls to Groq (or OpenRouter) rather than failing. A provider with no
+    key is skipped; Ollama needs none, so it stands on its own.
+    """
+    primary = cfg.get("provider", "gemini")
+    chain: list[tuple[str, str]] = []
+    primary_key = (cfg.get("api_key") or "").strip() or _env_key(primary)
+    if primary == "ollama" or primary_key:
+        chain.append((primary, primary_key))
+    for provider in _FALLBACK_ORDER:
+        if provider == primary:
+            continue
+        key = _env_key(provider)
+        if key:
+            chain.append((provider, key))
+    return chain
+
+
+def _call_provider(provider: str, key: str, model: str, prompt: str,
+                   system: str, schema: dict | None) -> str:
+    """One real call to a single provider, throttled. Raises LLMError on failure."""
+    if provider == "gemini":
+        _throttle()
+        return _gemini(prompt, system, schema, model or GEMINI_FALLBACKS[0], key)
+    if provider == "groq":
+        _throttle()
+        return _openai_compatible(GROQ_URL, prompt, system, schema,
+                                  model or GROQ_FALLBACKS[0], key, GROQ_FALLBACKS)
+    if provider == "openrouter":
+        _throttle()
+        return _openai_compatible(
+            OPENROUTER_URL, prompt, system, schema,
+            model or OPENROUTER_FALLBACKS[0], key, OPENROUTER_FALLBACKS,
+            {"HTTP-Referer": "http://localhost", "X-Title": "Quiver"})
+    if provider == "ollama":
+        return _ollama(prompt, system, schema, model)
+    raise LLMError(f"Unknown provider '{provider}'.")
 
 
 class LLMError(RuntimeError):
@@ -234,13 +301,7 @@ def config() -> dict[str, Any]:
     cfg = dict(store.DEFAULT_SETTINGS["llm"])
     cfg.update(store.get_setting("llm", {}) or {})
     if not cfg.get("api_key"):
-        env_key = {
-            "gemini": "GEMINI_API_KEY",
-            "groq": "GROQ_API_KEY",
-            "openrouter": "OPENROUTER_API_KEY",
-        }.get(cfg.get("provider", ""), "")
-        if env_key:
-            cfg["api_key"] = os.environ.get(env_key, "")
+        cfg["api_key"] = _env_key(cfg.get("provider", ""))
     return cfg
 
 
@@ -253,14 +314,21 @@ def available() -> tuple[bool, str]:
             return True, "Ollama is running locally."
         except Exception:
             return False, "Ollama is not reachable on localhost:11434. Start it with `ollama serve`."
-    if not cfg.get("api_key"):
-        where = {
-            "gemini": "https://aistudio.google.com/apikey",
-            "groq": "https://console.groq.com/keys",
-            "openrouter": "https://openrouter.ai/keys",
-        }.get(provider, "")
-        return False, f"No API key set for {provider}. Get a free one at {where} and paste it in Settings."
-    return True, f"{provider} ready ({cfg.get('model')})."
+    chain = _provider_chain(cfg)
+    keyed = [p for p, k in chain if k]
+    if keyed:
+        head = chain[0][0]
+        extra = [p for p in keyed if p != head]
+        msg = f"{head} ready ({cfg.get('model')})."
+        if extra:
+            msg += f" Fallback: {', '.join(extra)}."
+        return True, msg
+    where = {
+        "gemini": "https://aistudio.google.com/apikey",
+        "groq": "https://console.groq.com/keys",
+        "openrouter": "https://openrouter.ai/keys",
+    }.get(provider, "")
+    return False, f"No API key set for {provider}. Get a free one at {where} and paste it in Settings."
 
 
 # --------------------------------------------------------------------------
@@ -444,17 +512,23 @@ def complete(prompt: str, *, system: str = "", schema: dict | None = None,
     of their prompt (classification, JD analysis), never for creative ones.
     """
     cfg = config()
-    provider = cfg.get("provider", "gemini")
     model = cfg.get("model") or ""
-    key = cfg.get("api_key") or ""
 
-    ok, reason = available()
-    if not ok:
-        raise LLMError(reason)
+    # The providers to try, in order: the configured one, then any other free
+    # provider whose key is present. When Gemini's daily quota is spent, the call
+    # rolls to the next rather than failing — the fallback the user asked for.
+    chain = _provider_chain(cfg)
+    if not chain:
+        ok, reason = available()
+        raise LLMError(reason if not ok else "No LLM provider is configured.")
+
+    primary = chain[0][0]
 
     cache_key = ""
     if cacheable:
-        cache_key = _cache_key(provider, model, prompt, system, schema)
+        # Keyed on the primary provider/model so it stays stable run to run — a
+        # cached answer is a cached answer whichever provider produced it.
+        cache_key = _cache_key(primary, model, prompt, system, schema)
         try:
             hit = store.llm_cache_get(cache_key)
         except Exception:
@@ -462,57 +536,46 @@ def complete(prompt: str, *, system: str = "", schema: dict | None = None,
         if hit is not None:
             return hit
 
-    # Ollama is local and free — no budget, no throttle.
-    if provider != "ollama":
+    # The daily budget is a ceiling on real calls, counted across providers, so
+    # it is checked once up front. Ollama is local and free, so it is exempt.
+    if primary != "ollama":
         _check_budget(purpose)
 
     last: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            if provider == "gemini":
-                _throttle()
-                out = _gemini(prompt, system, schema, model or GEMINI_FALLBACKS[0], key)
-            elif provider == "groq":
-                _throttle()
-                out = _openai_compatible(GROQ_URL, prompt, system, schema,
-                                         model or GROQ_FALLBACKS[0], key, GROQ_FALLBACKS)
-            elif provider == "openrouter":
-                _throttle()
-                out = _openai_compatible(
-                    OPENROUTER_URL, prompt, system, schema,
-                    model or OPENROUTER_FALLBACKS[0], key, OPENROUTER_FALLBACKS,
-                    {"HTTP-Referer": "http://localhost", "X-Title": "Quiver"})
-            elif provider == "ollama":
-                out = _ollama(prompt, system, schema, model)
-            else:
-                raise LLMError(f"Unknown provider '{provider}'.")
-
-            if provider != "ollama":
-                try:
-                    store.llm_spend(purpose)
-                except Exception:
-                    pass          # a failed usage write must not fail the answer
-            if cacheable and cache_key and out.strip():
-                try:
-                    store.llm_cache_put(cache_key, out)
-                except Exception:
-                    pass
-            return out
-        except LLMError as exc:
-            last = exc
-            # Only a per-minute limit is worth waiting out. A spent daily
-            # quota used to cost 40 seconds of sleeping before failing anyway.
-            if getattr(exc, "retryable", False) and attempt < retries:
-                time.sleep(20 * (attempt + 1))
-                continue
-            raise
-        except requests.RequestException as exc:
-            last = exc
-            if attempt < retries:
-                time.sleep(3 * (attempt + 1))
-                continue
-            raise LLMError(f"Network error talking to {provider}: {exc}") from exc
-    raise LLMError(str(last))
+    for provider, key in chain:
+        # Only the configured provider uses the configured model name; a fallback
+        # provider would not know it, so it picks its own default.
+        pmodel = model if provider == primary else ""
+        for attempt in range(retries + 1):
+            try:
+                out = _call_provider(provider, key, pmodel, prompt, system, schema)
+                if provider != "ollama":
+                    try:
+                        store.llm_spend(purpose)
+                    except Exception:
+                        pass          # a failed usage write must not fail the answer
+                if cacheable and cache_key and out.strip():
+                    try:
+                        store.llm_cache_put(cache_key, out)
+                    except Exception:
+                        pass
+                return out
+            except LLMError as exc:
+                last = exc
+                # A per-minute limit is worth waiting out on the same provider;
+                # anything else — a spent day, a hard error — rolls to the next
+                # provider in the chain instead.
+                if getattr(exc, "retryable", False) and attempt < retries:
+                    time.sleep(20 * (attempt + 1))
+                    continue
+                break
+            except requests.RequestException as exc:
+                last = exc
+                if attempt < retries:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                break
+    raise LLMError(str(last) if last else "No LLM provider produced an answer.")
 
 
 def complete_json(prompt: str, schema: dict, *, system: str = "",

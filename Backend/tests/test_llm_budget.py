@@ -42,6 +42,47 @@ def fake(monkeypatch):
     return use
 
 
+# ------------------------------------------------ cross-provider fallback
+
+def test_env_key_accepts_the_grok_misspelling(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("GROK_API_KEY", "gsk_test")
+    assert L._env_key("groq") == "gsk_test"
+
+
+def test_chain_adds_groq_behind_gemini(monkeypatch):
+    monkeypatch.setenv("GROK_API_KEY", "gsk_test")
+    chain = L._provider_chain({"provider": "gemini", "api_key": "gem_key"})
+    assert [p for p, _ in chain] == ["gemini", "groq"]
+
+
+def test_a_spent_gemini_day_rolls_to_groq(fake, monkeypatch):
+    fake()
+    monkeypatch.setenv("GROK_API_KEY", "gsk_test")
+    monkeypatch.setattr(L, "config",
+                        lambda: {"provider": "gemini", "api_key": "gem_key", "model": ""})
+    monkeypatch.setattr(L, "_throttle", lambda: None)
+    monkeypatch.setattr(L, "_check_budget", lambda purpose: None)
+
+    def spent_gemini(*a, **k):
+        raise L.LLMError("Every Gemini model has spent its free-tier day")
+    monkeypatch.setattr(L, "_gemini", spent_gemini)
+    monkeypatch.setattr(L, "_openai_compatible",
+                        lambda *a, **k: "groq answered")
+
+    assert L.complete("hi", purpose="apply") == "groq answered"
+
+
+def test_no_key_anywhere_raises(fake, monkeypatch):
+    fake()
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GROK_API_KEY", raising=False)
+    monkeypatch.setattr(L, "config",
+                        lambda: {"provider": "gemini", "api_key": "", "model": ""})
+    with pytest.raises(L.LLMError):
+        L.complete("hi", purpose="apply")
+
+
 # --------------------------------------------------------------- budget
 
 def test_bulk_purposes_cut_before_apply(fake):
