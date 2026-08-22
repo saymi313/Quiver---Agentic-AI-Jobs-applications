@@ -209,20 +209,39 @@ export default function ResumeEditor({ profile, initial, open, onClose, onSaved 
         </div>
 
         {/* live preview */}
-        <div className="relative min-h-[24rem] overflow-hidden rounded-md border border-line bg-n-850">
-          {building ? (
-            <div className="absolute inset-0 z-10 grid place-items-center bg-n-950/40">
-              <span className="text-tiny text-n-500">Building…</span>
-            </div>
-          ) : null}
+        <div>
+          <div className="relative min-h-[24rem] overflow-hidden rounded-md border border-line bg-n-850">
+            {building ? (
+              <div className="absolute inset-0 z-10 grid place-items-center bg-n-950/40">
+                <span className="text-tiny text-n-500">Building…</span>
+              </div>
+            ) : null}
+            {url ? (
+              // An <object> renders a blob PDF more reliably than an <iframe>,
+              // and the plain blob URL is used with no `#toolbar` fragment —
+              // Chrome refuses to render a blob-URL PDF once a fragment is
+              // attached, which left this pane blank. The fallback below covers
+              // any browser that still will not embed a PDF at all.
+              <object data={url} type="application/pdf"
+                      className="h-[32rem] w-full lg:h-[36rem]" aria-label="Resume preview">
+                <div className="grid h-[32rem] place-items-center px-6 text-center text-tiny text-n-500">
+                  Your browser will not preview the PDF inline. Open it in a new tab or download it
+                  from the buttons below.
+                </div>
+              </object>
+            ) : (
+              <div className="grid h-[32rem] place-items-center text-tiny text-n-500">
+                {building ? 'Building the first preview…' : 'The preview appears here.'}
+              </div>
+            )}
+          </div>
           {url ? (
-            <iframe title="Resume preview" src={`${url}#toolbar=0&navpanes=0`}
-                    className="h-[32rem] w-full lg:h-[36rem]" />
-          ) : (
-            <div className="grid h-[32rem] place-items-center text-tiny text-n-500">
-              The preview appears here.
-            </div>
-          )}
+            <a href={url} target="_blank" rel="noreferrer"
+               className="press mt-2 inline-flex items-center gap-1.5 text-tiny text-blue-500 hover:underline">
+              <Icon.Doc className="size-3.5" />
+              Open preview in a new tab
+            </a>
+          ) : null}
         </div>
       </div>
     </Sheet>
