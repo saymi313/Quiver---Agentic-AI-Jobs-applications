@@ -228,6 +228,7 @@ class BuildRequest(BaseModel):
     # LaTeX is the primary output: a real .tex plus a compiled PDF.
     useLatex: bool = True
     contentSource: str = "upload"      # upload | profile
+    mode: str = ""                     # off | honest | aggressive (blank = the saved setting)
     # The house standard is a two pager with every project on it. Turning this
     # on squeezes to one page instead.
     onePage: bool = False
@@ -301,8 +302,16 @@ def ats_build(req: BuildRequest) -> dict[str, Any]:
                 content = latex_resume.from_parsed(parsed)
 
             tailor_notes: list[str] = []
+            # The mode picks how far the rewrite travels: off / honest /
+            # aggressive. A blank mode falls back to the saved tailoring setting,
+            # so the Resume-check page and the agent agree by default. `useAi`
+            # off still forces "off" regardless of mode.
+            build_mode = (req.mode or "").strip().lower()
+            if not build_mode:
+                from agent import store as agent_store
+                build_mode = (agent_store.get_setting("tailoring", {}) or {}).get("mode") or "honest"
             tailored = latex_resume.tailor(
-                content, ctx["jd_text"], jd, use_llm=req.useAi,
+                content, ctx["jd_text"], jd, use_llm=req.useAi, mode=build_mode,
                 log=lambda m: tailor_notes.append(m))
             latex_out = latex_resume.build(
                 content, session_dir, stem,

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { api } from '../lib/api'
+import { Segmented } from '../components/apple'
 import {
   Button,
   Checkbox,
@@ -42,6 +43,7 @@ export default function ResumeTab({ aiStatus }) {
   const [error, setError] = useState('')
 
   const [useAi, setUseAi] = useState(true)
+  const [mode, setMode] = useState('honest')
   const [useLatex, setUseLatex] = useState(true)
   const [contentSource, setContentSource] = useState('profile')
   const [onePage, setOnePage] = useState(false)
@@ -80,6 +82,7 @@ export default function ResumeTab({ aiStatus }) {
           sessionId: analysis.sessionId,
           reorderBullets: reorder,
           useAi,
+          mode: useAi ? mode : 'off',
           useLatex,
           contentSource,
           onePage,
@@ -91,7 +94,7 @@ export default function ResumeTab({ aiStatus }) {
     } finally {
       setBuilding(false)
     }
-  }, [analysis, reorder, useAi, useLatex, contentSource, onePage])
+  }, [analysis, reorder, useAi, mode, useLatex, contentSource, onePage])
 
   return (
     <div className="space-y-4">
@@ -265,6 +268,23 @@ export default function ResumeTab({ aiStatus }) {
                     label={`AI rewrite${aiStatus?.model ? ` (${aiStatus.model})` : ''}`}
                     hint="Constrained to facts already in your resume. It will not invent metrics."
                   />
+                  {useAi ? (
+                    <Field
+                      label="How far to rewrite"
+                      hint="Honest rewords what you already wrote; Aggressive reaches harder for the posting's keywords. Neither may claim a skill your resume does not show."
+                    >
+                      <Segmented
+                        size="sm"
+                        ariaLabel="Resume rewrite mode"
+                        value={mode}
+                        onChange={setMode}
+                        options={[
+                          { value: 'honest', label: 'Honest' },
+                          { value: 'aggressive', label: 'Aggressive' },
+                        ]}
+                      />
+                    </Field>
+                  ) : null}
                 </div>
               </div>
             </Disclosure>

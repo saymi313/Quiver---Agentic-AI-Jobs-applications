@@ -224,7 +224,13 @@ def build_and_record(job: dict[str, Any], *, use_llm: bool = True,
     out = build_for_job(job, use_llm=use_llm, mode=mode, profile=profile, log=log)
     if out["ok"]:
         settings = tailoring_settings()
-        approved = settings["auto_approve"] and not out.get("needsReview")
+        # Auto is authoritative, in every mode. Turning it on is an explicit
+        # choice to use the tailored resume without reading it — aggressive
+        # included, which is what the mode control is for. The fact gate still
+        # runs in every mode, so "auto" never means "may invent"; it only means
+        # "do not stop to show me the wording it kept to". With auto off, a
+        # rewrite waits for the review link on the Jobs table.
+        approved = settings["auto_approve"]
         # Nothing was rewritten, so there is nothing to review.
         if not out.get("changes"):
             approved = True

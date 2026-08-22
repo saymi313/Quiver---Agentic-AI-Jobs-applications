@@ -2,6 +2,7 @@ import { useAgentRun } from '../lib/useAgentRun'
 import Console from '../components/Console'
 import TrackedJobs from '../components/TrackedJobs'
 import AddJobByUrl from '../components/AddJobByUrl'
+import ResumeMode from '../components/ResumeMode'
 import { Empty, Note, PageHead, Status, Switch } from '../components/ui'
 
 /*
@@ -49,6 +50,8 @@ export default function JobsTab() {
         onGenerate={generateResumes}
         toolbar={
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <ResumeMode tailoring={overview.settings.tailoring} onChanged={refresh} />
+            <span className="hidden h-5 w-px bg-line sm:block" />
             <Switch
               checked={dryRun}
               onChange={(v) => setRunSetting({ dryRun: v })}
