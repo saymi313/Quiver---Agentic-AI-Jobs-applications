@@ -649,6 +649,23 @@ def jobs_needing_meta(limit: int = 400) -> list[dict[str, Any]]:
     return _attach_company(_cleaned(cur))
 
 
+def unnotified_matches(min_score: float = 75.0, limit: int = 50) -> list[dict[str, Any]]:
+    """Strong, actionable matches the user has not been told about by email yet."""
+    cur = _connect().jobs.find({
+        "notified_at": {"$in": [None]},
+        "fit_score": {"$gte": float(min_score)},
+        "status": {"$nin": ["applied", "failed", "skipped", "duplicate"]},
+    }).sort("fit_score", -1).limit(int(limit))
+    return _attach_company(_cleaned(cur))
+
+
+def mark_notified(job_ids: list[int]) -> None:
+    if not job_ids:
+        return
+    _connect().jobs.update_many(
+        {"id": {"$in": [int(i) for i in job_ids]}}, {"$set": {"notified_at": now()}})
+
+
 def applied_hashes() -> set[str]:
     cur = _connect().applications.find(
         {"job_hash": {"$ne": None}, "status": {"$in": ["submitted", "filled"]}, "dry_run": 0},

@@ -254,6 +254,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "max_years_experience": 3,
         "allow_internships": False,
     },
+    # Being told when a strong match appears, within one scan cycle of it being
+    # found. Two independent channels: a desktop notification while the
+    # dashboard is open, and an email that arrives even when it is not — the one
+    # that matters for a scheduled run nobody is watching.
+    "notify": {
+        "enabled": True,
+        "min_score": 75,
+        "desktop": True,
+        "email": False,
+    },
     # What a manual "Find new jobs" run does. These used to live in the Jobs
     # screen's own React state, which meant the controls had to be on the same
     # page as the button. Storing them lets the button be pressed from anywhere

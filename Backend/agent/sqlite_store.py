@@ -277,6 +277,8 @@ MIGRATIONS: list[tuple[str, str]] = [
     # The full message text, so the inbox is a mail client rather than a list
     # of snippets — read the whole thing, and search it.
     ("messages", "body TEXT"),
+    # When a high-match role was announced by email, so it is announced once.
+    ("jobs", "notified_at TEXT"),
 ]
 
 
@@ -838,6 +840,25 @@ def jobs_needing_meta(limit: int = 400) -> list[dict[str, Any]]:
         "LEFT JOIN companies c ON c.id = j.company_id "
         "WHERE j.skills IS NULL AND j.description IS NOT NULL AND j.description != '' "
         "ORDER BY j.discovered_at DESC LIMIT ?", (limit,)))
+
+
+def unnotified_matches(min_score: float = 75.0, limit: int = 50) -> list[dict[str, Any]]:
+    """Strong, actionable matches the user has not been told about by email yet."""
+    return _job_rows(_conn().execute(
+        "SELECT j.*, c.name AS company_name FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id "
+        "WHERE j.notified_at IS NULL AND COALESCE(j.fit_score, 0) >= ? "
+        "AND j.status NOT IN ('applied','failed','skipped','duplicate') "
+        "ORDER BY j.fit_score DESC LIMIT ?", (float(min_score), limit)))
+
+
+def mark_notified(job_ids: list[int]) -> None:
+    if not job_ids:
+        return
+    marks = ",".join("?" * len(job_ids))
+    with tx() as c:
+        c.execute(f"UPDATE jobs SET notified_at = ? WHERE id IN ({marks})",
+                  [now(), *[int(i) for i in job_ids]])
 
 
 def applied_hashes() -> set[str]:

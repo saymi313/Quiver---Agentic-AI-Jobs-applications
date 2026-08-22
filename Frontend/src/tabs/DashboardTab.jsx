@@ -1,4 +1,5 @@
 import { useAgentRun } from '../lib/useAgentRun'
+import { useMatchAlerts } from '../lib/useMatchAlerts'
 import Console from '../components/Console'
 import ScanLine from '../components/ScanLine'
 import Pipeline from '../components/Pipeline'
@@ -25,6 +26,14 @@ import { Button, Empty, Note, PageHead } from '../components/ui'
 export default function DashboardTab({ onOpenJobs }) {
   const run = useAgentRun()
   const { overview, stream, busy, refreshKey, applyToJobs, findJobs } = run
+
+  // Desktop notifications for strong new matches, while this tab is open.
+  const notify = overview?.settings?.notify || {}
+  useMatchAlerts({
+    enabled: notify.enabled !== false,
+    desktop: notify.desktop !== false,
+    minScore: notify.min_score,
+  })
 
   if (!overview) return <Empty title="Loading" />
 

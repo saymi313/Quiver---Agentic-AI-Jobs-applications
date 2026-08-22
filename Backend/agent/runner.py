@@ -360,6 +360,14 @@ def discover(*, which: list[str], limit: int, find_people: bool,
     # so it costs nothing once the backlog is cleared.
     matcher.enrich_pending(limit=400, log=log)
 
+    # Tell the user about strong new matches within this scan cycle. Email only
+    # here; the desktop channel lives in the browser. Never fatal to the run.
+    try:
+        from . import notify
+        counts.update({"notified": notify.notify_new_matches(log=log)})
+    except Exception as exc:
+        log(f"[notify] skipped: {type(exc).__name__}: {exc}")
+
     # ---- Recruiter contact, per job --------------------------------------
     # Only ever written when a real address was found and verified. A job with
     # no contact keeps an empty field; nothing is guessed.
