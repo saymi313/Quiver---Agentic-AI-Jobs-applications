@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent.experience import required_years
+from agent.experience import required_years, seniority, verdict
 
 
 def test_ranges():
@@ -32,3 +32,30 @@ def test_silence_and_junk():
 
 def test_absurd_numbers_rejected():
     assert required_years("99 years of experience") == (None, None)
+
+
+# -- seniority: the title must win over LinkedIn's coarse level bucket --------
+
+def test_senior_title_beats_a_mid_senior_board_level():
+    # LinkedIn stamps huge numbers of postings "Mid-Senior level", senior ones
+    # included. The title is unambiguous and must win, or these slip the gate.
+    assert seniority("Senior Software Engineer", "Mid-Senior level") == "senior"
+    assert seniority("Senior Full Stack Developer", "Mid-Senior level") == "senior"
+    assert seniority("Staff Engineer", "") == "senior"
+    assert seniority("Lead Backend Engineer", "Associate") == "senior"
+
+
+def test_neutral_title_with_mid_senior_level_stays_mid():
+    # A plain title under the same bucket is a real mid role and must survive,
+    # so the fix does not throw the whole middle of the market out.
+    assert seniority("Software Engineer", "Mid-Senior level") == "mid"
+    assert seniority("Full Stack Engineer", "Mid-Senior level") == "mid"
+
+
+def test_verdict_rejects_the_senior_title_that_used_to_leak():
+    fits, _ = verdict({"title": "Senior Software Engineer", "level": "Mid-Senior level",
+                       "description": ""}, max_years=3)
+    assert fits is False
+    fits, _ = verdict({"title": "Full Stack Engineer", "level": "Mid-Senior level",
+                       "description": "2-3 years of experience"}, max_years=3)
+    assert fits is True

@@ -54,6 +54,24 @@ def test_identity_rules_still_hold():
     assert A._match_rule("Nothing recognisable") is None
 
 
+def test_a_willingness_to_move_question_is_relocation_not_sponsorship():
+    # "visa" would otherwise route this to requires_sponsorship and answer it
+    # backwards; a willingness-to-move question is about relocating.
+    assert A._match_rule("Would you be willing to go through the visa process and move?") \
+        == "willing_to_relocate"
+    assert A._match_rule("Are you willing to relocate?") == "willing_to_relocate"
+    assert A._match_rule("Open to relocation") == "willing_to_relocate"
+    # A genuine sponsorship question still reads as sponsorship.
+    assert A._match_rule("Do you require visa sponsorship?") == "requires_sponsorship"
+
+
+def test_choice_rule_answers_relocation_from_the_profile():
+    profile = {"willing_to_relocate": "Yes", "requires_sponsorship": "No"}
+    assert A._choice_rule_answer(
+        "Would you be willing to go through the visa process and move?", profile) == "Yes"
+    assert A._choice_rule_answer("Do you require sponsorship?", profile) == "No"
+
+
 def test_apply_link_text_matches_real_button_labels():
     for label in ("Apply", "Apply Now", "Apply now", "Apply for this job",
                   "I'm interested", "Submit application"):

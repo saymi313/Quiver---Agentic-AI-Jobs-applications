@@ -585,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="agent.runner", description="Job-hunting agent")
     ap.add_argument("mode",
                     choices=["discover", "apply", "resumes", "outreach", "tasks",
-                             "inbox", "propose",
+                             "inbox", "propose", "regate",
                              # Read/act commands that mirror the MCP tool surface,
                              # so anything the agent can do over MCP can be done
                              # from the shell (FR-S4). These dispatch to the same
@@ -645,6 +645,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "resumes":
             _log(_rule("Tailoring resumes"))
             stats["resumes"] = build_resumes_for(job_ids)
+
+        if args.mode == "regate":
+            # Re-apply the experience gate to jobs already in the list — the way
+            # to clear senior roles an older gate let through, without wiping the
+            # whole store and re-fetching.
+            _log(_rule("Re-checking the experience gate"))
+            stats["regate"] = matcher.regate_experience(log=_log)
 
         if args.mode == "apply":
             # Apply is user-triggered only. `full` deliberately stops before it:

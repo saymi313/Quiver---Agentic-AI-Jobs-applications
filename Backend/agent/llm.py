@@ -316,6 +316,12 @@ def _gemini(prompt: str, system: str, schema: dict | None, model: str, key: str)
             raise LLMError(
                 f"{candidate} hit a per-minute rate limit. Waiting and retrying.",
                 retryable=True)
+        if resp.status_code in (500, 502, 503, 504):
+            # A transient server-side spike ("UNAVAILABLE — high demand"), not a
+            # spent quota. Worth waiting out and asking again, so one busy moment
+            # does not sink a whole apply run's cover letter and answers.
+            raise LLMError(f"Gemini {resp.status_code}: temporarily unavailable, retrying.",
+                           retryable=True)
         if not resp.ok:
             raise LLMError(f"Gemini {resp.status_code}: {resp.text[:300]}")
         data = resp.json()

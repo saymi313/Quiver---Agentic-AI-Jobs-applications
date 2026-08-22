@@ -79,18 +79,32 @@ def required_years(text: str) -> tuple[int | None, int | None]:
 
 
 def seniority(title: str, level: str = "") -> str:
-    """intern | junior | mid | senior — from the board's level first, then the title."""
+    """
+    intern | junior | mid | senior.
+
+    The title is read first and trusted most: "Senior Software Engineer" is
+    senior no matter how a board files it. This ordering matters because LinkedIn
+    stamps a huge share of postings — senior ones included — with the single
+    coarse bucket "Mid-Senior level", and reading that bucket before the title
+    once let those senior roles slip the gate. So an unambiguous title word wins,
+    and only a neutral title falls back to the board's own level.
+    """
+    t = title or ""
+    if JUNIOR_TITLE.search(t):
+        return "intern" if re.search(r"intern|apprentice|placement|co-?op", t, re.I) else "junior"
+    if SENIOR_TITLE.search(t):
+        return "senior"
+
     if level:
+        # "Mid-Senior level" is LinkedIn's catch-all for the whole middle of the
+        # market; with a neutral title it is treated as mid, so genuine mid roles
+        # are not thrown out along with the senior ones the title would catch.
+        if re.search(r"mid[\s-]?senior|mid[\s-]?level|associate|^\s*mid\b", level, re.I):
+            return "mid"
         if JUNIOR_LEVEL.search(level):
             return "junior"
         if SENIOR_LEVEL.search(level):
             return "senior"
-        if re.search(r"mid|associate", level, re.I):
-            return "mid"
-    if JUNIOR_TITLE.search(title or ""):
-        return "intern" if re.search(r"intern|apprentice|placement|co-?op", title or "", re.I) else "junior"
-    if SENIOR_TITLE.search(title or ""):
-        return "senior"
     return "mid"
 
 

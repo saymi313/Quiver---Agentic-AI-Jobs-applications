@@ -203,6 +203,35 @@ def enrich_pending(limit: int = 400, *, log=print) -> int:
     return done
 
 
+def regate_experience(*, log=print) -> dict[str, int]:
+    """
+    Re-run the experience gate over jobs already scored, and skip the ones it now
+    rejects.
+
+    The gate improves over time — a title-versus-board-level fix, a new senior
+    keyword — but a change only reaches jobs scored afterwards. This applies the
+    current gate to everything still in the actionable pool, so a "Senior" role
+    that slipped an older gate is filtered out without clearing and re-fetching.
+    Applied rows are never touched: your own history is not housekeeping.
+    """
+    targeting = store.get_setting("targeting", {}) or {}
+    min_years = int(targeting.get("min_years_experience", 1))
+    max_years = int(targeting.get("max_years_experience", 3))
+    allow_interns = bool(targeting.get("allow_internships", False))
+
+    jobs = store.list_jobs(limit=2000, status="not_applied")
+    demoted = 0
+    for job in jobs:
+        fits, why = experience.verdict(job, min_years=min_years, max_years=max_years,
+                                       allow_internships=allow_interns)
+        if not fits:
+            store.set_job_fit(job["id"], 0.0, f"Experience gate: {why}", "skipped")
+            demoted += 1
+            log(f"[regate] skipped {job.get('company_name') or '?'} — {job['title'][:48]} ({why})")
+    log(f"[regate] {demoted} of {len(jobs)} actionable job(s) now filtered out by the experience gate")
+    return {"checked": len(jobs), "demoted": demoted}
+
+
 def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
     """Score every unscored job in the store and set its status."""
     targeting = store.get_setting("targeting", {}) or {}

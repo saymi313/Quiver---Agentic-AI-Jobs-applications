@@ -55,9 +55,14 @@ FIELD_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"universit|college|\bschool\b|alma\s*mater|institution", re.I), "university"),
     (re.compile(r"notice\s*period|when.*(start|available)|availability", re.I), "notice_period"),
     (re.compile(r"salary|compensation|expected\s*pay|rate\s*expectation", re.I), "salary_expectation"),
+    # Relocation willingness is read before the visa rule below, because a
+    # question like "willing to go through the visa process and move" is about
+    # moving, not about needing sponsorship — the "visa" keyword would otherwise
+    # answer it as a sponsorship question and get it backwards.
+    (re.compile(r"relocat|willing[\w\s]{0,45}\bmove\b|open\s+to\s+(relocat|mov)|"
+                r"willing\s+to\s+move", re.I), "willing_to_relocate"),
     (re.compile(r"sponsor|visa|work\s*permit", re.I), "requires_sponsorship"),
     (re.compile(r"authori[sz]ed|legally.*work|right\s*to\s*work|eligible.*work", re.I), "work_authorization"),
-    (re.compile(r"relocat", re.I), "willing_to_relocate"),
     (re.compile(r"pronoun", re.I), "pronouns"),
     (re.compile(r"how.*(hear|find).*(us|role|position)|referral\s*source", re.I), "how_did_you_hear"),
     (re.compile(r"why.*(join|company|us|interested)|cover\s*letter|motivat", re.I), "_cover_letter"),
@@ -493,6 +498,14 @@ REGION_HINTS = {
 def _choice_rule_answer(question: str, profile: dict[str, str]) -> str | None:
     """Answer a Yes/No screening question from the profile alone, truthfully."""
     q = (question or "").lower()
+    # Willingness to relocate or move — answered from the profile, and checked
+    # before sponsorship so "willing to go through the visa process and move"
+    # is read as a move question, not a sponsorship one.
+    if re.search(r"relocat|willing[\w\s]{0,45}\bmove\b|open to (relocat|mov)|willing to move", q):
+        value = (profile.get("willing_to_relocate") or "").strip().lower()
+        if value in ("yes", "no"):
+            return value.title()
+        return None
     if "sponsor" in q:
         value = (profile.get("requires_sponsorship") or "").strip().lower()
         if value in ("yes", "no"):
