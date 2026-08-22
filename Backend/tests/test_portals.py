@@ -41,7 +41,7 @@ def test_detection_claims_match_the_readers_that_exist():
     from agent import sources
 
     readers = {"greenhouse", "lever", "ashby", "smartrecruiters", "workable",
-               "recruitee", "breezy", "rippling"}
+               "recruitee", "breezy", "rippling", "bamboohr", "personio"}
     aggregators = {"arbeitnow", "remoteok", "remotive", "weworkremotely",
                    "workingnomads", "landingjobs", "themuse", "yc", "hn"}
     for p in portals.PORTALS:
