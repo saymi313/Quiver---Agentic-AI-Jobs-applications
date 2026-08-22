@@ -152,6 +152,31 @@ OTP_MARKERS = re.compile(
     r"security code)\b", re.I)
 
 
+# A posting that has been taken down. Ashby (and others) serve a soft 404 — an
+# HTTP 200 whose body says the page is gone — so the status code cannot be
+# trusted; the body text is the tell. Kept to unambiguous phrases so a live form
+# is never mistaken for a dead one.
+CLOSED_MARKERS = re.compile(
+    r"\b(page not found|page you requested was not found|"
+    r"no longer (accepting|available|open|active)|"
+    r"(position|posting|job|role|vacancy|opening) (has been|is|was) (closed|filled|removed|expired)|"
+    r"this (position|posting|job|role) is (closed|no longer)|"
+    r"applications? (are|is) closed|we are no longer accepting|"
+    r"this (job|posting|opening|listing) (is|has) (closed|expired|been filled|no longer)|"
+    r"job not found|posting not found|not accepting applications)\b", re.I)
+
+
+def _posting_closed(page) -> str | None:
+    """A reason if the page reads as a taken-down posting, else None."""
+    try:
+        text = (page.inner_text("body") or "")[:3000]
+    except Exception:
+        return ""
+    if CLOSED_MARKERS.search(text):
+        return "this posting has been taken down — the page is gone, so there is nothing to apply to"
+    return None
+
+
 def diagnose_wall(page) -> tuple[str, str] | None:
     """
     Why this form cannot be completed right now, as (kind, message).
@@ -1405,16 +1430,25 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
 
             log(f"[apply]   {len(fields)} form field(s) detected")
             if not fields or not looks_like_application(fields):
-                result["error"] = (
-                    "no application form found — this listing sends applicants to an "
-                    "external site the agent could not reach. Open the link and apply "
-                    "by hand." if fields else
-                    "no form fields found — the posting is closed, or the application "
-                    "lives on a site the agent cannot read")
+                # A dead posting is not a failure to fix: say so plainly and let
+                # it leave the queue, rather than reading as "the agent broke".
+                closed = _posting_closed(page)
+                if closed:
+                    result["closed"] = True
+                    result["error"] = closed
+                elif fields:
+                    result["error"] = (
+                        "no application form found — this listing sends applicants to an "
+                        "external site the agent could not reach. Open the link and apply "
+                        "by hand.")
+                else:
+                    result["error"] = ("no form fields found — the application lives on a "
+                                       "site the agent cannot read. Open the link and apply "
+                                       "by hand.")
                 shot = SHOT_DIR / f"job{job.get('id')}_noform.png"
                 page.screenshot(path=str(shot), full_page=True)
                 result["screenshot"] = shot.name
-                log(f"[apply]   FAILED — {result['error']}")
+                log(f"[apply]   {'CLOSED' if closed else 'FAILED'} — {result['error']}")
                 return result
 
             filled: dict[str, str] = {}
@@ -1695,6 +1729,12 @@ def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
     store.record_application(result)
 
     status = result["status"]
+    if result.get("closed"):
+        # A taken-down posting is not a failure to retry: drop it from the
+        # actionable pool with a clear reason, and report it as its own outcome.
+        store.set_job_fit(job_id, 0.0, f"Posting closed: {result.get('error', '')}"[:300],
+                          "skipped")
+        return "closed"
     if status == "submitted" and not dry_run:
         store.set_job_applied(job_id, resume_version=job.get("resume_version") or "")
     elif status == "failed":
@@ -1736,7 +1776,8 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
         return {"attempted": 0, "submitted": 0, "failed": 0, "already": 0}
 
     already = store.applied_hashes()
-    counts = {"attempted": 0, "submitted": 0, "failed": 0, "needs_review": 0, "already": 0}
+    counts = {"attempted": 0, "submitted": 0, "failed": 0, "needs_review": 0,
+              "closed": 0, "already": 0}
     guard = threading.Lock()
 
     # ---- what is actually worth attempting -------------------------------
@@ -1818,5 +1859,6 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
 
     log(f"[apply] done — submitted={counts['submitted']} "
         f"needs-review={counts.get('needs_review', 0)} "
-        f"failed={counts['failed']} already-applied={counts['already']}")
+        f"failed={counts['failed']} closed={counts.get('closed', 0)} "
+        f"already-applied={counts['already']}")
     return counts

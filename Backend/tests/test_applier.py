@@ -86,6 +86,22 @@ def test_apply_link_text_matches_german_labels():
         assert A.APPLY_LINK_TEXT.match(label), label
 
 
+def test_closed_markers_catch_taken_down_postings():
+    # Ashby serves a soft 404: HTTP 200 with a "page not found" body. The status
+    # code lies, so the body text is the tell.
+    for text in ["Page not found. The page you requested was not found.",
+                 "This position is no longer accepting applications",
+                 "The posting has been filled",
+                 "This job is closed",
+                 "We are no longer accepting applications for this role"]:
+        assert A.CLOSED_MARKERS.search(text), text
+
+
+def test_closed_markers_do_not_fire_on_a_live_form():
+    assert not A.CLOSED_MARKERS.search(
+        "First name, last name, email, upload your CV, submit your application")
+
+
 def test_reveal_and_consent_labels():
     # The button that opens an inline form, in English and German.
     for label in ("Apply for this job", "Apply now", "Bewerben", "Jetzt bewerben"):
