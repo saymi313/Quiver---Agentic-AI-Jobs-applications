@@ -8,6 +8,7 @@ import Kanban from '../components/Kanban'
 import MessageReader from '../components/MessageReader'
 import Compose from '../components/Compose'
 import AddApplication from '../components/AddApplication'
+import ClearData from '../components/ClearData'
 import { MessageChip, Segmented, StageBar } from '../components/apple'
 import {
   Button,
@@ -123,14 +124,17 @@ export default function TrackTab() {
         title="Track"
         description="Every application that reached an employer, and what came back. Replies are matched to the application they belong to and the stage moves on its own."
         actions={
-          <Button
-            variant="primary"
-            disabled={busy || !mailbox?.available}
-            busy={stream.starting === 'agent_inbox'}
-            onClick={() => stream.start({ key: 'agent_inbox', limit: 100, max_age: 21 })}
-          >
-            Read replies
-          </Button>
+          <div className="flex items-center gap-3">
+            <ClearData kind="tracker" onCleared={refresh} />
+            <Button
+              variant="primary"
+              disabled={busy || !mailbox?.available}
+              busy={stream.starting === 'agent_inbox'}
+              onClick={() => stream.start({ key: 'agent_inbox', limit: 100, max_age: 21 })}
+            >
+              Read replies
+            </Button>
+          </div>
         }
       />
 

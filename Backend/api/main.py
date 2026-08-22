@@ -619,6 +619,82 @@ def agent_overview() -> dict[str, Any]:
     }
 
 
+def _backup_before_clear(name: str, rows: list[dict[str, Any]]) -> str:
+    """
+    Write a JSON snapshot before a destructive clear, so it is recoverable.
+
+    Named by day and time under Backend/data_backups (gitignored). The clear
+    actions are irreversible against the live DB; this is the undo of last
+    resort, and returning its name lets the UI say where it went.
+    """
+    from .config import BASE_DIR
+
+    out_dir = BASE_DIR / "data_backups"
+    out_dir.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    path = out_dir / f"{name}_{stamp}.json"
+    path.write_text(json.dumps(rows, indent=2, default=str), encoding="utf-8")
+    return path.name
+
+
+class ClearJobs(BaseModel):
+    confirm: bool = False
+    keep_applied: bool = True
+    keep_saved: bool = True
+
+
+@app.post("/api/agent/jobs/clear")
+def agent_clear_jobs(body: ClearJobs) -> dict[str, Any]:
+    """
+    Empty the jobs table — everything, or all but applied and saved rows.
+
+    Backed up first, and gated on an explicit confirm so a stray call cannot
+    wipe the table. Orphaned tailored-resume files are removed with the rows.
+    """
+    if not body.confirm:
+        raise HTTPException(400, "This clears the jobs table. Send confirm=true to proceed.")
+    from agent import store as agent_store
+
+    agent_store.init()
+    backup = _backup_before_clear("jobs", agent_store.list_jobs(5000))
+    out = agent_store.clear_jobs(keep_applied=body.keep_applied, keep_saved=body.keep_saved)
+
+    # Remove the tailored-resume files the deleted jobs owned, never a master.
+    removed = 0
+    try:
+        from agent.tailor import RESUME_DIR
+        for rp in out.get("resumes") or []:
+            p = Path(rp)
+            if not p.is_absolute():
+                p = RESUME_DIR / p.name
+            if p.is_file() and RESUME_DIR in p.parents:
+                p.unlink()
+                removed += 1
+    except Exception:
+        pass
+    return {"ok": True, "deleted": out["deleted"], "kept": out["kept"],
+            "resumesRemoved": removed, "backup": backup}
+
+
+class ClearTracker(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/agent/tracker/clear")
+def agent_clear_tracker(body: ClearTracker) -> dict[str, Any]:
+    """Empty the tracker — every application and inbox message. Backed up first."""
+    if not body.confirm:
+        raise HTTPException(400, "This clears the tracker and inbox. Send confirm=true to proceed.")
+    from agent import store as agent_store
+
+    agent_store.init()
+    apps_backup = _backup_before_clear("applications", agent_store.list_applications(5000))
+    msgs_backup = _backup_before_clear("messages", agent_store.list_messages(5000))
+    out = agent_store.clear_tracker()
+    return {"ok": True, "applications": out["applications"], "messages": out["messages"],
+            "backups": [apps_backup, msgs_backup]}
+
+
 @app.get("/api/agent/research")
 def agent_research() -> dict[str, Any]:
     """Companies worth reading up on before an interview or an outreach email."""

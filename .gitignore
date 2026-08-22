@@ -77,3 +77,6 @@ desktop.ini
 # ---------------------------------------------------------------------------
 # Backend/companies_dataset.csv
 # Backend/send_log.jsonl
+
+# Data backups written by the in-app "Clear" actions
+Backend/data_backups/

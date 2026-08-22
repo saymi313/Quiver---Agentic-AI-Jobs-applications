@@ -4,6 +4,7 @@ import ResumeReview from './ResumeReview'
 import { CategoryChip, SelectionBar } from './apple'
 import JobFilters, { NO_FILTERS, toQuery } from './JobFilters'
 import JobDetail from './JobDetail'
+import ClearData from './ClearData'
 import { Button, Empty, Icon, Section, Status, Table, Tag, Td, Tr } from './ui'
 
 /*
@@ -127,10 +128,13 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
       }
       flush
       actions={
-        <Button size="sm" variant="ghost" onClick={load}>
-          <Icon.Refresh />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          <ClearData kind="jobs" onCleared={load} />
+          <Button size="sm" variant="ghost" onClick={load}>
+            <Icon.Refresh />
+            Refresh
+          </Button>
+        </div>
       }
     >
       <JobFilters

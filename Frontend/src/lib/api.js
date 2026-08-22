@@ -77,6 +77,20 @@ export const api = {
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
 
+  agentClearJobs: ({ keepApplied = true, keepSaved = true } = {}) =>
+    fetch(`${BASE}/api/agent/jobs/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true, keep_applied: keepApplied, keep_saved: keepSaved }),
+    }).then(handle),
+
+  agentClearTracker: () =>
+    fetch(`${BASE}/api/agent/tracker/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    }).then(handle),
+
   agentResearch: () => fetch(`${BASE}/api/agent/research`).then(handle),
   agentResearchCompany: (id) => fetch(`${BASE}/api/agent/research/${id}`).then(handle),
 

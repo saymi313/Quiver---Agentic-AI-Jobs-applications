@@ -587,6 +587,39 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
     return {"deleted": len(doomed), "resumes": resumes, "cutoff": cutoff}
 
 
+def clear_jobs(*, keep_applied: bool = True, keep_saved: bool = True) -> dict[str, Any]:
+    """
+    Empty the jobs table on request — the whole thing, or all but the rows worth
+    protecting. Unlike purge_old_jobs this ignores age: it is the deliberate
+    "start clean" a person asks for, not housekeeping. Returns the resume files
+    the deleted rows owned so the caller can remove the orphans.
+    """
+    where: list[str] = []
+    if keep_applied:
+        where.append("status != 'applied'")
+    if keep_saved:
+        where.append("COALESCE(saved, 0) = 0")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    doomed = _rows(_conn().execute(f"SELECT id, resume_path FROM jobs{clause}"))
+    resumes = [d["resume_path"] for d in doomed if d.get("resume_path")]
+    kept = _conn().execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"] - len(doomed)
+    if doomed:
+        marks = ",".join("?" * len(doomed))
+        with tx() as c:
+            c.execute(f"DELETE FROM jobs WHERE id IN ({marks})", [d["id"] for d in doomed])
+    return {"deleted": len(doomed), "kept": int(kept), "resumes": resumes}
+
+
+def clear_tracker() -> dict[str, Any]:
+    """Empty the tracker: every application and every stored inbox message."""
+    with tx() as c:
+        apps = c.execute("SELECT COUNT(*) FROM applications").fetchone()[0]
+        msgs = c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        c.execute("DELETE FROM applications")
+        c.execute("DELETE FROM messages")
+    return {"applications": int(apps), "messages": int(msgs)}
+
+
 # --------------------------------------------------------------------------
 # Task queue
 # --------------------------------------------------------------------------

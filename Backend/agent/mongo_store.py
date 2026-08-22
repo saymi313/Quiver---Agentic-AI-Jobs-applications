@@ -408,6 +408,36 @@ def purge_old_jobs(days: int = 3, *, keep_applied: bool = True) -> dict[str, Any
     return {"deleted": len(doomed), "resumes": resumes, "cutoff": cutoff}
 
 
+def clear_jobs(*, keep_applied: bool = True, keep_saved: bool = True) -> dict[str, Any]:
+    """
+    Empty the jobs table on request — the whole thing, or all but the rows worth
+    protecting. Unlike purge_old_jobs this ignores age: the deliberate "start
+    clean" a person asks for. Returns the orphaned resume files for cleanup.
+    """
+    db = _connect()
+    query: dict[str, Any] = {}
+    if keep_applied:
+        query["status"] = {"$ne": "applied"}
+    if keep_saved:
+        query["saved"] = {"$in": [None, 0]}
+    doomed = list(db.jobs.find(query, {"id": 1, "resume_path": 1}))
+    resumes = [d["resume_path"] for d in doomed if d.get("resume_path")]
+    total = db.jobs.count_documents({})
+    if doomed:
+        db.jobs.delete_many({"id": {"$in": [int(d["id"]) for d in doomed]}})
+    return {"deleted": len(doomed), "kept": total - len(doomed), "resumes": resumes}
+
+
+def clear_tracker() -> dict[str, Any]:
+    """Empty the tracker: every application and every stored inbox message."""
+    db = _connect()
+    apps = db.applications.count_documents({})
+    msgs = db.messages.count_documents({})
+    db.applications.delete_many({})
+    db.messages.delete_many({})
+    return {"applications": int(apps), "messages": int(msgs)}
+
+
 # --------------------------------------------------------------------------
 # Task queue — mirrors sqlite_store function for function
 # --------------------------------------------------------------------------
