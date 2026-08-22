@@ -424,6 +424,39 @@ def company(company_id: int) -> dict[str, Any] | None:
     return _row(_conn().execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone())
 
 
+def research_list(limit: int = 200) -> list[dict[str, Any]]:
+    """
+    Companies worth researching, with how many roles and contacts are known.
+
+    Only companies a role has actually been found at — an empty company is not
+    something to research. Ordered by how much is known, so the ones you can
+    prepare for most sit first.
+    """
+    return _rows(_conn().execute(
+        "SELECT c.*, "
+        "  (SELECT COUNT(*) FROM jobs j WHERE j.company_id = c.id) AS job_count, "
+        "  (SELECT COUNT(*) FROM people p WHERE p.company_id = c.id) AS contact_count "
+        "FROM companies c "
+        "WHERE EXISTS (SELECT 1 FROM jobs j WHERE j.company_id = c.id) "
+        "ORDER BY job_count DESC, c.discovered_at DESC LIMIT ?", (limit,)))
+
+
+def research_company(company_id: int) -> dict[str, Any]:
+    """Everything known about one company: its facts, its people, its roles."""
+    c = company(company_id)
+    if not c:
+        return {}
+    people = _rows(_conn().execute(
+        "SELECT * FROM people WHERE company_id = ? "
+        "ORDER BY COALESCE(email_score, 0) DESC, id ASC", (company_id,)))
+    jobs = _job_rows(_conn().execute(
+        "SELECT j.*, c.name AS company_name FROM jobs j "
+        "LEFT JOIN companies c ON c.id = j.company_id "
+        "WHERE j.company_id = ? "
+        "ORDER BY COALESCE(j.fit_score, -1) DESC", (company_id,)))
+    return {"company": c, "people": people, "jobs": jobs}
+
+
 def mark_company_scanned(company_id: int) -> None:
     with tx() as c:
         c.execute("UPDATE companies SET last_scanned_at = ? WHERE id = ?", (now(), company_id))

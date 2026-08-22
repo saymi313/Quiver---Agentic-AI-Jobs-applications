@@ -240,6 +240,44 @@ def company(company_id: int) -> dict[str, Any] | None:
     return _clean(_connect().companies.find_one({"id": int(company_id)}))
 
 
+def research_list(limit: int = 200) -> list[dict[str, Any]]:
+    """
+    Companies worth researching, with how many roles and contacts are known.
+
+    Only companies a role has actually been found at, ordered by how much is
+    known, so the ones you can prepare for most sit first.
+    """
+    db = _connect()
+    job_counts: dict[int, int] = {}
+    for d in db.jobs.aggregate([{"$group": {"_id": "$company_id", "n": {"$sum": 1}}}]):
+        if d["_id"] is not None:
+            job_counts[int(d["_id"])] = int(d["n"])
+    people_counts: dict[int, int] = {}
+    for d in db.people.aggregate([{"$group": {"_id": "$company_id", "n": {"$sum": 1}}}]):
+        if d["_id"] is not None:
+            people_counts[int(d["_id"])] = int(d["n"])
+
+    rows = _cleaned(db.companies.find({"id": {"$in": list(job_counts)}}))
+    for r in rows:
+        r["job_count"] = job_counts.get(int(r["id"]), 0)
+        r["contact_count"] = people_counts.get(int(r["id"]), 0)
+    rows.sort(key=lambda r: (-(r.get("job_count") or 0), r.get("discovered_at") or ""))
+    return rows[:int(limit)]
+
+
+def research_company(company_id: int) -> dict[str, Any]:
+    """Everything known about one company: its facts, its people, its roles."""
+    c = company(company_id)
+    if not c:
+        return {}
+    db = _connect()
+    people = _cleaned(db.people.find({"company_id": int(company_id)}))
+    people.sort(key=lambda p: -(p.get("email_score") or 0))
+    jobs = _attach_company(_cleaned(db.jobs.find({"company_id": int(company_id)})))
+    jobs.sort(key=lambda j: -(j.get("fit_score") or -1))
+    return {"company": c, "people": people, "jobs": jobs}
+
+
 def mark_company_scanned(company_id: int) -> None:
     _connect().companies.update_one({"id": int(company_id)},
                                     {"$set": {"last_scanned_at": now()}})

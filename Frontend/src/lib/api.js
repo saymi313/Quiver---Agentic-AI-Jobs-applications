@@ -77,6 +77,9 @@ export const api = {
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
 
+  agentResearch: () => fetch(`${BASE}/api/agent/research`).then(handle),
+  agentResearchCompany: (id) => fetch(`${BASE}/api/agent/research/${id}`).then(handle),
+
   // ---- employer-account credentials ----
   agentCredentials: () => fetch(`${BASE}/api/agent/credentials`).then(handle),
 

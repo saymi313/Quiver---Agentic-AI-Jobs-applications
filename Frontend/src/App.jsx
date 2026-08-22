@@ -6,6 +6,7 @@ import ResumeTab from './tabs/ResumeTab'
 import OutreachTab from './tabs/OutreachTab'
 import TrackTab from './tabs/TrackTab'
 import ProfilesTab from './tabs/ProfilesTab'
+import ResearchTab from './tabs/ResearchTab'
 import SettingsTab from './tabs/SettingsTab'
 import { api } from './lib/api'
 import { springFor } from './lib/motion'
@@ -43,6 +44,7 @@ const GROUPS = [
       { key: 'jobs', label: 'Jobs', icon: Icon.Briefcase },
       { key: 'track', label: 'Track', icon: Icon.Inbox },
       { key: 'outreach', label: 'Outreach', icon: Icon.Send },
+      { key: 'research', label: 'Research', icon: Icon.Search },
     ],
   },
   {
@@ -254,6 +256,8 @@ export default function App() {
                   <TrackTab />
                 ) : tab === 'outreach' ? (
                   <OutreachTab />
+                ) : tab === 'research' ? (
+                  <ResearchTab />
                 ) : tab === 'profiles' ? (
                   <ProfilesTab />
                 ) : tab === 'resume' ? (

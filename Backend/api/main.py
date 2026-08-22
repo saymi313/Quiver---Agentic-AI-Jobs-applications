@@ -610,6 +610,27 @@ def agent_overview() -> dict[str, Any]:
     }
 
 
+@app.get("/api/agent/research")
+def agent_research() -> dict[str, Any]:
+    """Companies worth reading up on before an interview or an outreach email."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    return {"rows": agent_store.research_list(300)}
+
+
+@app.get("/api/agent/research/{company_id}")
+def agent_research_company(company_id: int) -> dict[str, Any]:
+    """One company, everything known: its facts, its people, its roles."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    out = agent_store.research_company(company_id)
+    if not out:
+        raise HTTPException(404, "No such company.")
+    return out
+
+
 @app.get("/api/agent/data")
 def agent_data(kind: str = "jobs", limit: int = 100, status: str | None = None) -> dict[str, Any]:
     from agent import store as agent_store

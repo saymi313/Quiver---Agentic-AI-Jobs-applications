@@ -630,6 +630,12 @@ export const Icon = {
       <path d="M12 5v14M5 12h14" />
     </svg>
   ),
+  Search: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  ),
   Bookmark: ({ filled = false, ...p }) => (
     <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"
          {...stroke} fill={filled ? 'currentColor' : 'none'} {...p}>
