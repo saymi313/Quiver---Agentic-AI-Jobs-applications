@@ -1549,26 +1549,56 @@ def agent_set_application_password(body: AppPasswordRequest) -> dict[str, Any]:
 
 
 class OtpRequest(BaseModel):
-    code: str
+    # Either a one-time code or a confirmation link — whichever the site sent.
+    code: str | None = None
+    link: str | None = None
 
 
 @app.post("/api/agent/job/{job_id}/otp")
 def agent_submit_otp(job_id: int, body: OtpRequest) -> dict[str, Any]:
     """
-    Hand back a one-time code the site sent, for the next apply run to type in.
+    Hand back what a site is waiting on — a one-time code, or a confirmation
+    link — for the next apply run to use.
 
     Quiver's local stand-in for Tsenta's `POST /applications/{id}/otp`: the
-    browser does not stay alive between runs, so the code waits against the job
-    until you apply again, and is spent the moment it is used.
+    browser does not stay alive between runs, so the code or link waits against
+    the job until you apply again, and is spent the moment it is used.
     """
     from agent import credentials
 
     code = (body.code or "").strip()
-    if not code:
-        raise HTTPException(400, "Enter the code the site sent you.")
-    credentials.set_otp(job_id, code)
-    return {"ok": True, "job_id": job_id,
-            "message": "Code saved. Apply to this job again and it will be entered."}
+    link = (body.link or "").strip()
+    if link:
+        if not link.lower().startswith(("http://", "https://")):
+            raise HTTPException(400, "That does not look like a link. Paste the full https:// URL.")
+        credentials.set_confirmation_link(job_id, link)
+        return {"ok": True, "job_id": job_id, "kind": "link",
+                "message": "Link saved. Apply to this job again and it will be opened."}
+    if code:
+        credentials.set_otp(job_id, code)
+        return {"ok": True, "job_id": job_id, "kind": "otp",
+                "message": "Code saved. Apply to this job again and it will be entered."}
+    raise HTTPException(400, "Enter the code or paste the confirmation link the site sent you.")
+
+
+@app.get("/api/agent/input-required")
+def agent_input_required() -> dict[str, Any]:
+    """
+    The jobs paused waiting on you — each with what it needs (a code or a link)
+    and the posting it belongs to, so the dashboard can ask for exactly that.
+    """
+    from agent import credentials, store
+
+    rows = []
+    for rec in credentials.awaiting_input():
+        job = store.job(rec["job_id"]) or {}
+        rows.append({
+            **rec,
+            "title": job.get("title") or "",
+            "company_name": job.get("company_name") or "",
+            "apply_url": job.get("apply_url") or job.get("url") or "",
+        })
+    return {"rows": rows, "count": len(rows)}
 
 
 class ReplyRequest(BaseModel):

@@ -42,14 +42,18 @@ _lock = threading.Lock()
 
 def _read() -> dict[str, Any]:
     if not STORE.is_file():
-        return {"domains": {}, "app_password": "", "otp": {}}
+        return {"domains": {}, "app_password": "", "otp": {}, "link": {}, "pending": {}}
     try:
         data = json.loads(STORE.read_text(encoding="utf-8"))
     except (ValueError, OSError):
-        return {"domains": {}, "app_password": "", "otp": {}}
+        return {"domains": {}, "app_password": "", "otp": {}, "link": {}, "pending": {}}
     data.setdefault("domains", {})
     data.setdefault("app_password", "")
     data.setdefault("otp", {})
+    # A confirmation link the user pasted back, parked for the next run to open.
+    data.setdefault("link", {})
+    # The queue of jobs paused waiting on the user: {job_id: {kind, domain, ...}}.
+    data.setdefault("pending", {})
     return data
 
 
@@ -178,3 +182,104 @@ def pop_otp(job_id: int) -> str | None:
 def awaiting_otp() -> list[int]:
     with _lock:
         return [int(k) for k in _read()["otp"]]
+
+
+# --------------------------------------------------------------------------
+# Confirmation links, parked against a job for the next run
+# --------------------------------------------------------------------------
+#
+# Some sites verify a new account by emailing a link rather than a code. The
+# agent cannot invent it and will not click a link out of an inbox on its own,
+# so — exactly as the user asked — it waits for the link to be handed back, then
+# opens it on the next run to finish activating the account.
+
+def set_confirmation_link(job_id: int, url: str) -> None:
+    with _lock:
+        data = _read()
+        data["link"][str(int(job_id))] = (url or "").strip()
+        _write(data)
+
+
+def pop_confirmation_link(job_id: int) -> str | None:
+    """Take the parked link for a job, if any. Single use, like the code."""
+    with _lock:
+        data = _read()
+        url = data["link"].pop(str(int(job_id)), None)
+        if url is not None:
+            _write(data)
+        return url
+
+
+# --------------------------------------------------------------------------
+# The signup identity (one email + password for accounts the agent creates)
+# --------------------------------------------------------------------------
+
+def signup_identity(fallback_email: str = "") -> dict[str, str] | None:
+    """
+    The (email, password) to register a new employer account with, or None.
+
+    The email comes from the signup settings, or the profile email as a
+    fallback; the password is the shared application password. Both must be
+    present — an account cannot be created with half an identity.
+    """
+    from . import store
+
+    signup = store.get_setting("signup", {}) or {}
+    email = (signup.get("email") or fallback_email or "").strip()
+    password = application_password()
+    if not email or not password:
+        return None
+    return {"username": email, "password": password}
+
+
+def signup_enabled() -> bool:
+    from . import store
+
+    signup = store.get_setting("signup", {}) or {}
+    return bool(signup.get("enabled", True))
+
+
+# --------------------------------------------------------------------------
+# The input-required queue: jobs paused waiting on the user
+# --------------------------------------------------------------------------
+#
+# When a fresh account needs a code or a confirmation link, the job is parked
+# here so the dashboard can show an "input required" queue and let the user hand
+# the missing piece back. This is the durable stand-in for a browser prompt the
+# agent cannot show, since no browser stays alive between runs.
+
+def set_pending_input(job_id: int, kind: str, *, domain: str = "",
+                      prompt: str = "") -> None:
+    """Record that a job is waiting on the user. `kind` is 'otp' or 'link'."""
+    from datetime import datetime, timezone
+
+    with _lock:
+        data = _read()
+        data["pending"][str(int(job_id))] = {
+            "kind": kind,
+            "domain": domain,
+            "prompt": prompt,
+            "since": datetime.now(timezone.utc).isoformat(),
+        }
+        _write(data)
+
+
+def clear_pending_input(job_id: int) -> None:
+    with _lock:
+        data = _read()
+        if data["pending"].pop(str(int(job_id)), None) is not None:
+            _write(data)
+
+
+def pending_input(job_id: int) -> dict[str, Any] | None:
+    with _lock:
+        return _read()["pending"].get(str(int(job_id)))
+
+
+def awaiting_input() -> list[dict[str, Any]]:
+    """Every job paused on the user, newest first — drives the queue in the UI."""
+    with _lock:
+        data = _read()
+    rows = [{"job_id": int(k), **v} for k, v in data["pending"].items()]
+    rows.sort(key=lambda r: r.get("since", ""), reverse=True)
+    return rows

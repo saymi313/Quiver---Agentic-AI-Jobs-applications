@@ -23,14 +23,33 @@ export default function Credentials({ open, onToggle }) {
   const [appPw, setAppPw] = useState('')
   const [generated, setGenerated] = useState('')
   const [busy, setBusy] = useState(false)
+  // The signup identity: one email + on/off, kept in settings (the password is
+  // the application password below). Loaded from the overview alongside the
+  // credential status.
+  const [signup, setSignup] = useState({ enabled: true, email: '' })
+  const [signupDone, setSignupDone] = useState(false)
 
   const load = useCallback(
-    () => api.agentCredentials().then(setState).catch((e) => setError(e.message)),
+    () =>
+      Promise.all([
+        api.agentCredentials().then(setState),
+        api.agentOverview().then((o) => {
+          const s = o?.settings?.signup
+          if (s) setSignup({ enabled: s.enabled !== false, email: s.email || '' })
+        }),
+      ]).catch((e) => setError(e.message)),
     [],
   )
   useEffect(() => {
     if (open) load()
   }, [open, load])
+
+  const saveSignup = (next) => {
+    setSignup(next)
+    api.agentSettings({ signup: next })
+      .then(() => { setSignupDone(true); setTimeout(() => setSignupDone(false), 2000) })
+      .catch((e) => setError(e.message))
+  }
 
   const act = async (fn) => {
     setBusy(true)
@@ -67,6 +86,43 @@ export default function Credentials({ open, onToggle }) {
           <Note tone="bad" title="Could not save" onDismiss={() => setError('')}>{error}</Note>
         </div>
       ) : null}
+
+      {/* signup identity — one email + the application password, used to create
+          accounts on any site that demands one before it shows the form */}
+      <div className="mb-4 rounded-md border border-line bg-raised p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-n-100">Auto sign-up</p>
+            <p className="mt-0.5 text-micro leading-relaxed text-n-500">
+              When a site insists on an account, Quiver creates one with this email and the
+              application password below, and reuses it there from then on. If the new account needs
+              a code or a confirmation link, the job is marked <em>input required</em> and waits for you.
+            </p>
+          </div>
+          <label className="flex shrink-0 items-center gap-1.5 text-tiny text-n-300">
+            <input
+              type="checkbox"
+              checked={signup.enabled}
+              onChange={(e) => saveSignup({ ...signup, enabled: e.target.checked })}
+              className="size-4 accent-blue-500"
+            />
+            on
+          </label>
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="min-w-[14rem] flex-1">
+            <Input
+              type="email"
+              value={signup.email}
+              disabled={!signup.enabled}
+              onChange={(e) => setSignup((s) => ({ ...s, email: e.target.value }))}
+              onBlur={() => saveSignup(signup)}
+              placeholder="signup email — defaults to your profile email"
+            />
+          </div>
+          {signupDone ? <Status tone="ok" dot={false}>saved</Status> : null}
+        </div>
+      </div>
 
       {/* stored sites */}
       {domains.length ? (

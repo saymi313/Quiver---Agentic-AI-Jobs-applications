@@ -27,7 +27,7 @@ from typing import Any, Callable
 from api.config import DASHBOARD_OUT
 from api import behuman
 
-from . import llm, matcher, portals, store
+from . import credentials, llm, matcher, portals, store
 
 SHOT_DIR = DASHBOARD_OUT / "applications"
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -69,6 +69,23 @@ LOGIN_MARKERS = re.compile(
     r"\b(sign in to (?:apply|continue)|log ?in to (?:apply|continue)|"
     r"create an account to apply|please (?:sign|log) ?in|"
     r"you must be logged in|register to apply)\b", re.I)
+
+# A registration wall — the site wants a *new* account, not a sign-in. Detected
+# separately so the agent can create one from the signup identity rather than
+# giving up. Kept narrow: a page that only offers "sign in" is a login wall.
+SIGNUP_MARKERS = re.compile(
+    r"\b(create (?:an |your )?account|sign ?up|register(?:ing)? (?:to|an account|now)|"
+    r"create your profile|don'?t have an account|new (?:to|here)\?|"
+    r"set (?:a |up (?:a )?)?password)\b", re.I)
+
+# The state right after registering on a site that verifies by emailing a link.
+# There is no code box to fill and no form to complete — the account is inert
+# until the link is opened, so this is a distinct "input required" wall.
+VERIFY_MARKERS = re.compile(
+    r"\b(check your (?:email|inbox)|we(?:'ve| have)? sent (?:you )?a (?:confirmation|verification) "
+    r"(?:email|link)|confirm your email (?:address )?to|verify your email (?:address )?to|"
+    r"click the (?:confirmation|verification) link|activation (?:email|link) (?:has been )?sent|"
+    r"a link to (?:activate|verify|confirm))\b", re.I)
 
 
 def _visible_captcha(page) -> bool:
@@ -157,6 +174,11 @@ def diagnose_wall(page) -> tuple[str, str] | None:
                 "the site sent a one time code and is waiting for it — open the "
                 "posting, enter the code, and apply again")
 
+    if VERIFY_MARKERS.search(text):
+        return ("needs_review",
+                "a confirmation link was emailed to activate the new account — open "
+                "the posting, paste the link, and apply again")
+
     hit = LOGIN_MARKERS.search(text)
     if hit:
         return ("needs_review",
@@ -201,6 +223,65 @@ def _fill_login(page, cred: dict[str, str], log: Callable[[str], None]) -> bool:
         return False
 
 
+def _fill_signup(page, identity: dict[str, str], profile: dict[str, str],
+                 log: Callable[[str], None]) -> bool:
+    """
+    Register a new account from the signup identity and submit the form.
+
+    Fills email and password — and a confirm-password box, and a name, when the
+    form has them, since a registration form usually does. Best-effort like the
+    login filler: several selectors per field in the order sites commonly use,
+    and a submit is clicked. The caller re-checks the wall to see what the
+    registration produced (the form, a code box, or a "check your email" page).
+    """
+    email_sel = ("input[type=email]", "input[name*=email i]", "input[id*=email i]",
+                 "input[autocomplete=email]", "input[autocomplete=username]")
+    pass_sel = ("input[type=password][autocomplete=new-password]",
+                "input[name*=pass i]", "input[id*=pass i]", "input[type=password]")
+    try:
+        email = next((page.locator(s) for s in email_sel if page.locator(s).count()), None)
+        pws = next((page.locator(s) for s in pass_sel if page.locator(s).count()), None)
+        if not email or not pws:
+            return False
+        email.first.fill(identity["username"], timeout=6000)
+        # A registration form often shows password + confirm password; fill both
+        # with the same value when there are two boxes.
+        pw_boxes = page.locator("input[type=password]")
+        count = pw_boxes.count()
+        if count >= 2:
+            pw_boxes.nth(0).fill(identity["password"], timeout=6000)
+            pw_boxes.nth(1).fill(identity["password"], timeout=6000)
+        else:
+            pws.first.fill(identity["password"], timeout=6000)
+
+        # A full-name field, if the form asks for one, from the profile.
+        name = (profile.get("full_name") or "").strip()
+        if name:
+            for sel in ("input[name*=name i][type=text]", "input[id*=name i][type=text]",
+                        "input[autocomplete=name]"):
+                loc = page.locator(sel)
+                if loc.count() and loc.first.is_visible():
+                    try:
+                        loc.first.fill(name, timeout=3000)
+                    except Exception:
+                        pass
+                    break
+
+        for label in ("Create account", "Sign up", "Register", "Create your account",
+                      "Get started", "Continue", "Submit"):
+            btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(label)}\s*$", re.I))
+            if btn.count() and btn.first.is_visible():
+                btn.first.click(timeout=6000)
+                log(f"[apply]   registered a new account as {identity['username']}")
+                return True
+        pws.first.press("Enter")
+        log(f"[apply]   registered a new account as {identity['username']}")
+        return True
+    except Exception as exc:
+        log(f"[apply]   sign-up attempt did not go through ({type(exc).__name__})")
+        return False
+
+
 def _fill_otp(page, code: str, log: Callable[[str], None]) -> bool:
     """
     Enter a one-time code the user handed back, and submit it.
@@ -236,44 +317,137 @@ def _fill_otp(page, code: str, log: Callable[[str], None]) -> bool:
 
 def try_clear_wall(page, job: dict[str, Any], log: Callable[[str], None]) -> bool:
     """
-    Attempt to get past a login or one-time-code wall using what is stored.
+    Attempt to get past a login, sign-up or one-time-code wall automatically.
 
-    A parked OTP for this job is spent first; failing that, a saved credential
-    for the page's domain is used to sign in. Returns True only if the wall is
-    actually gone afterwards, so the caller can continue filling the form.
+    The pipeline, in order:
+
+      1. A confirmation link the user pasted back is opened first — it activates
+         the account a previous run created, and clears the wall for good.
+      2. A one-time-code wall is answered from a parked code, or read straight
+         from the connected inbox.
+      3. A saved login for this domain is used to sign in.
+      4. Otherwise, if the site wants a *new* account and a signup identity is
+         configured, one is registered on the spot and saved for next time.
+
+    Any step that still leaves the user something to do — a code that never
+    arrived, a confirmation link a fresh account now needs — parks the job in the
+    input-required queue with a specific prompt, so the dashboard can ask for it.
+    Returns True only if the wall is actually gone afterwards.
     """
-    from . import credentials
+    from . import credentials, inbox
 
-    try:
-        text = (page.inner_text("body") or "")[:6000]
-    except Exception:
-        text = ""
+    job_id = job.get("id")
+    domain = credentials.domain_of(page.url)
 
+    def body() -> str:
+        try:
+            return (page.inner_text("body") or "")[:6000]
+        except Exception:
+            return ""
+
+    # 1. A confirmation link the user handed back — open it, then come back to
+    #    the application page and re-check.
+    link = credentials.pop_confirmation_link(job_id)
+    if link:
+        try:
+            log("[apply]   opening the confirmation link you provided")
+            page.goto(link, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2500)
+            back = job.get("apply_url") or job.get("url")
+            if back:
+                page.goto(back, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
+        except Exception as exc:
+            log(f"[apply]   the confirmation link did not open ({type(exc).__name__})")
+        if diagnose_wall(page) is None:
+            credentials.clear_pending_input(job_id)
+            return True
+
+    text = body()
+
+    # 2. One-time-code wall.
     if OTP_MARKERS.search(text):
         # A code the user handed back wins — it is the one they were looking at.
-        code = credentials.pop_otp(job.get("id"))
-        # Otherwise, the form just triggered a code by email. Since the mailbox
-        # is already connected, read it: poll a few times because the mail takes
-        # a few seconds to arrive, then fall through to needs-review if it never
-        # does (a code sent by SMS, say, which Quiver cannot see).
-        if not code:
-            from . import inbox
-            if inbox.available()[0]:
-                log("[apply]   a one-time code was requested — checking the inbox for it")
-                for _ in range(3):
-                    page.wait_for_timeout(7000)
-                    code = inbox.latest_verification_code(within_seconds=180, log=log)
-                    if code:
-                        break
+        code = credentials.pop_otp(job_id)
+        # Otherwise the form just triggered a code by email. The mailbox is
+        # already connected, so read it: poll a few times because the mail takes
+        # a few seconds to arrive.
+        if not code and inbox.available()[0]:
+            log("[apply]   a one-time code was requested — checking the inbox for it")
+            for _ in range(3):
+                page.wait_for_timeout(7000)
+                code = inbox.latest_verification_code(within_seconds=180, log=log)
+                if code:
+                    break
         if code and _fill_otp(page, code, log):
             page.wait_for_timeout(1800)
-            return diagnose_wall(page) is None
+            if diagnose_wall(page) is None:
+                credentials.clear_pending_input(job_id)
+                return True
+            return False
+        # No code available — ask the user for it (a code sent by SMS, say).
+        credentials.set_pending_input(
+            job_id, "otp", domain=domain,
+            prompt="The site emailed or texted a one-time code. Paste it to continue.")
         return False
 
-    cred = credentials.get_credential(credentials.domain_of(page.url))
+    # 3. A saved login for this domain.
+    cred = credentials.get_credential(domain)
     if cred and _fill_login(page, cred, log):
         page.wait_for_timeout(2200)
-        return diagnose_wall(page) is None
+        if diagnose_wall(page) is None:
+            credentials.clear_pending_input(job_id)
+            return True
+        # A saved login that lands on a code wall falls through on the next loop.
+
+    # 4. A registration wall, and nobody signed in — create the account.
+    text = body()
+    if SIGNUP_MARKERS.search(text) and credentials.signup_enabled():
+        profile = _profile_values()
+        identity = credentials.signup_identity(fallback_email=profile.get("email", ""))
+        if not identity:
+            credentials.set_pending_input(
+                job_id, "login", domain=domain,
+                prompt="This site needs an account. Set a signup email and an "
+                       "application password in Settings, then apply again.")
+            log("[apply]   a new account is needed but no signup identity is set")
+            return False
+        if _fill_signup(page, identity, profile, log):
+            page.wait_for_timeout(2800)
+            # Save the login so future runs sign in instead of re-registering.
+            credentials.set_credential(domain, identity["username"], identity["password"])
+            after = body()
+            if diagnose_wall(page) is None and not VERIFY_MARKERS.search(after):
+                credentials.clear_pending_input(job_id)
+                log("[apply]   account created — the form is now reachable")
+                return True
+            # Registration worked but the account is not active yet.
+            if OTP_MARKERS.search(after):
+                code = None
+                if inbox.available()[0]:
+                    for _ in range(3):
+                        page.wait_for_timeout(7000)
+                        code = inbox.latest_verification_code(within_seconds=180, log=log)
+                        if code:
+                            break
+                if code and _fill_otp(page, code, log):
+                    page.wait_for_timeout(1800)
+                    if diagnose_wall(page) is None:
+                        credentials.clear_pending_input(job_id)
+                        return True
+                credentials.set_pending_input(
+                    job_id, "otp", domain=domain,
+                    prompt="The new account needs a one-time code the site sent. "
+                           "Paste it to finish activating it.")
+                return False
+            # A confirmation-link account: wait for the link.
+            credentials.set_pending_input(
+                job_id, "link", domain=domain,
+                prompt="The new account was emailed a confirmation link. Paste the "
+                       "link to activate it, then apply again.")
+            log("[apply]   account created — waiting on the emailed confirmation link")
+            return False
+
     return False
 
 
@@ -1078,6 +1252,12 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 wall = None
             if wall:
                 result["status"], result["error"] = wall
+                # If clearing the wall parked something for the user, say exactly
+                # what — and carry the kind so the UI can offer the right box.
+                pending = credentials.pending_input(job.get("id"))
+                if pending:
+                    result["error"] = pending.get("prompt") or result["error"]
+                    result["input_required"] = pending.get("kind")
                 log(f"[apply]   {result['status'].upper()} — {result['error']}")
                 try:
                     shot = SHOT_DIR / f"job{job.get('id')}_blocked.png"

@@ -13,11 +13,16 @@ const APP_TONE = {
 const IN_FLIGHT = { running: 'applying', queued: 'queued' }
 
 // What a needs-review row is actually waiting for, read from its reason. A form
-// held for approval, a one-time code the site sent, or a question the profile
-// could not answer — each wants a different next step.
+// held for approval, a one-time code, a confirmation link a fresh account
+// needs, or a question the profile could not answer — each wants a different
+// next step. The explicit kind the applier records wins; the reason text is the
+// fallback for older rows.
 function waitingFor(r) {
   if (r.status !== 'needs_review') return null
+  if (r.input_required === 'link') return 'link'
+  if (r.input_required === 'otp') return 'otp'
   const e = (r.error || '').toLowerCase()
+  if (/confirmation link|verification link|paste the link|activate the/.test(e)) return 'link'
   if (/one[- ]time|\bcode\b/.test(e)) return 'otp'
   if (/review|approve to submit/.test(e)) return 'review'
   return 'other'
@@ -26,8 +31,8 @@ function waitingFor(r) {
 export default function ApplicationLog({ refreshKey, onApprove }) {
   const [rows, setRows] = useState([])
   const [open, setOpen] = useState(false)
-  const [otpFor, setOtpFor] = useState(null) // job id whose code box is open
-  const [code, setCode] = useState('')
+  const [inputFor, setInputFor] = useState(null) // job id whose box is open
+  const [value, setValue] = useState('')
   const [saved, setSaved] = useState(null)
 
   useEffect(() => {
@@ -43,12 +48,16 @@ export default function ApplicationLog({ refreshKey, onApprove }) {
     return `${sent} submitted · ${real.length - sent} failed · ${rows.length - real.length} dry run`
   }, [rows])
 
-  const submitCode = (jobId) =>
-    api.agentSubmitOtp(jobId, code.trim()).then(() => {
+  const submitInput = (jobId, kind) => {
+    const v = value.trim()
+    if (!v) return
+    const payload = kind === 'link' ? { link: v } : { code: v }
+    api.agentSubmitInput(jobId, payload).then(() => {
       setSaved(jobId)
-      setOtpFor(null)
-      setCode('')
+      setInputFor(null)
+      setValue('')
     }).catch(() => {})
+  }
 
   return (
     <Disclosure
@@ -80,25 +89,28 @@ export default function ApplicationLog({ refreshKey, onApprove }) {
                           onClick={() => onApprove?.(r.job_id)}>
                     Approve &amp; submit
                   </Button>
-                ) : wait === 'otp' && r.job_id ? (
+                ) : (wait === 'otp' || wait === 'link') && r.job_id ? (
                   saved === r.job_id ? (
                     <span className="ml-auto text-micro text-ok-400">
-                      code saved — apply again to use it
+                      {wait === 'link' ? 'link' : 'code'} saved — apply again to use it
                     </span>
-                  ) : otpFor === r.job_id ? (
+                  ) : inputFor === r.job_id ? (
                     <span className="ml-auto flex items-center gap-1.5">
-                      <div className="w-28">
-                        <Input value={code} onChange={(e) => setCode(e.target.value)}
-                               placeholder="code" aria-label="One-time code" className="h-7 py-0" />
+                      <div className={wait === 'link' ? 'w-64' : 'w-28'}>
+                        <Input value={value} onChange={(e) => setValue(e.target.value)}
+                               placeholder={wait === 'link' ? 'https://…confirmation link' : 'code'}
+                               aria-label={wait === 'link' ? 'Confirmation link' : 'One-time code'}
+                               className="h-7 py-0" />
                       </div>
-                      <Button size="sm" variant="primary" disabled={!code.trim()}
-                              onClick={() => submitCode(r.job_id)}>
+                      <Button size="sm" variant="primary" disabled={!value.trim()}
+                              onClick={() => submitInput(r.job_id, wait)}>
                         Save
                       </Button>
                     </span>
                   ) : (
-                    <Button size="sm" className="ml-auto" onClick={() => { setOtpFor(r.job_id); setCode('') }}>
-                      Enter code
+                    <Button size="sm" className="ml-auto"
+                            onClick={() => { setInputFor(r.job_id); setValue('') }}>
+                      {wait === 'link' ? 'Paste link' : 'Enter code'}
                     </Button>
                   )
                 ) : null}
@@ -114,8 +126,8 @@ export default function ApplicationLog({ refreshKey, onApprove }) {
 
       {saved ? (
         <div className="mt-3">
-          <Note tone="ok" title="Code saved" onDismiss={() => setSaved(null)}>
-            Apply to that job again and the code will be entered for you.
+          <Note tone="ok" title="Saved" onDismiss={() => setSaved(null)}>
+            Apply to that job again and it will be used for you.
           </Note>
         </div>
       ) : null}

@@ -289,6 +289,20 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "auto_approve": True,
         "review_form_before_submit": False,
     },
+    # A single identity for the accounts the agent has to create on employer
+    # sites that will not show the form until you register. The email lives here
+    # (it is not a secret and forms ask for it directly); the password lives in
+    # credentials.json alongside the per-site logins, never in this settings
+    # store, because settings are dumped into API responses. Empty email falls
+    # back to the profile email, so the common case needs no configuration.
+    #
+    # When a fresh account triggers an email confirmation link or a one-time
+    # code, the agent does not guess: it parks the job as "input required" and
+    # waits for you to hand back the code or the link.
+    "signup": {
+        "enabled": True,
+        "email": "",
+    },
     # Auto Apply, as a review queue rather than a free hand.
     #
     # Tsenta's version picks roles and submits them. Quiver's picks roles and

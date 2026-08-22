@@ -116,12 +116,24 @@ export const api = {
       body: JSON.stringify({ password, generate }),
     }).then(handle),
 
+  // Hand back what a site is waiting on — a one-time code, or a confirmation
+  // link a freshly created account needs. Pass { code } or { link }.
+  agentSubmitInput: (jobId, payload) =>
+    fetch(`${BASE}/api/agent/job/${jobId}/otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(handle),
+
   agentSubmitOtp: (jobId, code) =>
     fetch(`${BASE}/api/agent/job/${jobId}/otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
     }).then(handle),
+
+  agentInputRequired: () =>
+    fetch(`${BASE}/api/agent/input-required`).then(handle),
 
   agentSaveJob: (jobId, saved = true) =>
     fetch(`${BASE}/api/agent/job/${jobId}/save?saved=${saved}`, { method: 'POST' }).then(handle),
