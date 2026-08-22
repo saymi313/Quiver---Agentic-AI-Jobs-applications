@@ -77,6 +77,35 @@ export const api = {
     return fetch(`${BASE}/api/agent/jobs?${p}`).then(handle)
   },
 
+  // ---- employer-account credentials ----
+  agentCredentials: () => fetch(`${BASE}/api/agent/credentials`).then(handle),
+
+  agentSetCredential: (domain, username, password) =>
+    fetch(`${BASE}/api/agent/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain, username, password }),
+    }).then(handle),
+
+  agentDeleteCredential: (domain) =>
+    fetch(`${BASE}/api/agent/credentials/${encodeURIComponent(domain)}`, {
+      method: 'DELETE',
+    }).then(handle),
+
+  agentSetAppPassword: ({ password = '', generate = false }) =>
+    fetch(`${BASE}/api/agent/application-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, generate }),
+    }).then(handle),
+
+  agentSubmitOtp: (jobId, code) =>
+    fetch(`${BASE}/api/agent/job/${jobId}/otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    }).then(handle),
+
   agentSaveJob: (jobId, saved = true) =>
     fetch(`${BASE}/api/agent/job/${jobId}/save?saved=${saved}`, { method: 'POST' }).then(handle),
 

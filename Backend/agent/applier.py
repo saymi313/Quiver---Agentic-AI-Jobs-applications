@@ -169,6 +169,100 @@ def diagnose_wall(page) -> tuple[str, str] | None:
     return None
 
 
+def _fill_login(page, cred: dict[str, str], log: Callable[[str], None]) -> bool:
+    """
+    Type a stored username and password into a sign-in form and submit it.
+
+    Best-effort by design: the field a site calls "username" might be an email
+    input, an id, or a plain text box, so several selectors are tried in the
+    order sites most commonly use. Returns whether both fields were filled and a
+    submit was clicked — the caller re-checks the wall to see if it worked.
+    """
+    user_sel = ("input[type=email]", "input[name*=email i]", "input[name*=user i]",
+                "input[id*=email i]", "input[id*=user i]", "input[autocomplete=username]")
+    pass_sel = ("input[type=password]", "input[name*=pass i]", "input[autocomplete=current-password]")
+    try:
+        user = next((page.locator(s) for s in user_sel if page.locator(s).count()), None)
+        pw = next((page.locator(s) for s in pass_sel if page.locator(s).count()), None)
+        if not user or not pw:
+            return False
+        user.first.fill(cred["username"], timeout=6000)
+        pw.first.fill(cred["password"], timeout=6000)
+        for name in ("Sign in", "Log in", "Login", "Continue", "Submit"):
+            btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
+            if btn.count() and btn.first.is_visible():
+                btn.first.click(timeout=6000)
+                log("[apply]   signed in with the stored credentials for this site")
+                return True
+        pw.first.press("Enter")
+        return True
+    except Exception as exc:
+        log(f"[apply]   sign-in attempt did not go through ({type(exc).__name__})")
+        return False
+
+
+def _fill_otp(page, code: str, log: Callable[[str], None]) -> bool:
+    """
+    Enter a one-time code the user handed back, and submit it.
+
+    Two shapes cover almost every site: one input that takes the whole code, or a
+    row of single-character boxes. The digits are spread across the boxes when
+    there is more than one.
+    """
+    try:
+        boxes = page.locator("input[autocomplete=one-time-code], input[name*=otp i], "
+                             "input[id*=otp i], input[name*=code i], input[inputmode=numeric]")
+        n = boxes.count()
+        if n == 0:
+            return False
+        if n == 1:
+            boxes.first.fill(code, timeout=6000)
+        else:
+            for i, ch in enumerate(code[:n]):
+                boxes.nth(i).fill(ch, timeout=3000)
+        for name in ("Verify", "Confirm", "Continue", "Submit"):
+            btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
+            if btn.count() and btn.first.is_visible():
+                btn.first.click(timeout=6000)
+                break
+        else:
+            boxes.first.press("Enter")
+        log("[apply]   entered the one-time code")
+        return True
+    except Exception as exc:
+        log(f"[apply]   could not enter the code ({type(exc).__name__})")
+        return False
+
+
+def try_clear_wall(page, job: dict[str, Any], log: Callable[[str], None]) -> bool:
+    """
+    Attempt to get past a login or one-time-code wall using what is stored.
+
+    A parked OTP for this job is spent first; failing that, a saved credential
+    for the page's domain is used to sign in. Returns True only if the wall is
+    actually gone afterwards, so the caller can continue filling the form.
+    """
+    from . import credentials
+
+    try:
+        text = (page.inner_text("body") or "")[:6000]
+    except Exception:
+        text = ""
+
+    if OTP_MARKERS.search(text):
+        code = credentials.pop_otp(job.get("id"))
+        if code and _fill_otp(page, code, log):
+            page.wait_for_timeout(1800)
+            return diagnose_wall(page) is None
+        return False
+
+    cred = credentials.get_credential(credentials.domain_of(page.url))
+    if cred and _fill_login(page, cred, log):
+        page.wait_for_timeout(2200)
+        return diagnose_wall(page) is None
+    return False
+
+
 # Yes/No toggle groups (Ashby renders required screening questions this way —
 # as <button> pairs, not radio inputs, so input-based collection never sees
 # them). The script tags each group's buttons so Python can click by group id.
@@ -891,6 +985,7 @@ def _llm_answers(page_fields: list[dict[str, Any]], job: dict[str, Any],
 
 
 def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool = True,
+                 review_before_submit: bool = False,
                  timeout_ms: int = 45000, log: Callable[[str], None] = print) -> dict[str, Any]:
     """Drive one application end to end. Never raises — returns a result dict."""
     from playwright.sync_api import sync_playwright
@@ -959,9 +1054,14 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     break
 
             # A captcha or login wall means the page in front of us is not the
-            # application form. Recorded as a failure with the reason, never
-            # skipped silently.
+            # application form. A sign-in or one-time-code wall is tried first
+            # against the credential store — the Workday/iCIMS case this whole
+            # feature exists for — and only recorded as needs-review if that does
+            # not clear it. A captcha is never something stored credentials help.
             wall = diagnose_wall(page)
+            if wall and wall[0] == "needs_review" and try_clear_wall(page, job, log):
+                log("[apply]   cleared the sign-in wall with stored credentials")
+                wall = None
             if wall:
                 result["status"], result["error"] = wall
                 log(f"[apply]   {result['status'].upper()} — {result['error']}")
@@ -987,6 +1087,9 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     page = moved
                     page.set_default_timeout(timeout_ms)
                     wall = diagnose_wall(page)
+                    if wall and wall[0] == "needs_review" and try_clear_wall(page, job, log):
+                        log("[apply]   cleared the sign-in wall with stored credentials")
+                        wall = None
                     if wall:
                         result["status"], result["error"] = wall
                         log(f"[apply]   {result['status'].upper()} — {result['error']}")
@@ -1147,6 +1250,20 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 log(f"[apply]   DRY RUN — form complete, not submitted ({shot.name})")
                 return result
 
+            # Review before submit: the form is filled and every required field
+            # answered, but the user asked to see it before it goes. Stop here
+            # with the filled fields and the screenshot captured, exactly one
+            # click short of submitting. Approving re-runs this with the flag
+            # off, which re-fills and submits. Unlike Tsenta, this pauses on any
+            # system — Quiver owns the submit click, so it can always hold it.
+            if review_before_submit:
+                result["status"] = "needs_review"
+                result["awaiting"] = "review"
+                result["error"] = ("filled and waiting for your review — approve to submit, "
+                                   "or open the screenshot to see the completed form")
+                log(f"[apply]   REVIEW — form complete, holding for your approval ({shot.name})")
+                return result
+
             # Short timeouts on purpose. A wrong guess used to sit on the
             # default 45 seconds waiting for a hidden element to become
             # clickable; trying the next candidate is far more useful than
@@ -1280,7 +1397,7 @@ def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
 
 
 def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = True,
-                 workers: int = 1,
+                 workers: int = 1, review: bool | None = None,
                  log: Callable[[str], None] = print) -> dict[str, Any]:
     """
     Apply to exactly these jobs — the per-job and bulk-apply entry point.
@@ -1289,7 +1406,15 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
     refuses are ones already applied to, checked against the live applications
     table so a double click, a re-run or an overlapping bulk selection cannot
     produce a second application.
+
+    `review` overrides the review-before-submit setting for this run: True forces
+    the pause on, False (what "Approve and submit" passes) forces it off, None
+    reads the setting. It never applies to a dry run, which submits nothing
+    regardless.
     """
+    if review is None:
+        review = bool((store.get_setting("tailoring", {}) or {}).get("review_form_before_submit"))
+    review = review and not dry_run
     rows = store.jobs_by_ids([int(i) for i in job_ids])
     if not rows:
         log("[apply] none of those job ids exist.")
@@ -1359,7 +1484,8 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
                 return
             counts["attempted"] += 1
 
-        result = apply_to_job(job, dry_run=dry_run, headless=headless, log=log)
+        result = apply_to_job(job, dry_run=dry_run, headless=headless,
+                              review_before_submit=review, log=log)
         with guard:
             status = _record(job, result, dry_run=dry_run, log=log)
             counts[status] = counts.get(status, 0) + 1

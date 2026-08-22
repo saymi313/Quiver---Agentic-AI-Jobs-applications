@@ -77,6 +77,21 @@ export function useAgentRun() {
     [stream],
   )
 
+  // Approve a form that was held for review, and submit it. Same apply path,
+  // with the review pause forced off for this one job.
+  const approveAndSubmit = useCallback(
+    (jobId) =>
+      stream.start({
+        key: 'agent_apply',
+        job_ids: [jobId],
+        dry_run: false,
+        headed: settings.headed,
+        workers: 1,
+        no_review: true,
+      }),
+    [stream, settings],
+  )
+
   /** Start a discovery run from whatever the saved search settings say. The
    *  button that does this is not on the same screen as those settings any
    *  more, so it reads them rather than owning them. */
@@ -99,6 +114,7 @@ export function useAgentRun() {
     busy,
     applyToJobs,
     generateResumes,
+    approveAndSubmit,
     findJobs,
     runSettings: settings,
     setRunSetting,

@@ -94,7 +94,7 @@ export default function DashboardTab({ onOpenJobs }) {
         onClear={stream.clear}
       />
 
-      <ApplicationLog refreshKey={refreshKey} />
+      <ApplicationLog refreshKey={refreshKey} onApprove={run.approveAndSubmit} />
 
       <p className="pt-1 text-tiny text-n-500">
         {overview.stats.jobs} roles tracked across {sourceCount} source

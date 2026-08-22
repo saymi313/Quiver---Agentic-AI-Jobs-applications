@@ -94,7 +94,8 @@ class JobManager:
         # boolean switches
         for flag, arg in (("dry_run", "--dry-run"), ("to_self", "--to-self"),
                           ("no_people", "--no-people"), ("no_ats", "--no-ats"),
-                          ("no_attach", "--no-attach"), ("headed", "--headed")):
+                          ("no_attach", "--no-attach"), ("headed", "--headed"),
+                          ("no_review", "--no-review")):
             if flag in allowed and options.get(flag):
                 cmd.append(arg)
 

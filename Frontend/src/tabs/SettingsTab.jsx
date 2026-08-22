@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import Settings from '../components/Settings'
 import Portals from '../components/Portals'
 import Mailbox from '../components/Mailbox'
+import Credentials from '../components/Credentials'
 import {
   Button, Checkbox, Disclosure, Empty, Field, Input, Note, PageHead,
 } from '../components/ui'
@@ -59,6 +60,8 @@ export default function SettingsTab() {
       <Portals open={panel === 'portals'} onToggle={(v) => setPanel(v ? 'portals' : '')} />
 
       <Mailbox open={panel === 'mailbox'} onToggle={(v) => setPanel(v ? 'mailbox' : '')} />
+
+      <Credentials open={panel === 'accounts'} onToggle={(v) => setPanel(v ? 'accounts' : '')} />
 
       <Settings
         overview={overview}

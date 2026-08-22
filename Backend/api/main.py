@@ -1296,6 +1296,92 @@ def agent_compose(body: ComposeRequest) -> dict[str, Any]:
     return out
 
 
+# --------------------------------------------------------------------------
+# Employer-account credentials, for the sites that need an account first
+# --------------------------------------------------------------------------
+
+@app.get("/api/agent/credentials")
+def agent_credentials() -> dict[str, Any]:
+    """The stored sites and whether an application password is set — no secrets."""
+    from agent import credentials
+
+    return credentials.status()
+
+
+class CredentialRequest(BaseModel):
+    domain: str
+    username: str
+    password: str
+
+
+@app.post("/api/agent/credentials")
+def agent_set_credential(body: CredentialRequest) -> dict[str, Any]:
+    """Save a login for one employer site. Stored outside the repo and the DB."""
+    from agent import credentials
+
+    out = credentials.set_credential(body.domain, body.username, body.password)
+    if not out.get("ok"):
+        raise HTTPException(400, out.get("error", "Could not save that credential."))
+    return {**out, **credentials.status()}
+
+
+@app.delete("/api/agent/credentials/{domain}")
+def agent_delete_credential(domain: str) -> dict[str, Any]:
+    from agent import credentials
+
+    credentials.delete_credential(domain)
+    return credentials.status()
+
+
+class AppPasswordRequest(BaseModel):
+    password: str = ""
+    generate: bool = False
+
+
+@app.post("/api/agent/application-password")
+def agent_set_application_password(body: AppPasswordRequest) -> dict[str, Any]:
+    """
+    Set (or generate) the shared password for accounts the agent registers.
+
+    The one Tsenta asks for at onboarding. Never returned once set — generating
+    one hands it back a single time so it can be written down, and after that the
+    store only ever says whether it exists.
+    """
+    from agent import credentials
+
+    password = credentials.generate_password() if body.generate else (body.password or "")
+    if not password:
+        raise HTTPException(400, "Provide a password or ask for a generated one.")
+    credentials.set_application_password(password)
+    out = {"ok": True, **credentials.status()}
+    if body.generate:
+        out["generated"] = password  # shown once, never stored back to the client
+    return out
+
+
+class OtpRequest(BaseModel):
+    code: str
+
+
+@app.post("/api/agent/job/{job_id}/otp")
+def agent_submit_otp(job_id: int, body: OtpRequest) -> dict[str, Any]:
+    """
+    Hand back a one-time code the site sent, for the next apply run to type in.
+
+    Quiver's local stand-in for Tsenta's `POST /applications/{id}/otp`: the
+    browser does not stay alive between runs, so the code waits against the job
+    until you apply again, and is spent the moment it is used.
+    """
+    from agent import credentials
+
+    code = (body.code or "").strip()
+    if not code:
+        raise HTTPException(400, "Enter the code the site sent you.")
+    credentials.set_otp(job_id, code)
+    return {"ok": True, "job_id": job_id,
+            "message": "Code saved. Apply to this job again and it will be entered."}
+
+
 class ReplyRequest(BaseModel):
     text: str
     subject: str | None = None
