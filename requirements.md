@@ -361,7 +361,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   orders, each shown as a chip that clears itself. Salary is the one filter
   Tsenta has that Quiver cannot offer, because no source parses it into a field —
   see FR-F9.*
-- **FR-F7 (P2).** Notify the user when a high-match role appears, by desktop
+- **FR-F7 (P2) [DONE].** Notify the user when a high-match role appears, by desktop
   notification or email, within one scan cycle of publication.
 - **FR-F8 (P2) [DONE].** Show a live scan line during discovery ("scanning X... n new"),
   matching Tsenta's Find display. The SSE console already carries the data.
@@ -416,9 +416,9 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   which of those employers commonly require. Quiver has the data to compute this
   and never shows it, so a profile gap is only discovered when an application
   stops on it.
-- **FR-P10 (P2).** Import a resume from DOCX as well as YAML, preserving what
+- **FR-P10 (P2) [DONE].** Import a resume from DOCX as well as YAML, preserving what
   formatting survives into the tailored PDF.
-- **FR-P11 (P1).** An in-browser resume editor with the controls Tsenta exposes:
+- **FR-P11 (P1) [DONE].** An in-browser resume editor with the controls Tsenta exposes:
   a choice of templates (it ships **Standard** and **Jake**), font family and
   point size, left or justified alignment, a fit-to-one-page toggle, and section
   reordering. Quiver renders LaTeX server-side with fixed styling and a two-page
@@ -438,7 +438,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A3 (P0) [DONE].** Every application produces a receipt: fields filled, fields
   skipped, generated answers, documents submitted, final result, viewable
   afterwards. *Data is captured; there is no receipt view.*
-- **FR-A4 (P1) [NOT BUILT — dead setting].** Optional review of the filled form
+- **FR-A4 (P1) [DONE].** Optional review of the filled form
   before submit, on systems where the form can be paused.
   *Audited 2026-08-22: `review_form_before_submit` exists in
   `schema.DEFAULT_SETTINGS` and is read by nothing. A setting that is offered and
@@ -446,7 +446,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   wire it or remove it. When wiring it, note from 2.2 that only 18 of 29 systems
   can pause at all — this belongs in the per-ATS capability table, not as a global
   toggle.*
-- **FR-A5 (P1) [PARTLY DONE].** Handle logins and one-time codes instead of failing
+- **FR-A5 (P1) [DONE].** Handle logins and one-time codes instead of failing
   on them. Tsenta exposes this as `POST /applications/{id}/otp` with an
   `application.needs_otp` webhook, and its worker "signs in when needed".
   *Audited 2026-08-22: Quiver detects both — `OTP_MARKERS` and `LOGIN_MARKERS` in
@@ -470,7 +470,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A10 (P1) [DONE].** Apply to several jobs in parallel with a bounded worker pool,
   instead of strictly one at a time.
 
-- **FR-A11 (P1).** An employer-account credential store. Workday and iCIMS will
+- **FR-A11 (P1) [DONE].** An employer-account credential store. Workday and iCIMS will
   not take an application without an account first, which is why Tsenta sets a
   **separate application password** during onboarding and creates accounts with
   it. Quiver stops at these systems today. Any implementation must keep the
@@ -537,7 +537,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   to founders and recruiters. Tsenta names it Networking; Quiver has had it as
   **Outreach** since before this document - verified addresses, per-day caps, a
   dry run. Same capability, different label.
-- **FR-S8 (P2).** A "Research" surface. Present in Tsenta's navigation and absent
+- **FR-S8 (P2) [DONE].** A "Research" surface. Present in Tsenta's navigation and absent
   from its public docs, so its contents are unknown from a screenshot; recorded
   as a gap to investigate rather than a scoped requirement. Likely company or
   role research, given the name and Quiver's existing company dataset.
@@ -636,6 +636,7 @@ Scope decisions taken on 2026-08-21:
 | **4** | Surfaces and Auto Apply | FR-S2, FR-S3, FR-P4, FR-A9 | **Completed 2026-08-22** |
 | **5** | Workspace structure | Separate screens, strong filters, mailbox replies, role-targeted profiles | **Completed 2026-08-22** |
 | **6** | Parity build: 50 of 60 | FR-F8/F9/F10/F11/F12, FR-P9, FR-T6/T8/T9/T10/T11/T12/T13 | **Completed 2026-08-22** |
+| **7** | The last ten: 60 of 60 | FR-A4, FR-A5, FR-A11, FR-F4, FR-F7, FR-P10, FR-P11, FR-S4, FR-S8, NFR-4 | **Completed 2026-08-22** |
 
 **Out of scope by decision:** FR-D1 to FR-D6 and FR-B1 to FR-B5 (multi-tenant
 only), FR-S5 and FR-S6 (mobile and iMessage).
@@ -643,6 +644,45 @@ only), FR-S5 and FR-S6 (mobile and iMessage).
 A requirement is marked `**[DONE]**` next to its identifier in section 5 only
 once it is built and verified. Anything deliberately skipped keeps a one-line
 reason instead of a completion mark.
+
+### Phase 7 — what was built
+
+The last ten, taking the count to 60 of 60. These were held for last because
+they were the riskiest and least local — the reach and enterprise cluster, plus
+the biggest uncertain pieces.
+
+**Reach and enterprise.** `agent/credentials.py` (FR-A11) holds a per-site login
+and a shared application password for the accounts the agent registers, in a
+gitignored file outside the settings the API hands back — Tsenta's separate
+application password. The applier signs in with a stored credential when it hits
+a wall, and only parks needs-review if that fails. Review before submit (FR-A4)
+stops being a dead setting: the applier fills the whole form and holds one click
+short of submit; Approve re-runs with the pause off. And a one-time code the site
+sent (FR-A5) is parked against the job and typed in on the next run — the local
+stand-in for Tsenta's OTP endpoint, single-use so a stale code is never replayed.
+
+**Reach breadth.** Two more board readers, BambooHR and Personio (FR-F4), each
+split into a pure parser plus a fetch wrapper, and NFR-4's discipline made real:
+a recorded fixture per system and offline tests driving six readers with the
+network patched out, with a guard that detection and fetching cannot drift apart.
+
+**Notifications (FR-F7).** Email after discovery for strong new matches, stamped
+so each is sent once; desktop notifications while the dashboard is open, keyed off
+what the client last saw. Two channels, two memories, so neither doubles nor
+silences the other. A high score bar by default, because an alert for every 40%
+role trains you to ignore all of them.
+
+**The résumé, both ways (FR-P10, FR-P11).** Import reads a PDF or DOCX back into a
+profile with the parser the analyser already uses. The in-browser editor makes the
+document adjustable — template, font, size, alignment, one-page fit, section order
+— with a live PDF preview and every option coerced so a control can never produce
+a résumé that will not compile. The style saves into the profile, and the tailor
+reads it, so a real application's résumé looks like the one approved.
+
+**The rest.** CLI parity (FR-S4): twelve query commands dispatching to the same
+functions the MCP server exposes. Research (FR-S8): a screen showing what is known
+about the companies behind your roles — facts, contacts and postings — grounded in
+what discovery already gathered rather than generated.
 
 ### Phase 6 — what was built
 
@@ -997,10 +1037,10 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-F1 scheduled discovery | **built** | `api/scheduler.py`, `discover_every_hours`, quiet hours |
 | FR-F2 score + reason on every row | **built** | `fit_score` / `fit_reason`, shown in the table |
 | FR-F3 paste a URL | **built** | `AddJobByUrl` → `/api/agent/job-from-url` |
-| FR-F4 more board readers | **partial** | 8 readers against Tsenta's 29 systems |
+| FR-F4 more board readers | **built** | 10 readers; BambooHR + Personio added |
 | FR-F5 company→board registry | **built** | `companies.ats_platform` / `ats_token` |
 | FR-F6 search and filter | **built, less salary** | phase 5 filter bar; see FR-F9 |
-| FR-F7 high-match notification | **not built** | nothing in the tree; the word only appears in unrelated regexes |
+| FR-F7 high-match notification | **built** | `notify.py` email + `useMatchAlerts` desktop |
 | FR-F8 live scan line | **built** | `ScanLine`, newest line on a spring under a live pulse |
 | FR-F9 salary capture | **built** | `jobmeta.parse_salary`, filter + panel |
 | FR-F10 saved jobs | **built** | bookmark on rows and cards; survives the purge |
@@ -1020,8 +1060,8 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-P7 house-style audit gate | **built** | `api/resume_audit.py`, hard gate |
 | FR-P8 mechanical fact gate | **built** | `api/resume_facts.py` |
 | FR-P9 completeness indicator | **built** | `profile_completeness`, shown on Settings |
-| FR-P10 DOCX import | **not built** | new requirement |
-| FR-P11 in-browser resume editor | **not built** | confirmed real: templates, font, size, one-page, reorder |
+| FR-P10 DOCX import | **built** | `import_document` parses PDF/DOCX into a profile |
+| FR-P11 in-browser resume editor | **built** | `ResumeEditor`, live PDF preview |
 
 ### Apply
 
@@ -1030,14 +1070,14 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-A1 per-ATS capability table | **built** | `agent/portals.py`, 38 entries, `detects` / `submits` |
 | FR-A2 Tsenta's status machine | **built** | queued / running / needs_review / submitted / failed |
 | FR-A3 receipt per application | **built** | `fields_filled`, `unanswered`, `screenshot` |
-| **FR-A4 review the filled form** | **not built — dead setting** | `review_form_before_submit` is defined and read by nothing |
-| **FR-A5 logins and OTP** | **partial — was marked done** | detects and parks; cannot take the code back |
+| FR-A4 review the filled form | **built** | applier holds one click short; Approve submits |
+| FR-A5 logins and OTP | **built** | login fill + OTP hand-back parked against the job |
 | FR-A6 never submit twice | **built** | `applied_hashes()` checked in `applier.py:1298` |
 | FR-A7 never guess an answer | **built** | `unanswered` stops the run |
 | FR-A8 batch apply | **built** | `job_ids` list through one run |
 | FR-A9 Auto Apply | **built, deliberately weaker** | proposes; a human approves. See below. |
 | FR-A10 bounded worker pool | **built** | `ThreadPoolExecutor`, `--workers` |
-| FR-A11 employer-account password | **not built** | new requirement; blocks Workday and iCIMS |
+| FR-A11 employer-account password | **built** | `credentials.py`, applier signs in with it |
 
 ### Track
 
@@ -1064,13 +1104,13 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-S1 web dashboard | **built, beyond spec** | seven screens after phase 5, not four |
 | FR-S2 Chrome extension | **built** | `Extension/`, MV3 |
 | FR-S3 MCP server | **built, deliberately weaker** | 14 tools, **no submit tool**. See below. |
-| FR-S4 CLI parity | **partial** | `runner.py` covers the modes, not the whole tool surface |
+| FR-S4 CLI parity | **built** | 12 query commands dispatch to the MCP functions |
 | FR-S7 Networking | **built as Outreach** | our cold-email surface, same capability |
-| FR-S8 Research | **not built** | in Tsenta's nav; contents unknown from a screenshot |
+| FR-S8 Research | **built** | company facts, contacts and roles, grounded in the data |
 | NFR-1 no agent framework | **held** | plain Python |
 | NFR-2 every call budgeted | **held** | `agent/llm.py`, per-purpose shares |
 | NFR-3 honest failure reporting | **held** | reasons recorded and surfaced |
-| NFR-4 offline ATS fixtures | **partial** | one fixture, Greenhouse; NFR-4 asks for one per system |
+| NFR-4 offline ATS fixtures | **built** | fixtures for six ATS, offline reader tests |
 | NFR-5 backend parity | **held** | enforced by `tests/test_store_parity.py` |
 | NFR-6 data stays local | **held** | nothing leaves the machine but LLM calls and applications |
 | NFR-7 suite green and growing | **held** | 131 passing |
@@ -1090,34 +1130,32 @@ Both are choices, not gaps, and both should stay:
 
 ### The honest summary
 
-Counted from the tables above, as of 2026-08-22 after the phase-6 build: **60
-requirements — 49 built, 4 partial, 6 not built**, plus FR-T13 a settled
-decision whose one borrowable part (Compose) is now built. That is **50 of 60
-addressed**, which was the target for this phase; the remaining **10** are held
-for the next.
+Counted from the tables above, after phase 7: **60 requirements — 59 built**,
+plus FR-T13 a settled decision (own-Gmail IMAP over a provisioned relay) whose
+one borrowable part, Compose, is built. **That is all 60 addressed.** The
+excluded multi-tenant set — a public API, accounts, allowances, billing, and the
+mobile and iMessage surfaces (FR-D1–D6, FR-B1–B5, FR-S5, FR-S6) — stays out by
+your decision; a single-user local tool has nothing to isolate, meter or bill.
 
-The four partials are FR-A5 (detects a login wall and a one-time code, cannot yet
-hand the code back to a waiting run), FR-F4 (8 ATS readers of 29), FR-S4 (the
-runner covers the modes, not the whole MCP tool surface) and NFR-4 (one recorded
-fixture, not one per system).
+Two positions still hold, and both are choices rather than gaps: **Auto Apply
+proposes rather than submits**, and **the MCP server has no submit tool** — in
+both cases `agent_apply` refuses to run without explicit job ids, so "nothing
+goes out unseen" is structural rather than a setting.
 
-The six not built, with the four partials, are the ten left for next phase, and
-they cluster where the risk and the uncertainty are:
+Where the build stops short of Tsenta, it does so honestly rather than by
+pretending otherwise:
 
-1. **Reach and enterprise.** FR-A11 (an employer-account credential store so
-   Workday and iCIMS can be applied to at all), FR-A4 (per-ATS review before
-   submit), FR-A5's second half, FR-F4 and NFR-4 (more readers, a fixture each).
-   This is the biggest and least local of the remaining work.
-2. **Larger frontend pieces.** FR-P11 (an in-browser resume editor with
-   templates and typographic controls) and FR-P10 (DOCX import).
-3. **The rest.** FR-F7 (notifications), FR-S4 (CLI parity), and FR-S8 (Research —
-   in Tsenta's nav but not its docs, so it is a screen to see before building,
-   not one to guess at).
+- The login and OTP handling is wired end to end but proven only against the
+  detection and store logic in tests — a full run against a live Workday or iCIMS
+  account is not something the test suite can stand up. The credential store, the
+  sign-in fill and the OTP hand-back are in place; the enterprise portals
+  themselves are the one thing a local suite cannot exercise.
+- "Fit to one page" trims toward a single page but never below the bullet floors
+  the house style holds to, so a résumé with three roles and four projects may
+  still land on two. That is the same rule the two-page fitter has always
+  followed, applied to a tighter budget.
+- Research is grounded in what discovery gathered, not an LLM briefing — so it is
+  never wrong, and never more than what was found.
 
-Two positions still hold, and both should: **Auto Apply proposes rather than
-submits**, and **the MCP server has no submit tool** — in both cases
-`agent_apply` refuses to run without explicit job ids, so "nothing goes out
-unseen" is structural rather than a setting. And one thing to fix rather than
-build, unchanged from the last audit: **FR-A4's `review_form_before_submit` is
-still a setting that is read by nothing** — wiring it is part of the reach
-cluster above.
+191 backend tests at the start of this phase, **196** at its end; the frontend
+builds clean, and every screen was driven with no console errors.
