@@ -1061,11 +1061,9 @@ def _fill_text(page, idx: int, value: str) -> bool:
     must_type = picks_suggestion or bool(kind.get("tel"))
 
     if kind.get("tel"):
-        # intl-tel-input parses as it goes and drops what it cannot read.
-        # "+92 301 8165385" loses its spaces or the whole entry; the compact
-        # E.164 form is what it accepts, and the plus keeps the country right.
-        digits = re.sub(r"[^\d+]", "", value or "")
-        value = digits if digits else value
+        # The phone box is an intl-tel-input widget with its own country
+        # dropdown, and it needs its own routine — see _fill_phone.
+        return _fill_phone(page, field, value)
 
     if not must_type:
         try:
@@ -1092,6 +1090,70 @@ def _fill_text(page, idx: int, value: str) -> bool:
         # reads back empty even when the form is perfectly happy. Ask the
         # form, not the input.
         return _field_satisfied(field)
+    except Exception:
+        return False
+
+
+def _fill_phone(page, field, value: str) -> bool:
+    """
+    Fill a phone box, including the intl-tel-input widget Greenhouse wraps it in.
+
+    intl-tel-input is the hard case. It pairs the number input with a country
+    flag, and reformats what you type inside its own `input`/`keyup` handler —
+    on the forms measured here the flag is styled to 0×0 (a human never clicks
+    it either) and the handler *wipes* any international number it cannot pin to
+    a locked country. So typing, `.fill()`, and a native value-set that fires
+    `input` all end up empty the moment the field blurs or the next field is
+    touched. The one thing that survives: set the value through the native
+    setter and fire only `change`, which the widget does not react to. The
+    digits — with their country code — then stay put and submit correctly, since
+    the form posts the input's own value. The country code must be in the number
+    (the profile stores it as "+92 …"), because the widget's default country is
+    no longer consulted.
+
+    A plain phone field is filled with real keystrokes instead, so a React-driven
+    form still registers the change.
+    """
+    number = re.sub(r"[^\d+]", "", value or "")
+    if not number:
+        return False
+
+    is_iti = False
+    try:
+        is_iti = bool(field.evaluate("(el) => !!el.closest('.iti, [class*=iti__]')"))
+    except Exception:
+        pass
+
+    if is_iti:
+        try:
+            field.evaluate(
+                """(el, val) => {
+                  const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set;
+                  setter.call(el, val);
+                  el.dispatchEvent(new Event('change', {bubbles: true}));
+                }""", number)
+            page.wait_for_timeout(300)
+            return bool((field.input_value(timeout=2000) or "").strip())
+        except Exception:
+            return False
+
+    for _ in range(2):
+        try:
+            field.click(timeout=5000)
+            field.fill("", timeout=3000)          # clear any partial entry
+            field.press_sequentially(number, delay=35, timeout=15000)
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
+        try:
+            if (field.input_value(timeout=2000) or "").strip():
+                return True
+        except Exception:
+            pass
+    try:
+        field.fill(number, timeout=5000)
+        return bool((field.input_value(timeout=2000) or "").strip())
     except Exception:
         return False
 
