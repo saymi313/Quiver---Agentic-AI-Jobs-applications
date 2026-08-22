@@ -781,7 +781,25 @@ APPLICATION_HINT = re.compile(
 
 APPLY_LINK_TEXT = re.compile(
     r"^\s*(apply(\s+(now|here|for this (job|role|position)|on .{0,30})?)?|"
-    r"i'?m interested|submit application|go to application)\s*$", re.I)
+    r"i'?m interested|submit application|go to application|"
+    # The EU boards this reaches are often not in English.
+    r"(jetzt |auf diese stelle )?bewerben|zur bewerbung|postuler)\s*$", re.I)
+
+# Cookie / consent overlays that sit over the form until dismissed. Mandatory on
+# EU sites and shown by default, so German and French are covered too.
+CONSENT_LABELS = re.compile(
+    r"^\s*(accept( all)?( cookies)?|allow all( cookies)?|i agree|agree|got it|"
+    r"alle akzeptieren|akzeptieren|zustimmen|einverstanden|"
+    r"tout accepter|j'?accepte|accepter)\s*$", re.I)
+
+# Buttons that open or expand an inline application form — as opposed to a link
+# that navigates to another site, which is follow_apply_link's job. Personio,
+# SmartRecruiters and others hide the fields behind one of these, and the label
+# is frequently in the employer's own language.
+REVEAL_FORM_LABELS = re.compile(
+    r"^\s*(apply( for this (job|role|position))?|apply now|i'?m interested|"
+    r"start( your)? application|(jetzt |auf diese stelle )?bewerben|"
+    r"zur bewerbung|postuler)\s*$", re.I)
 
 
 def looks_like_application(fields: list[dict[str, Any]]) -> bool:
@@ -800,6 +818,40 @@ def looks_like_application(fields: list[dict[str, Any]]) -> bool:
     if any(APPLICATION_HINT.search(text) for text in labelled):
         return True
     return len(fields) >= 4
+
+
+def _reveal_form(page, log: Callable[[str], None]) -> None:
+    """
+    Get an application form onto the page: dismiss a cookie wall, then click any
+    Apply/Bewerben button that expands or opens the inline form.
+
+    Employer ATS pages — Personio especially — hide the fields behind a consent
+    banner and an Apply button, and the labels are often not in English. Without
+    this the page reads as "no form fields" when the form is one click away.
+    Best-effort and silent on failure: it only ever helps.
+    """
+    # 1. Consent overlays first — they can cover or gate the form.
+    for role in ("button", "link"):
+        try:
+            b = page.get_by_role(role, name=CONSENT_LABELS)
+            if b.count() and b.first.is_visible():
+                b.first.click(timeout=4000)
+                page.wait_for_timeout(900)
+                log("[apply]   dismissed a cookie/consent banner")
+                break
+        except Exception:
+            pass
+
+    # 2. A button that opens or expands the inline form. Buttons only — a link
+    #    that leaves the page is followed elsewhere, not here.
+    try:
+        b = page.get_by_role("button", name=REVEAL_FORM_LABELS)
+        if b.count() and b.first.is_visible():
+            b.first.click(timeout=5000)
+            page.wait_for_timeout(2200)
+            log("[apply]   opened the application form")
+    except Exception:
+        pass
 
 
 def follow_apply_link(page, context, *, log: Callable[[str], None] = print):
@@ -1251,13 +1303,9 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             page.wait_for_timeout(2500)
 
-            # Greenhouse/Lever often gate the form behind an "Apply" button.
-            for label in ("Apply for this job", "Apply now", "Apply", "I'm interested"):
-                btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(label)}\s*$", re.I))
-                if btn.count() and btn.first.is_visible():
-                    btn.first.click()
-                    page.wait_for_timeout(2000)
-                    break
+            # Greenhouse/Lever/Personio gate the form behind a consent banner
+            # and/or an Apply button, in whatever language the employer uses.
+            _reveal_form(page, log)
 
             # A captcha or login wall means the page in front of us is not the
             # application form. A sign-in or one-time-code wall is tried first
@@ -1312,7 +1360,48 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                         except Exception:
                             pass
                         return result
+                    # The employer's own page may itself gate the form behind a
+                    # consent banner and an Apply button — reveal it before reading.
+                    _reveal_form(page, log)
                     fields = _collect_fields(page)
+
+            # Still no form? It is often one more hop away. A Personio job page
+            # carries the description and an "Apply for this job" link on to a
+            # separate /apply URL where the fields actually live — so follow the
+            # apply link again, reveal, settle and scroll before giving up.
+            if not fields or not looks_like_application(fields):
+                hopped = follow_apply_link(page, context, log=log)
+                if hopped is not page or hopped.url != page.url:
+                    page = hopped
+                    page.set_default_timeout(timeout_ms)
+                    wall = diagnose_wall(page)
+                    if wall and wall[0] == "needs_review" and try_clear_wall(page, job, log):
+                        wall = None
+                    if wall:
+                        result["status"], result["error"] = wall
+                        pending = credentials.pending_input(job.get("id"))
+                        if pending:
+                            result["error"] = pending.get("prompt") or result["error"]
+                            result["input_required"] = pending.get("kind")
+                        log(f"[apply]   {result['status'].upper()} — {result['error']}")
+                        try:
+                            shot = SHOT_DIR / f"job{job.get('id')}_blocked.png"
+                            page.screenshot(path=str(shot), full_page=True)
+                            result["screenshot"] = shot.name
+                        except Exception:
+                            pass
+                        return result
+                _reveal_form(page, log)
+                page.wait_for_timeout(3000)
+                try:
+                    page.mouse.wheel(0, 1600)
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+                retry = _collect_fields(page)
+                if len(retry) > len(fields):
+                    log(f"[apply]   found the form after another hop: {len(retry)} field(s)")
+                    fields = retry
 
             log(f"[apply]   {len(fields)} form field(s) detected")
             if not fields or not looks_like_application(fields):

@@ -76,5 +76,25 @@ def test_apply_link_text_matches_real_button_labels():
     for label in ("Apply", "Apply Now", "Apply now", "Apply for this job",
                   "I'm interested", "Submit application"):
         assert A.APPLY_LINK_TEXT.match(label), label
+
+
+def test_apply_link_text_matches_german_labels():
+    # The EU boards this reaches (arbeitnow → Personio) label the apply link in
+    # the employer's language; missing these is how a German form was never
+    # reached.
+    for label in ("Bewerben", "Jetzt bewerben", "Auf diese Stelle bewerben"):
+        assert A.APPLY_LINK_TEXT.match(label), label
+
+
+def test_reveal_and_consent_labels():
+    # The button that opens an inline form, in English and German.
+    for label in ("Apply for this job", "Apply now", "Bewerben", "Jetzt bewerben"):
+        assert A.REVEAL_FORM_LABELS.match(label), label
+    # Cookie/consent buttons that gate EU forms.
+    for label in ("Accept all", "Allow all cookies", "Alle akzeptieren",
+                  "Akzeptieren", "Tout accepter"):
+        assert A.CONSENT_LABELS.match(label), label
+    # A plain "Submit" is not a consent button.
+    assert not A.CONSENT_LABELS.match("Submit")
     for label in ("Apply filters", "How to apply for a visa", "Applications"):
         assert not A.APPLY_LINK_TEXT.match(label), label
