@@ -27,6 +27,7 @@ from typing import Any, Callable
 from api.config import DASHBOARD_OUT
 from api import behuman
 
+from . import answers as answer_bank
 from . import credentials, llm, matcher, portals, store
 
 SHOT_DIR = DASHBOARD_OUT / "applications"
@@ -536,12 +537,16 @@ def _answer_choice_groups(page, job: dict[str, Any], profile: dict[str, str],
     if not pending:
         return {}, []
 
-    # Rules answer the common questions without a model call; the LLM handles
-    # the rest with the same "only if the profile supports it" contract.
+    # Rules answer the common questions without a model call; a saved answer
+    # covers the long tail the profile cannot; the LLM handles the rest with the
+    # same "only if the profile supports it" contract.
+    saved_bank = answer_bank.load()
     need_llm = []
     answers: dict[int, str] = {}
     for g in pending:
         ans = _choice_rule_answer(g["question"], profile)
+        if not ans:
+            ans = answer_bank.as_yes_no(answer_bank.match(g["question"], saved=saved_bank))
         if ans:
             answers[g["i"]] = ans
         else:
@@ -1373,10 +1378,24 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
 
             log(f"[apply]   {len(filled)} field(s) from profile rules, {len(leftovers)} to reason about")
 
-            # Pass 2 — LLM for whatever is left
+            # Pass 2 — saved answers first, then the LLM for whatever is left.
+            # A question the user has answered by hand once is reused here, for
+            # free and deterministically, and never reaches the model.
             if leftovers:
-                answers = _llm_answers(leftovers, {**job, "company_name": company},
-                                       profile, letter, log)
+                saved_bank = answer_bank.load()
+                answers: dict[int, dict[str, Any]] = {}
+                to_reason: list[dict[str, Any]] = []
+                for f in leftovers:
+                    hit = answer_bank.match(f["label"] or f["name"], saved=saved_bank)
+                    if hit:
+                        answers[f["idx"]] = {"answer": hit, "confident": True}
+                    else:
+                        to_reason.append(f)
+                if answers:
+                    log(f"[apply]   {len(answers)} field(s) from your saved answers")
+                if to_reason:
+                    answers.update(_llm_answers(to_reason, {**job, "company_name": company},
+                                                profile, letter, log))
                 still: list[dict[str, Any]] = []
                 for f in leftovers:
                     ans = answers.get(f["idx"])

@@ -303,6 +303,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "enabled": True,
         "email": "",
     },
+    # Saved answers to the questions a profile cannot hold — "Are you open to
+    # co-living?", "What's your favourite project?". Each is {match, answer}:
+    # the agent reuses the answer wherever a form asks the same thing, so a
+    # question answered by hand once never stops a run again. These fill only
+    # where the truthful profile rules had nothing to say.
+    "custom_answers": [],
     # Auto Apply, as a review queue rather than a free hand.
     #
     # Tsenta's version picks roles and submits them. Quiver's picks roles and

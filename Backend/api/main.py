@@ -821,6 +821,11 @@ class SettingsPatch(BaseModel):
     schedule: dict[str, Any] | None = None
     tailoring: dict[str, Any] | None = None
     auto_apply: dict[str, Any] | None = None
+    notify: dict[str, Any] | None = None
+    search: dict[str, Any] | None = None
+    signup: dict[str, Any] | None = None
+    # A list, not a dict — replaced wholesale, not key-merged (see below).
+    custom_answers: list[dict[str, Any]] | None = None
 
 
 @app.post("/api/agent/settings")
@@ -829,6 +834,12 @@ def agent_settings(patch: SettingsPatch) -> dict[str, Any]:
 
     agent_store.init()
     for key, value in patch.model_dump(exclude_none=True).items():
+        # A list-valued setting (custom_answers) is the whole collection, so it
+        # replaces what was there — key-merging a list is meaningless and, worse,
+        # spreading one into a dict raises.
+        if isinstance(value, list):
+            agent_store.set_setting(key, value)
+            continue
         current = agent_store.get_setting(key, {}) or {}
         merged = {**current, **value}
         # An empty api_key in the payload means "leave it alone", not "clear it".

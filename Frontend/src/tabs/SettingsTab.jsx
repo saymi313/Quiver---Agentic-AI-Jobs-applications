@@ -6,6 +6,7 @@ import Settings from '../components/Settings'
 import Portals from '../components/Portals'
 import Mailbox from '../components/Mailbox'
 import Credentials from '../components/Credentials'
+import SavedAnswers from '../components/SavedAnswers'
 import {
   Button, Checkbox, Disclosure, Empty, Field, Input, Note, PageHead,
 } from '../components/ui'
@@ -62,6 +63,13 @@ export default function SettingsTab() {
       <Mailbox open={panel === 'mailbox'} onToggle={(v) => setPanel(v ? 'mailbox' : '')} />
 
       <Credentials open={panel === 'accounts'} onToggle={(v) => setPanel(v ? 'accounts' : '')} />
+
+      <SavedAnswers
+        overview={overview}
+        onSaved={refresh}
+        open={panel === 'answers'}
+        onToggle={(v) => setPanel(v ? 'answers' : '')}
+      />
 
       <Notifications
         overview={overview}
