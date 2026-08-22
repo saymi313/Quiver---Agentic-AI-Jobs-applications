@@ -175,12 +175,15 @@ def audit_pdf(pdf: Path) -> list[str]:
         fails.append("no TECHNICAL SKILLS section")
 
     # -- summary length ----------------------------------------------------
+    # Two lines read as thin on a senior resume; four is the ceiling before the
+    # summary starts eating the space the experience needs. Anything in the
+    # three-to-four range is house style now.
     try:
         u0 = upper.index("SUMMARY")
         u1 = next(i for i in range(u0 + 1, len(lines)) if upper[i] in SECTIONS)
         n = len([l for l in lines[u0 + 1:u1] if l.strip()])
-        if n > 2:
-            fails.append(f"SUMMARY runs to {n} lines, house style is 2")
+        if n > 4:
+            fails.append(f"SUMMARY runs to {n} lines, house style is at most 4")
     except (ValueError, StopIteration):
         pass
 

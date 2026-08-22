@@ -612,11 +612,14 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *, mode: str = DEFAULT_MO
             b.text = revised
             changed += 1
 
-    # The house style caps the summary at two rendered lines (~230 chars in
-    # 10.5pt Times across 7.5in). A longer rewrite is rejected outright: the
-    # curated summary already fits, and the audit gate would bounce the PDF.
+    # A summary of three to four rendered lines (~520 chars in 10.5pt Times
+    # across 7.5in). Two lines read as thin on a senior resume; four is the
+    # ceiling before it starts eating the space the experience needs. A rewrite
+    # longer than that is rejected and the curated summary — itself written to
+    # this fuller length — is kept. The page fitter still guarantees two pages,
+    # so a long summary trims a weak bullet rather than spilling over.
     new_summary = (data.get("summary") or "").strip()
-    if (40 < len(new_summary) <= 230
+    if (40 < len(new_summary) <= 520
             and not resume_style.lint(resume_style.enforce(new_summary))
             and not resume_facts.check_rewrite(content.summary, new_summary, vocabulary)):
         changes.append({"original": content.summary, "revised": new_summary,

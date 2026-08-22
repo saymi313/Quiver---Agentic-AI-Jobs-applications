@@ -27,21 +27,29 @@ candidate:
   # Two lines, and they lead with years and impact rather than a stack list.
   # The stack belongs in Skills, where a parser expects to find it.
   summary: >
-    Software Developer and Frontend Team Lead with 2+ years shipping production web
-    applications in React, Node.js and MongoDB.
-    Leads a team of 10 and owns delivery across payments, real time systems and REST APIs.
+    Full Stack Developer and Frontend Team Lead with 2+ years shipping production
+    web applications end to end in React, Node.js, Express and MongoDB. Leads a team
+    of 10, owning delivery across payment integrations, real time systems and RESTful
+    API design, and running code reviews and sprint planning across the team. Works
+    the full stack into the cloud — AWS, Docker and Kubernetes — with a focus on
+    scalable, maintainable systems and clean, ATS-readable delivery.
 
 # Alternate summaries the tailor swaps in when the job description leans a
 # particular way. Keyword triggers live in `modes_triggers`.
 modes:
   ai_summary: >
-    AI Software Engineer with 2+ years building production web applications and
-    AI powered systems. Works across machine learning, NLP, real time systems, REST API
-    design and scalable backend architecture.
+    AI Software Engineer and Full Stack Developer with 2+ years building production
+    web applications and AI powered systems. Works across machine learning, NLP and
+    sentiment analysis alongside React, Node.js, Express and MongoDB, designing RESTful
+    APIs and scalable backend architecture for real time products. Ships AI into working
+    software — integrated, deployed on AWS with Docker, and owned end to end — rather
+    than leaving it in a notebook.
   ux_summary: >
     UI/UX Designer and Frontend Team Lead with 2+ years shipping production interfaces.
-    Runs the work end to end: user research, wireframes and prototypes in Figma, then the
-    React front end that implements them.
+    Runs the work end to end — user research, wireframes and interactive prototypes in
+    Figma and Adobe XD — then builds the React and Tailwind CSS front end that implements
+    them. Leads a team of 10 and owns the handoff from design system to shipped product,
+    keeping accessibility and usability in view the whole way.
 
 modes_triggers:
   ai_summary: [ai, machine learning, ml, nlp, deep learning, data science, llm, computer vision]
