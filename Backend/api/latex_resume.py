@@ -53,6 +53,68 @@ MIN_PROJECTS = 2
 MAX_PROJECTS_SHOWN = 4
 MAX_PAGES = 2
 
+# The controls the in-browser editor exposes (FR-P11). Each maps to something
+# the template can honour without giving up the ATS-safety the house style is
+# built on — so "justified" is offered but noted, and the fonts are all serif
+# faces with clean ToUnicode maps. `sections` is the render order; `template`
+# picks a density, not a wholly different layout, because a two-column resume
+# would defeat the single-column rule the whole file exists to keep.
+FONTS = {
+    "times": {"label": "Times", "pkg": r"\usepackage{newtxtext}\usepackage{newtxmath}"},
+    "charter": {"label": "Charter", "pkg": r"\usepackage[charter]{mathdesign}"},
+    "palatino": {"label": "Palatino", "pkg": r"\usepackage{newpxtext}\usepackage{newpxmath}"},
+}
+FONT_SIZES = (10.0, 10.5, 11.0, 11.5)
+SECTION_KEYS = ("summary", "experience", "projects", "skills", "education", "achievements")
+TEMPLATES = ("standard", "compact")
+
+
+@dataclass
+class RenderOptions:
+    template: str = "standard"     # standard | compact (density, not layout)
+    font: str = "times"            # a key of FONTS
+    font_size: float = 10.5        # one of FONT_SIZES
+    align: str = "left"            # left (ragged) | justified
+    fit_one_page: bool = False     # trim to a single page rather than two
+    sections: tuple[str, ...] = SECTION_KEYS
+
+    @classmethod
+    def coerce(cls, raw: dict[str, Any] | None) -> "RenderOptions":
+        """Build valid options from anything, dropping what does not check out —
+        an editor control cannot push the template into an invalid state."""
+        raw = raw or {}
+        try:
+            size = float(raw.get("font_size", 10.5))
+        except (TypeError, ValueError):
+            size = 10.5
+        size = min(FONT_SIZES, key=lambda s: abs(s - size))
+        wanted = [s for s in (raw.get("sections") or []) if s in SECTION_KEYS]
+        # Keep every real section exactly once, appending any the caller omitted
+        # so a section can never be lost by reordering.
+        order = list(dict.fromkeys(wanted)) + [s for s in SECTION_KEYS if s not in wanted]
+        return cls(
+            template=raw.get("template") if raw.get("template") in TEMPLATES else "standard",
+            font=raw.get("font") if raw.get("font") in FONTS else "times",
+            font_size=size,
+            align="justified" if raw.get("align") == "justified" else "left",
+            fit_one_page=bool(raw.get("fit_one_page")),
+            sections=tuple(order),
+        )
+
+    def to_context(self) -> dict[str, Any]:
+        density = self.template == "compact"
+        return {
+            "font_pkg": FONTS[self.font]["pkg"],
+            "font_size": f"{self.font_size:g}",
+            "leading": f"{self.font_size * 1.21:g}",
+            "align": self.align,
+            "margin": "0.4in" if density else "0.5in",
+            "role_gap": "0.28em" if density else "0.4em",
+            "sec_before": "0.5em" if density else "0.68em",
+            "sections": self.sections,
+        }
+
+
 # Custom delimiters so LaTeX braces pass through Jinja untouched.
 JINJA_KW = dict(
     block_start_string="[%", block_end_string="%]",
@@ -581,7 +643,8 @@ def _styled(s: Any) -> str:
 
 
 
-def render_tex(content: ResumeContent) -> str:
+def render_tex(content: ResumeContent, opts: RenderOptions | None = None) -> str:
+    opts = opts or RenderOptions()
     env = Environment(loader=FileSystemLoader(str(CV_DATA)), autoescape=False, **JINJA_KW)
     env.filters["tex"] = tex_escape
     template = env.get_template(TEMPLATE_NAME)
@@ -631,6 +694,7 @@ def render_tex(content: ResumeContent) -> str:
             "name": _styled(b.name), "tech": _styled(b.tech),
             "bullets": [_styled(x.text) for x in b.bullets],
         } for b in content.projects],
+        "opts": opts.to_context(),
     }
     return template.render(ctx)
 
@@ -786,6 +850,7 @@ def _drop_weakest(content: ResumeContent) -> bool:
 
 def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
           max_pages: int = MAX_PAGES, max_passes: int = 24,
+          opts: RenderOptions | None = None,
           log: Callable[[str], None] = print) -> dict[str, Any]:
     """
     Render the .tex and compile it.
@@ -797,10 +862,12 @@ def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
     pages — enough for every role and every project at healthy bullet counts.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
+    if opts and opts.fit_one_page:
+        max_pages = 1
     trim_to_budget(content, log=log)
 
     tex_path = out_dir / f"{stem}.tex"
-    tex_source = render_tex(content)
+    tex_source = render_tex(content, opts)
     tex_path.write_text(tex_source, encoding="utf-8")
 
     pdf, message = compile_pdf(tex_path, log=log)
@@ -810,7 +877,7 @@ def build(content: ResumeContent, out_dir: Path, stem: str = "resume", *,
         for _ in range(max_passes):
             if not _drop_weakest(content):
                 break
-            tex_source = render_tex(content)
+            tex_source = render_tex(content, opts)
             tex_path.write_text(tex_source, encoding="utf-8")
             pdf, message = compile_pdf(tex_path, log=lambda _: None)
             pages = _page_count(pdf) if pdf else pages

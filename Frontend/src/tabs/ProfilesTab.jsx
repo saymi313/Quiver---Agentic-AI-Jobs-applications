@@ -3,6 +3,7 @@ import { motion as m } from 'motion/react'
 import { api } from '../lib/api'
 import { springFor } from '../lib/motion'
 import { CategoryChip } from '../components/apple'
+import ResumeEditor from '../components/ResumeEditor'
 import {
   Button, Empty, Icon, Input, Note, PageHead, Section, Status,
 } from '../components/ui'
@@ -41,6 +42,7 @@ export default function ProfilesTab() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [newName, setNewName] = useState('')
+  const [editing, setEditing] = useState(null) // {name, render}
 
   const load = useCallback(
     () => api.agentResumeProfiles().then(setData).catch((e) => setError(e.message)),
@@ -93,6 +95,7 @@ export default function ProfilesTab() {
             onCategories={(next) =>
               act(`cats:${p.name}`, () => api.agentSetProfileCategories(p.name, next))
             }
+            onEditStyle={() => setEditing({ name: p.name, render: p.render })}
           />
         ))}
       </div>
@@ -163,11 +166,19 @@ export default function ProfilesTab() {
           />
         </div>
       </Section>
+
+      <ResumeEditor
+        open={!!editing}
+        profile={editing?.name}
+        initial={editing?.render}
+        onClose={() => setEditing(null)}
+        onSaved={load}
+      />
     </div>
   )
 }
 
-function ProfileCard({ profile, index, isDefault, busy, onSetDefault, onDelete, onCategories }) {
+function ProfileCard({ profile, index, isDefault, busy, onSetDefault, onDelete, onCategories, onEditStyle }) {
   const [editing, setEditing] = useState(false)
   const chosen = profile.categories || []
 
@@ -193,6 +204,9 @@ function ProfileCard({ profile, index, isDefault, busy, onSetDefault, onDelete, 
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <Button size="sm" onClick={onEditStyle}>
+            Edit style
+          </Button>
           {!isDefault ? (
             <Button size="sm" busy={busy === `default:${profile.name}`} onClick={onSetDefault}>
               Make default

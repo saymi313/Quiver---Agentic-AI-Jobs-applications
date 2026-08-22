@@ -214,6 +214,24 @@ export const api = {
       method: 'DELETE',
     }).then(handle),
 
+  // ---- resume editor (FR-P11) ----
+  agentResumePreview: (profile, options) =>
+    fetch(`${BASE}/api/agent/resume-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile, options }),
+    }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Could not build the preview.')
+      return { blob: await r.blob(), pages: r.headers.get('X-Resume-Pages') }
+    }),
+
+  agentSaveRender: (name, options) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ options }),
+    }).then(handle),
+
   agentImportProfile: (name, file) => {
     const form = new FormData()
     form.append('name', name)

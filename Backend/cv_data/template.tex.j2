@@ -31,13 +31,12 @@
   \pdfgentounicode=1
 \fi
 
-%% ---------- Times New Roman ----------
-\usepackage{newtxtext}
-\usepackage{newtxmath}
+%% ---------- font (editor choice; all serif with clean ToUnicode) ----------
+[[ opts.font_pkg ]]
 
 %% 0.5in — the dense end of the allowed 0.5 to 0.6in range, matching the
 %% single-page-and-full look of the reference templates.
-\usepackage[letterpaper,margin=0.5in]{geometry}
+\usepackage[letterpaper,margin=[[ opts.margin ]]]{geometry}
 \usepackage{titlesec}
 \usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
@@ -51,7 +50,7 @@
 \exhyphenpenalty=10000
 \tolerance=9999
 \emergencystretch=3em
-\raggedright
+[% if opts.align != 'justified' %]\raggedright[% endif %]
 
 %% ---------- interword space wide enough to survive text extraction ----------
 %% A PDF stores no space characters: a space is a positioning offset, and every
@@ -73,13 +72,13 @@
 %% Body at 10.5pt — the dense end of the 10.5 to 11pt band. Three roles at
 %% three bullets each plus Projects and Achievements only share one page at
 %% this size; at 11pt the fitter had to delete whole sections instead.
-\AtBeginDocument{\fontsize{10.5}{12.7}\selectfont}
+\AtBeginDocument{\fontsize{[[ opts.font_size ]]}{[[ opts.leading ]]}\selectfont}
 
 %% ---------- section headings ----------
 %% The reference resume's headings: bold ALL CAPS over a full-width rule.
 \titleformat{\section}
   {\normalfont\large\bfseries\MakeUppercase}{}{0em}{}[\vspace{-0.45em}\rule{\linewidth}{0.5pt}]
-\titlespacing*{\section}{0pt}{0.68em}{0.3em}
+\titlespacing*{\section}{0pt}{[[ opts.sec_before ]]}{0.3em}
 
 \setlist[itemize]{leftmargin=1.15em, itemsep=0.08em, parsep=0pt, topsep=0.14em,
                   partopsep=0pt, label=\textbullet}
@@ -100,12 +99,14 @@
   {\small [[ contact_line ]]}
 \end{center}
 
-[% if summary %]
+[#- Sections render in the order the editor chose (FR-P11); each still
+    guards on having content, so an empty one never prints a bare heading. #]
+[% for sec in opts.sections %]
+[%- if sec == 'summary' and summary %]
 \section{Summary}
 [[ summary ]]
-[% endif %]
 
-[% if experience %]
+[%- elif sec == 'experience' and experience %]
 \section{Professional Experience}
 [%- for e in experience %]
 \entry{[[ e.role ]]}{[[ e.period ]]}{[[ e.company ]]}{[[ e.location ]]}
@@ -116,11 +117,10 @@
 [%- endfor %]
 \end{itemize}
 [%- endif %]
-[%- if not loop.last %]\vspace{0.4em}[% endif %]
+[%- if not loop.last %]\vspace{[[ opts.role_gap ]]}[% endif %]
 [%- endfor %]
-[% endif %]
 
-[% if projects %]
+[%- elif sec == 'projects' and projects %]
 \section{Projects}
 [%- for p in projects %]
 \textbf{[[ p.name ]]}[% if p.tech %] \textbar{} \textbf{\textit{[[ p.tech ]]}}[% endif %]
@@ -133,19 +133,14 @@
 [%- endif %]
 [%- if not loop.last %]\vspace{0.32em}[% endif %]
 [%- endfor %]
-[% endif %]
 
-[% if skills %]
+[%- elif sec == 'skills' and skills %]
 \section{Technical Skills}
 [%- for s in skills %]
-[#- `s.value`, not `s.items`: Jinja resolves a dotted name to the attribute
-    first, so `s.items` finds dict.items (the bound method) and prints
-    "<built-in method items of dict object at 0x...>" into the PDF. #]
 \textbf{[[ s.label ]]:} [[ s.value ]][% if not loop.last %]\\[0.1em][% endif %]
 [%- endfor %]
-[% endif %]
 
-[% if education_entries or education %]
+[%- elif sec == 'education' and (education_entries or education) %]
 \section{Education}
 [%- for e in education_entries %]
 \textbf{[[ e.institution ]][% if e.location %], [[ e.location ]][% endif %]}\hfill\textit{[[ e.period ]]}\\
@@ -158,15 +153,15 @@ Relevant Courses: [[ e.courses ]]
 [%- for line in education %]
 [[ line ]][% if not loop.last %]\\[0.12em][% endif %]
 [%- endfor %]
-[% endif %]
 
-[% if achievements %]
+[%- elif sec == 'achievements' and achievements %]
 \section{Achievements \& Certifications}
 \begin{itemize}
 [%- for line in achievements %]
   \item [[ line ]]
 [%- endfor %]
 \end{itemize}
-[% endif %]
+[%- endif %]
+[%- endfor %]
 
 \end{document}

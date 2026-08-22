@@ -80,6 +80,9 @@ def _describe(path: Path, name: str) -> dict[str, Any]:
         # and an engineer's are different documents, and the point of having
         # both is that the right one is picked without being asked.
         "categories": [str(c) for c in (target.get("categories") or [])],
+        # The saved editor style, so the editor opens on it rather than the
+        # defaults.
+        "render": data.get("render") if isinstance(data.get("render"), dict) else None,
     })
     return info
 
@@ -251,6 +254,47 @@ def import_document(name: str, path: Path) -> dict[str, Any]:
                        "projects": len(profile["projects"]),
                        "skills": len(profile["skills"])},
             **described}
+
+
+def render_options(name: str | None) -> dict[str, Any]:
+    """The saved editor style for a profile, or {} — read from its `render:` block."""
+    path = path_for(name)
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    render = data.get("render")
+    return render if isinstance(render, dict) else {}
+
+
+def set_render_options(name: str, options: dict[str, Any]) -> dict[str, Any]:
+    """
+    Persist the editor's choices into the profile so every resume built from it
+    uses them — the tailored ones for real applications included.
+    """
+    from .latex_resume import RenderOptions
+
+    path = path_for(name)
+    if not path.is_file():
+        return {"ok": False, "error": f"No profile named '{name}'."}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+
+    # Round-trip through RenderOptions so only valid, complete options are stored.
+    opts = RenderOptions.coerce(options)
+    data["render"] = {
+        "template": opts.template, "font": opts.font, "font_size": opts.font_size,
+        "align": opts.align, "fit_one_page": opts.fit_one_page, "sections": list(opts.sections),
+    }
+    try:
+        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": f"could not write the profile: {exc}"}
+    return {"ok": True, "render": data["render"]}
 
 
 def delete(name: str) -> dict[str, Any]:

@@ -142,7 +142,11 @@ def build_for_job(job: dict[str, Any], *, use_llm: bool = True,
             log(f"[resume]   description is {len(description)} chars — "
                 f"building the master resume rather than tailoring to a teaser")
 
-        out = latex_resume.build(content, RESUME_DIR, stem,
+        # The real application uses the style the user set in the editor for
+        # this profile, so a tailored resume looks like the one they approved.
+        render_opts = latex_resume.RenderOptions.coerce(
+            resume_profiles.render_options(profile_name))
+        out = latex_resume.build(content, RESUME_DIR, stem, opts=render_opts,
                                  log=lambda m: log(f"[resume]   {m}"))
     except Exception as exc:
         result["reason"] = f"{type(exc).__name__}: {str(exc)[:200]}"

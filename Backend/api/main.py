@@ -805,6 +805,58 @@ def agent_create_profile(req: ProfileRequest) -> dict[str, Any]:
     return out
 
 
+class RenderPreview(BaseModel):
+    profile: str = "main"
+    options: dict[str, Any] = {}
+
+
+@app.post("/api/agent/resume-preview")
+def agent_resume_preview(body: RenderPreview) -> Any:
+    """
+    Build a preview PDF of a profile in the chosen style, and return it.
+
+    The in-browser editor (FR-P11) calls this on every change: it loads the
+    profile, renders it with the options — template, font, size, alignment,
+    one-page fit, section order — and streams back the PDF for the preview pane.
+    Nothing is saved; that is a separate step.
+    """
+    from . import resume_profiles
+    from .latex_resume import RenderOptions, build, from_profile
+
+    path = resume_profiles.path_for(body.profile)
+    if not path.is_file():
+        raise HTTPException(404, f"No profile named '{body.profile}'.")
+    try:
+        content = from_profile(path)
+    except Exception as exc:
+        raise HTTPException(400, f"Could not read that profile: {exc}")
+
+    opts = RenderOptions.coerce(body.options)
+    out_dir = DASHBOARD_OUT / f"preview_{uuid.uuid4().hex[:8]}"
+    try:
+        result = build(content, out_dir, stem="preview", opts=opts, log=lambda _m: None)
+        pdf = result.get("pdf")
+        if not pdf or not Path(pdf).is_file():
+            raise HTTPException(422, "Could not compile the resume — check that a LaTeX engine "
+                                     "is installed (python tools/install_tex.py).")
+        data = Path(pdf).read_bytes()
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+    return Response(content=data, media_type="application/pdf",
+                    headers={"X-Resume-Pages": str(result.get("pages") or "")})
+
+
+@app.post("/api/agent/resume-profiles/{name}/render")
+def agent_save_render(name: str, body: RenderPreview) -> dict[str, Any]:
+    """Save the editor's style into the profile, so every resume built from it uses it."""
+    from . import resume_profiles
+
+    out = resume_profiles.set_render_options(name, body.options)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
+
+
 @app.post("/api/agent/resume-profiles/import")
 async def agent_import_profile(name: str = Form(...), file: UploadFile = File(...)) -> dict[str, Any]:
     """
