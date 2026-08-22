@@ -784,6 +784,37 @@ def agent_create_profile(req: ProfileRequest) -> dict[str, Any]:
     return out
 
 
+@app.post("/api/agent/resume-profiles/import")
+async def agent_import_profile(name: str = Form(...), file: UploadFile = File(...)) -> dict[str, Any]:
+    """
+    Create a profile from an uploaded resume — DOCX as well as PDF.
+
+    The document is read back into the same fields a hand-written profile has,
+    so the imported one tailors and compiles like any other. What survives the
+    parse survives into the tailored PDF.
+    """
+    from . import resume_profiles
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_RESUME_EXT:
+        raise HTTPException(400, f"Upload a {', '.join(sorted(ALLOWED_RESUME_EXT))} file.")
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(400, "The uploaded file is empty.")
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+
+    tmp = UPLOADS_DIR / f"import_{uuid.uuid4().hex[:8]}{ext}"
+    tmp.write_bytes(payload)
+    try:
+        out = resume_profiles.import_document(name, tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+    if not out["ok"]:
+        raise HTTPException(400, out["error"])
+    return out
+
+
 @app.delete("/api/agent/resume-profiles/{name}")
 def agent_delete_profile(name: str) -> dict[str, Any]:
     from . import resume_profiles

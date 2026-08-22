@@ -149,6 +149,110 @@ def create(name: str, *, copy_from: str = MAIN) -> dict[str, Any]:
     return {"ok": True, "name": slug, "file": target.name, "copiedFrom": copy_from}
 
 
+def _parsed_to_profile(parsed: Any) -> dict[str, Any]:
+    """
+    Map a parsed resume onto the profile YAML shape.
+
+    Only what the document actually carried, kept in the structure the tailor
+    and the LaTeX builder already understand — so an imported DOCX produces the
+    same kind of profile a hand-written one does. Bullets keep their text; no
+    tags are invented, because a tag the document did not carry would be a
+    guess, and the tailor treats an untagged bullet as available to any role.
+    """
+    contact = getattr(parsed, "contact", {}) or {}
+    links = []
+    for label, key in (("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "website")):
+        if contact.get(key):
+            links.append({"label": label, "url": contact[key]})
+
+    def entries(items):
+        out = []
+        for e in items or []:
+            row = {
+                "company": getattr(e, "organization", "") or "",
+                "role": getattr(e, "title", "") or getattr(e, "header", "") or "",
+                "period": getattr(e, "period", "") or "",
+                "bullets": [{"text": b} for b in (getattr(e, "bullets", []) or []) if b.strip()],
+            }
+            if row["role"] or row["bullets"]:
+                out.append(row)
+        return out
+
+    sections = getattr(parsed, "sections", {}) or {}
+    skills = [{"line": line} for line in sections.get("skills", []) if line.strip()]
+    education = []
+    for line in sections.get("education", []):
+        if line.strip():
+            education.append({"institution": line.strip()})
+
+    summary = " ".join(sections.get("summary", []) or sections.get("about", [])).strip()
+
+    return {
+        "candidate": {
+            "name": getattr(parsed, "name", "") or "",
+            "title": getattr(parsed, "headline", "") or "",
+            "email": contact.get("email", ""),
+            "phone": contact.get("phone", ""),
+            "location": contact.get("location", ""),
+            "links": links,
+            "summary": summary,
+        },
+        "experience": entries(getattr(parsed, "experience", [])),
+        "projects": entries(getattr(parsed, "projects", [])),
+        "education": education,
+        "skills": skills,
+    }
+
+
+def import_document(name: str, path: Path) -> dict[str, Any]:
+    """
+    Create a profile from an uploaded resume — DOCX as well as PDF.
+
+    The document is parsed into the same structure a hand-written profile has:
+    contact, experience with its bullets, projects, education and skills. What
+    survives the parse survives into the tailored PDF; a complex two-column
+    layout may not carry perfectly, which is the honest limit of reading a
+    finished document back into fields.
+    """
+    if re.search(r"[\\/.]|^\s*$", name or ""):
+        return {"ok": False, "error": "A profile name cannot contain slashes or dots."}
+    slug = _slug(name)
+    if not valid(slug):
+        return {"ok": False, "error": "Use letters, numbers, dashes and underscores."}
+    if slug == MAIN or exists(slug):
+        return {"ok": False, "error": f"A profile called '{slug}' already exists."}
+
+    from .resume_parse import parse_resume
+
+    try:
+        parsed = parse_resume(path)
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not read that document: {exc}"}
+
+    profile = _parsed_to_profile(parsed)
+    if not profile["experience"] and not profile["skills"]:
+        return {"ok": False, "error": ("Almost nothing could be read out of that file — it may be "
+                                       "a scan or an image-only export. Try a text-based PDF or DOCX.")}
+
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    target = PROFILES_DIR / f"{slug}.yaml"
+    header = ("# Imported from an uploaded resume. Every line here came from that\n"
+              "# document; edit freely, but keep the rule the rest of the profiles hold\n"
+              "# to — add facts, never invent a metric that was not on the page.\n\n")
+    try:
+        target.write_text(header + yaml.safe_dump(profile, sort_keys=False, allow_unicode=True),
+                          encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not write the profile: {exc}"}
+
+    described = _describe(target, slug)
+    return {"ok": True, "name": slug,
+            "counts": {"experience": len(profile["experience"]),
+                       "projects": len(profile["projects"]),
+                       "skills": len(profile["skills"])},
+            **described}
+
+
 def delete(name: str) -> dict[str, Any]:
     """Remove a profile. The main one cannot be deleted — it is the fallback."""
     slug = _slug(name)

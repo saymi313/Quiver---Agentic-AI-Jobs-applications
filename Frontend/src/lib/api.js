@@ -211,6 +211,13 @@ export const api = {
       method: 'DELETE',
     }).then(handle),
 
+  agentImportProfile: (name, file) => {
+    const form = new FormData()
+    form.append('name', name)
+    form.append('file', file)
+    return fetch(`${BASE}/api/agent/resume-profiles/import`, { method: 'POST', body: form }).then(handle)
+  },
+
   agentSetProfileCategories: (name, categories) =>
     fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/categories`, {
       method: 'POST',

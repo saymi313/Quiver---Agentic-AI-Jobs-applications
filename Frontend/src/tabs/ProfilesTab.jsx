@@ -137,6 +137,31 @@ export default function ProfilesTab() {
             Create
           </Button>
         </div>
+
+        {/* the other way in: read a finished resume back into a profile */}
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="text-tiny font-medium text-n-200">Or import from a resume</p>
+          <p className="mt-0.5 text-micro leading-relaxed text-n-500">
+            Upload a PDF or DOCX and Quiver reads it into a new profile —
+            {newName.trim() ? ` named “${newName.trim()}”` : ' name it above first'}. A complex
+            two-column layout may not carry across perfectly.
+          </p>
+          <input
+            type="file"
+            accept=".pdf,.docx"
+            disabled={!newName.trim() || busy === 'import'}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                act('import', () => api.agentImportProfile(newName.trim(), file)).then(() => setNewName(''))
+              }
+              e.target.value = ''
+            }}
+            className="mt-2 block w-full text-tiny text-n-400 file:mr-3 file:rounded-full
+              file:border-0 file:bg-n-100 file:px-3 file:py-1 file:text-tiny file:font-medium
+              file:text-n-950 disabled:opacity-50"
+          />
+        </div>
       </Section>
     </div>
   )
