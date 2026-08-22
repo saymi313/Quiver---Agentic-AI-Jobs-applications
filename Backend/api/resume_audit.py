@@ -37,13 +37,20 @@ URLISH = re.compile(r"\S*(?:https?://|www\.|@|\.com|\.app|\.io|\.dev|\.pk)\S*")
 
 
 def _intentional_camel() -> set[str]:
-    """Camel-cased words that appear in the source content, so are not artefacts."""
+    """Camel-cased words that appear in the source content, so are not artefacts.
+
+    The audit runs against whichever profile built the PDF, not only the main
+    one, so a proper noun like CapCut or NeuroMark that lives in the design
+    profile must count as intentional too — otherwise every non-main profile is
+    rejected for words its own source deliberately wrote.
+    """
     words: set[str] = set()
-    profile = CV_DATA / "profile.yaml"
-    if profile.is_file():
-        words |= {w for w in re.findall(r"\b[A-Za-z]{4,}\b",
-                                        profile.read_text(encoding="utf-8"))
-                  if re.search(r"[a-z][A-Z]", w)}
+    sources = [CV_DATA / "profile.yaml", *sorted((CV_DATA / "profiles").glob("*.yaml"))]
+    for profile in sources:
+        if profile.is_file():
+            words |= {w for w in re.findall(r"\b[A-Za-z]{4,}\b",
+                                            profile.read_text(encoding="utf-8"))
+                      if re.search(r"[a-z][A-Z]", w)}
     return words
 
 

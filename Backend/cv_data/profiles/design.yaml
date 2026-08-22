@@ -1,9 +1,9 @@
 candidate:
   name: Usairam Saeed
-  title: Full Stack Developer
+  title: UI/UX Designer
   email: saeed.usairam@gmail.com
   phone: +92 301 8165385
-  location: Mansehra, Pakistan
+  location: Islamabad, Pakistan
   links:
   - label: LinkedIn
     url: https://www.linkedin.com/in/usairam-saeed-148044285/
@@ -11,502 +11,422 @@ candidate:
     url: https://github.com/saymi313
   - label: Portfolio
     url: https://usairam-saeed.vercel.app/
-  summary: 'Software Developer and Frontend Team Lead with 2+ years shipping production
-    web applications in React, Node.js and MongoDB. Leads a team of 10 and owns delivery
-    across payments, real time systems and REST APIs.
+  summary: 'UI/UX Designer and Software Engineering graduate with 3+ years designing
+    mobile and web interfaces across 15+ client and academic projects, including a
+    game UI project. Skilled in Figma and Adobe XD for interaction design, wireframing
+    and interactive prototyping, turning user research and usability testing into responsive,
+    user centered designs, backed by maintained design systems and clean developer
+    handoff.
 
     '
 modes:
-  ai_summary: 'AI Software Engineer with 2+ years building production web applications
-    and AI powered systems. Works across machine learning, NLP, real time systems,
-    REST API design and scalable backend architecture.
+  ux_summary: 'UI/UX Designer with 3+ years designing mobile and web interfaces across
+    15+ projects. Owns the work end to end: user research, wireframes, user flows
+    and interactive prototypes in Figma, then design handoff to developers. Maintains
+    design systems and style guides, and applies usability testing to ship responsive,
+    user centered designs.
 
     '
-  ux_summary: 'UI/UX Designer and Frontend Team Lead with 2+ years shipping production
-    interfaces. Runs the work end to end: user research, wireframes and prototypes
-    in Figma, then the React front end that implements them.
+  game_summary: 'UI/UX Designer with game UI design experience and 3+ years across
+    mobile and web interfaces. Designed the game interface and interaction design
+    for a digital Uno recreation covering gameplay states, card interactions, turn
+    based mechanics and player feedback. Proficient in Figma, Adobe Illustrator and
+    Adobe XD, translating user research and usability testing into responsive, user
+    centered designs.
 
     '
 modes_triggers:
-  ai_summary:
-  - ai
-  - machine learning
-  - ml
-  - nlp
-  - deep learning
-  - data science
-  - llm
-  - computer vision
   ux_summary:
   - ux
   - ui/ux
   - user experience
+  - user interface
   - product design
   - figma
   - wireframe
   - usability
   - design system
+  - interaction design
+  game_summary:
+  - game
+  - game ui
+  - gameplay
+  - game interface
+  - game design
 tag_hints:
-  react:
-  - react
-  - react.js
-  - frontend
-  - front-end
-  - javascript
-  - typescript
-  - spa
-  leadership:
-  - mentor
-  - mentoring
-  - team lead
-  - lead
-  - code review
-  - sprint
+  design:
+  - figma
+  - adobe xd
+  - wireframe
+  - prototype
+  - prototyping
+  - interaction design
+  - ui design
+  - ux design
+  - user interface
+  - user experience
+  - mobile ui
+  - web ui
+  - responsive
+  - user centered
+  research:
+  - user research
+  - usability
+  - usability testing
+  - user flow
+  - information architecture
+  - persona
+  system:
+  - design system
+  - style guide
+  - design tokens
+  - component library
+  - design documentation
+  - handoff
+  - design handoff
+  game:
+  - game ui
+  - game interface
+  - gameplay
+  - game design
+  - game interaction
+  graphics:
+  - illustrator
+  - photoshop
+  - after effects
+  - motion
+  - motion design
+  - capcut
+  - premiere
+  - canva
+  - branding
+  - visual design
+  collaboration:
+  - collaboration
+  - cross-functional
   - agile
   - scrum
-  node:
+  - sprint
+  - mentor
+  - team lead
+  - developers
+  frontend:
+  - react
+  - tailwind
+  - material ui
+  - html
+  - css
+  - javascript
+  - frontend
+  - front-end
+  backend:
   - node
   - node.js
   - express
-  - backend
-  - rest
-  - api
-  - microservice
-  mongo:
-  - mongo
   - mongodb
-  - nosql
-  - database
-  - schema
-  payments:
-  - payment
-  - stripe
-  - billing
-  - checkout
-  - transaction
-  - fintech
-  - wallet
-  realtime:
-  - real-time
-  - real time
-  - socket
-  - websocket
-  - chat
-  - live
-  ai:
-  - ai
-  - machine learning
-  - ml
-  - nlp
-  - deep learning
-  - sentiment
-  - model
-  cv:
-  - computer vision
-  - facial recognition
-  - face detection
-  - opencv
-  - image
-  blockchain:
-  - blockchain
-  - web3
-  - smart contract
-  - solidity
-  - tokenization
-  - ethereum
-  cloud:
-  - aws
-  - cloud
   - docker
   - kubernetes
-  - jenkins
-  - ci/cd
-  - devops
-  - deployment
-  ux:
-  - ux
-  - ui/ux
-  - figma
-  - wireframe
-  - prototype
-  - usability
-  - user research
-  - designer
-  - design system
-  - product design
-  - user interface
-  - user experience
-  performance:
-  - performance
-  - optimization
-  - load time
-  - scalability
-  - concurrent
-  saas:
-  - saas
-  - b2b
-  - platform
-  - multi-tenant
-  - subscription
-  trading:
-  - trading
-  - finance
-  - backtest
-  - portfolio
-  - market data
-  - algorithmic
+  - aws
+  - git
 defaults:
   max_bullets_per_role: 5
   max_bullets_per_project: 3
 experience:
 - id: exp_bangopure
   company: BangoPure Limited
-  role: Software Developer
+  role: UI/UX Designer
   period: March 2026 to Present
   location: Remote, United Kingdom
   website: https://bangopure.com/
   tags:
-  - react
-  - node
-  - saas
-  - ux
+  - design
+  - collaboration
+  - frontend
   bullets:
-  - text: Build scalable digital platforms for GreenTech and EdTech clients across
-      Europe and Africa, supporting sustainable innovation and digital learning.
+  - text: Promoted to UI/UX and Frontend Team Lead, leading and mentoring 10+ frontend
+      developers and 5+ designers through code reviews, sprint planning and collaborative
+      delivery, ensuring accurate implementation of UI/UX designs.
     tags:
-    - react
-    - node
-    - saas
+    - collaboration
+    - design
     src: current_role
-  - text: Lead the frontend team after promotion to Frontend Team Lead, mentoring
-      10 developers and owning delivery of the frontend codebase.
+  - text: Designed responsive interfaces for GreenTech and EdTech platforms, translating
+      UI/UX designs into accessible, pixel accurate experiences for users across Europe
+      and Africa.
     tags:
-    - react
-    - ux
-    - leadership
+    - design
+    - frontend
     src: current_role
-  - text: Run structured code reviews and sprint planning across the team, keeping
-      collaborative project delivery on schedule.
+  - text: Collaborated with design and product teams to maintain UI/UX consistency,
+      design systems and responsive design standards across shipped features.
     tags:
-    - leadership
-    - react
+    - system
+    - design
+    - collaboration
     src: current_role
 - id: exp_scholars_avenue
   company: Scholars Avenue (Scholarslee)
-  role: Full Stack Developer
+  role: UI/UX Designer
   period: September 2025 to March 2026
   location: Remote, Germany
   tags:
-  - react
-  - node
-  - mongo
-  - saas
+  - design
+  - research
+  - system
   bullets:
-  - text: Led full stack development of Scholarslee, a study abroad mentorship platform
-      connecting students with mentors worldwide.
+  - text: 'Owned end to end UI/UX design for Scholarslee, a global mentorship platform
+      with 1,000+ users: led user research, wireframing, user flows, interactive prototyping
+      and high fidelity mockups for web and mobile.'
     tags:
-    - react
-    - node
-    - saas
-    - mongo
-    src: full_stack
-  - text: Implemented Stripe payment processing, real time chat via Socket.io, and
-      calendar scheduling to streamline the booking experience.
+    - design
+    - research
+    src: uiux
+  - text: Built and maintained a complete design system in Figma, including tokens,
+      variables and components, to keep UI/UX documentation and style guides consistent
+      across the product.
     tags:
-    - payments
-    - realtime
-    - node
-    - saas
-    src: full_stack
-  - text: Architected scalable REST APIs with Node.js, Express, and MongoDB ensuring
-      reliability under concurrent user loads.
+    - system
+    - design
+    src: uiux
+  - text: Collaborated with developers through design handoff and interaction specs
+      across React, Node.js, Express and MongoDB, ensuring delivered interfaces matched
+      design intent and stayed responsive across devices.
     tags:
-    - node
-    - mongo
-    - performance
-    - api
-    src: full_stack
-  - text: Built mentor review and rating system with quality controls, maintaining
-      high platform trust and user satisfaction.
+    - collaboration
+    - system
+    - frontend
+    src: uiux
+  - text: Ran iterative usability testing on mentor booking flows covering payments,
+      real time chat and calendar scheduling, applying current UI/UX trends to improve
+      user satisfaction.
     tags:
-    - node
-    - mongo
-    - saas
-    src: full_stack
-  - text: 'Owned end to end design and development: conducted user research, built
-      wireframes and prototypes in Figma, then implemented them in React.'
-    tags:
-    - ux
-    - react
+    - research
+    - design
     src: uiux
 - id: exp_rubrixcode
   company: RubrixCode
-  role: Full Stack Developer
+  role: UI/UX Designer
   period: August 2024 to August 2025
   location: Hybrid, Islamabad
   tags:
-  - react
-  - node
-  - mongo
+  - design
+  - research
+  - system
   bullets:
-  - text: Built Sweden Relocators Portal for a Swedish client, a relocation platform
-      covering housing, visa, job search and settlement services.
+  - text: 'Designed the USMON web application, an IONM clinical workflow system, in
+      Figma: conducted user research, defined information architecture and produced
+      high fidelity, responsive mockups aligned with complex clinical workflows.'
     tags:
-    - react
-    - node
-    - saas
-    - mongo
-    src: full_stack
-  - text: Designed and implemented responsive UI components, RESTful APIs, and database
-      schemas, delivering full client satisfaction.
+    - design
+    - research
+    src: uiux
+  - text: Designed the Sweden Relocators Portal end to end, a web and mobile UI covering
+      housing, visa and job search, from wireframes through interactive prototypes.
     tags:
-    - react
-    - node
-    - mongo
-    - api
-    - ux
-    src: full_stack
-  - text: Optimized frontend performance achieving fast page load times across all
-      devices and screen sizes.
+    - design
+    - research
+    src: uiux
+  - text: Partnered with developers to hand off interaction specs and design assets,
+      maintaining responsive design standards and delivering UI/UX improvements validated
+      through usability testing to full client satisfaction.
     tags:
-    - performance
-    - react
-    - ux
-    src: full_stack
+    - collaboration
+    - system
+    - research
+    src: uiux
+- id: exp_avancod
+  company: Avancod PVT Ltd
+  role: UI/UX Designer
+  period: August 2023 to August 2024
+  location: Hybrid, Islamabad
+  tags:
+  - design
+  - frontend
+  bullets:
+  - text: Designed a Financial Assistant for United States based properties, creating
+      intuitive interfaces and workflows that streamlined financial analysis and improved
+      the user experience.
+    tags:
+    - design
+    - frontend
+    src: uiux
+  - text: Designed NeuroMark, a computer vision based HR attendance system, improving
+      face detection accuracy by 25% and reducing false positives by 30%.
+    tags:
+    - design
+    - frontend
+    src: uiux
+  - text: Redesigned client facing web experiences, including a portfolio site and
+      a Spanish e-commerce platform, focused on responsive UI, intuitive navigation,
+      usability and engagement.
+    tags:
+    - design
+    - frontend
+    src: uiux
 projects:
-- id: proj_casabelle
-  name: CasaBelle
-  tech: React, Node.js, Blockchain, AI
+- id: proj_uno_game_ui
+  name: Uno Game UI, HCI Course Project
+  tech: Figma, Adobe Illustrator
   tags:
-  - blockchain
-  - react
-  - ai
+  - game
+  - design
   bullets:
-  - text: Developed responsive frontend interfaces and UI/UX workflows for a blockchain
-      powered real estate and fractional property investment platform.
+  - text: 'Designed the game interface and interaction design for a digital recreation
+      of Uno: gameplay states, card interactions, turn based mechanics and player
+      feedback.'
     tags:
-    - blockchain
-    - react
-    - ux
-    src: full_stack
-  - text: Integrated secure authentication, automated email services, and AI sentiment
-      analysis for property review verification.
+    - game
+    - design
+    src: uiux
+  - text: Built supporting mockups and card art in Illustrator, treating it as directly
+      relevant game UI design experience.
     tags:
-    - ai
-    - node
-    - security
-    src: full_stack
-  - text: Contributed to property tokenization, fractional ownership management, and
-      smart contract based rent distribution.
-    tags:
-    - blockchain
-    src: full_stack
-- id: proj_neuromark
-  name: Neuro Mark
-  tech: React, Node.js, Express, MongoDB, Deep Learning
-  tags:
-  - ai
-  - cv
-  - saas
-  bullets:
-  - text: Built an AI driven HR SaaS platform with facial recognition based attendance
-      tracking.
-    tags:
-    - ai
-    - cv
-    - saas
-    src: full_stack
-  - text: Automated core HR workflows using deep learning models, eliminating manual
-      tracking processes at scale.
-    tags:
-    - ai
-    - saas
-    src: full_stack
-  - text: Deployed the platform for multiple corporate clients running attendance
-      and HR operations on it.
-    tags:
-    - saas
-    - cloud
-    src: full_stack
-- id: proj_algodinero
-  name: Algodinero
-  tech: React, Node.js, Market Data APIs
-  tags:
-  - trading
-  - react
-  - node
-  bullets:
-  - text: Built a full stack algorithmic trading platform where users design, backtest
-      and deploy automated trading strategies.
-    tags:
-    - trading
-    - node
-    - react
-    src: swe_ai
-  - text: Integrated real time market data feeds powering live strategy execution
-      across the platform.
-    tags:
-    - trading
-    - realtime
-    - node
-    src: swe_ai
-  - text: Developed portfolio analytics so users track the performance of their deployed
-      strategies.
-    tags:
-    - trading
-    - react
-    src: swe_ai
-- id: proj_relocators
-  name: Sweden Relocators Portal
-  tech: React, Node.js, Express, MongoDB, Material UI
-  tags:
-  - react
-  - node
-  - ux
-  bullets:
-  - text: Built a responsive relocation platform for a Swedish client covering end
-      to end relocation and embassy related services.
-    tags:
-    - react
-    - node
-    - saas
-    src: full_stack
-  - text: Improved UX through repeated usability testing iterations with the client.
-    tags:
-    - ux
-    src: full_stack
-  - text: Optimized frontend performance for fast load times across all devices and
-      screen sizes.
-    tags:
-    - performance
-    - react
-    src: full_stack
+    - game
+    - graphics
+    src: uiux
 - id: proj_otakulink
   name: OtakuLink, Anime Streaming Platform
   tech: Figma
   tags:
-  - ux
+  - design
+  - research
   bullets:
-  - text: 'Designed the full streaming UX from scratch: user flows, wireframes, a
-      component library, and a high fidelity prototype.'
+  - text: 'Designed the full streaming UX from scratch: user flows, wireframes, a component
+      library and a high fidelity interactive prototype for web and mobile.'
     tags:
-    - ux
+    - design
+    - research
+    - system
     src: uiux
   - text: Focused the experience on content discovery and clear visual hierarchy.
     tags:
-    - ux
+    - design
     src: uiux
-  - text: Won 1st place in the Soventure'25 competitive UI/UX design competition.
+  - text: Won 1st place at the Soventure'25 UI/UX design competition.
     tags:
-    - ux
+    - design
     src: uiux
 - id: proj_teensotera
   name: Teen So Tera, Islamic Web Application
   tech: Figma
   tags:
-  - ux
+  - design
   bullets:
-  - text: Designed an accessible, user centered interface for daily worship needs.
+  - text: Designed an accessible, user centered interface integrating prayer times,
+      a Qibla compass, Tasbeeh counter, daily Adhkars and an Islamic calendar.
     tags:
-    - ux
-    src: uiux
-  - text: Integrated prayer times, a Qibla compass, Tasbeeh counter, daily Adhkars
-      and an Islamic calendar into one coherent experience.
-    tags:
-    - ux
+    - design
     src: uiux
   - text: Won 1st place at DeenFest'24 for usability and aesthetic quality.
     tags:
-    - ux
+    - design
     src: uiux
 - id: proj_kitimat
   name: Kitimat Canada, Civic Community Platform
   tech: Figma
   tags:
-  - ux
+  - design
   bullets:
-  - text: Designed clean, accessible UI/UX for a transparent civic platform serving
-      diverse user groups.
+  - text: Designed clean, accessible responsive UI/UX for a civic platform supporting
+      local commerce, event management and community information.
     tags:
-    - ux
+    - design
     src: uiux
-  - text: Covered local commerce, event management and community information flows
-      across the platform.
+  - text: Structured the information architecture and navigation so residents could
+      reach services and events across the platform quickly.
     tags:
-    - ux
+    - design
+    - research
     src: uiux
 - id: proj_credo
   name: Credo, Cybersecurity Agency Website
   tech: Figma
   tags:
-  - ux
+  - design
+  - system
   bullets:
   - text: 'Designed the complete website experience: service architecture pages and
-      cloud focused sections.'
+      a brand aligned visual design system.'
     tags:
-    - ux
+    - design
+    - system
+    - graphics
     src: uiux
-  - text: Built a brand aligned visual design system carried across every page.
+  - text: Carried the visual identity across every page, keeping typography, colour
+      and components consistent for a cybersecurity brand.
     tags:
-    - ux
+    - design
+    - system
     src: uiux
 - id: proj_figma_client_work
   name: Selected Figma Client Work
   tech: Figma
   tags:
-  - ux
+  - design
   bullets:
   - text: Delivered design work for international clients including BedaBoo Kids (UAE),
       Costa Da Morte (Spain), Aegean (Greece), The Menu (South Africa) and Brandit
       Lab.
     tags:
-    - ux
+    - design
     src: uiux
-  - text: Additional projects include Yale School Revamp (3rd place, NASCON'24), Sweden
-      Relocators App, Preppo, Railroad Ecommerce, Arli Plumbing, a Women Empowerment
-      Initiative, a travel agency and Novel Axis.
+  - text: Additional projects include Yale School Revamp (3rd place, NASCON'24), the
+      Sweden Relocators mobile app, Preppo, Railroad E-commerce, Arli Plumbing, a
+      Women Empowerment Initiative, a travel agency and Novel Axis.
     tags:
-    - ux
+    - design
     src: uiux
 education:
 - institution: FAST NUCES
-  location: Mansehra, Pakistan
+  location: Islamabad, Pakistan
   degree: Bachelor of Science in Software Engineering
   period: August 2022 to July 2026
-  courses: Software Engineering, DSA, Operating Systems, DBMS, HCI, DevOps, AI/ML,
-    NLP
+  courses: Human Computer Interaction (HCI), AI/ML, Software Engineering, DBMS, DSA,
+    DevOps
 skills:
-- line: 'Languages: JavaScript (ES6+), C++, SQL, NoSQL (MongoDB)'
+- line: 'UI/UX Design: Figma, Adobe XD, Interaction Design, Mobile UI Design, Web
+    UI Design, Responsive Design, User Centered Design, Wireframing, Prototyping,
+    Interactive Prototyping, User Flows, Information Architecture, User Research, Usability
+    Testing'
   tags:
-  - react
-  - node
-  - mongo
-- line: 'Frameworks and Libraries: React.js, Node.js, Express.js, Tailwind CSS, Material
-    UI, Socket.io'
+  - design
+  - research
+- line: 'Design Systems: Design Systems, Style Guides, Design Tokens, Component Libraries,
+    Design Documentation, Design Handoff'
   tags:
-  - react
-  - node
-  - realtime
-- line: 'AI and Machine Learning: Machine Learning, NLP, AI Integration, Sentiment
-    Analysis'
+  - system
+- line: 'Graphics and Motion: Adobe Illustrator, Adobe Photoshop, Adobe After Effects,
+    Motion Design, CapCut, Adobe Premiere Pro, Canva'
   tags:
-  - ai
-- line: 'Cloud and DevOps: AWS, Docker, Kubernetes, Jenkins, Git, Postman'
+  - graphics
+- line: 'Game Design: Game UI Design, Game Interface Design, Gameplay UI, Game Interaction
+    Design (academic project)'
   tags:
-  - cloud
-- line: 'Design: Figma, Adobe XD'
+  - game
+- line: 'Collaboration: Collaboration with Developers, Design Handoff, Cross-Functional
+    Teamwork, Agile Workflows'
   tags:
-  - ux
+  - collaboration
+- line: 'Front End (supporting): React, Tailwind CSS, Material UI, HTML, CSS, JavaScript
+    (ES6+)'
+  tags:
+  - frontend
+- line: 'Back End and DevOps (supporting): Node.js, Express.js, MongoDB, Docker, Kubernetes,
+    AWS, Git'
+  tags:
+  - backend
 awards:
-- line: Gold Medalist, top scorer in ETEA 2022
-- line: 1st Place, UI/UX Design Competition, Soventure'25
-- line: 1st Place, Web Design Competition, Deenfest 2024
-- line: 3rd Place, UI/UX Design Competition, NASCON'24
+- line: 1st Place, UI/UX Design, Soventure'25
+- line: 1st Place, Web Design, DeenFest'24
+- line: 3rd Place, UI/UX Design, NASCON'24
+- line: Gold Medalist, ETEA 2022 (13th in Khyber Pakhtunkhwa)
 certifications:
+- line: IBM Essential UI/UX Design with Figma (2023)
+- line: IBM Introduction to UI/UX Design (2023)
+- line: IBM Frontend Development with React (2024)
 - line: IBM Agile Development and Scrum (2025)
-- line: Stanford Machine Learning (2025)
-- line: IBM Frontend Development with React
-- line: Essential UI/UX Design with Figma
+- line: Stanford Complete Machine Learning (2025)
+- line: Complete React Developer (Udemy)
 languages:
 - line: English (Fluent), Urdu (Native), German (A1)
 target:
@@ -515,3 +435,4 @@ target:
   - ui_design
   - ux_design
   - product_design
+  - game_ui
