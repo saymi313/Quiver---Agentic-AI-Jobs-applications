@@ -789,6 +789,54 @@ def _handle(page, idx: int):
     return page.locator("input, textarea, select").nth(idx)
 
 
+def _collect_form(page, log: Callable[[str], None] = print):
+    """(context, fields) for whichever frame holds the form — see _form_context."""
+    form = _form_context(page)
+    if form is not page:
+        try:
+            log(f"[apply]   the form is inside an embedded frame ({_host(form.url)}) "
+                f"— filling it there")
+        except Exception:
+            pass
+    return form, _collect_fields(form)
+
+
+def _form_context(page):
+    """
+    The page-or-frame that actually holds the application form.
+
+    Most forms are in the main document, but a real share of ATS embed the whole
+    form in an iframe — SmartRecruiters, BambooHR, and Greenhouse/Lever when a
+    company drops them into its own careers page. Playwright can read across
+    frame boundaries, so the form is found by asking each frame what fields it
+    has: the main document wins when it has the form, and a child frame is used
+    only when it clearly carries the form and the top page does not. Returns the
+    main page as a safe default. A Frame supports the same locator/evaluate calls
+    the field code uses, so it can stand in for the page throughout the fill.
+    """
+    try:
+        if looks_like_application(_collect_fields(page)):
+            return page
+    except Exception:
+        pass
+    best = None
+    best_n = 0
+    try:
+        frames = list(page.frames)
+    except Exception:
+        frames = []
+    for fr in frames:
+        try:
+            if fr == page.main_frame:
+                continue
+            fields = _collect_fields(fr)
+        except Exception:
+            continue
+        if looks_like_application(fields) and len(fields) > best_n:
+            best, best_n = fr, len(fields)
+    return best if best is not None else page
+
+
 # --------------------------------------------------------------------------
 # "Is this actually an application form?"
 # --------------------------------------------------------------------------
@@ -1506,7 +1554,11 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     pass
                 return result
 
-            fields = _collect_fields(page)
+            # `form` is the surface the fields live on — the page itself, or an
+            # embedded frame when the ATS puts the form in an iframe. Everything
+            # from here that touches a field uses `form`; navigation, walls and
+            # screenshots stay on `page`.
+            form, fields = _collect_form(page, log)
 
             # An aggregator listing page is not an application form. Follow its
             # Apply link to the employer's site and look again before filling
@@ -1536,7 +1588,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     # The employer's own page may itself gate the form behind a
                     # consent banner and an Apply button — reveal it before reading.
                     _reveal_form(page, log)
-                    fields = _collect_fields(page)
+                    form, fields = _collect_form(page, log)
 
             # Still no form? It is often one more hop away. A Personio job page
             # carries the description and an "Apply for this job" link on to a
@@ -1571,10 +1623,10 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     page.wait_for_timeout(1000)
                 except Exception:
                     pass
-                retry = _collect_fields(page)
+                form2, retry = _collect_form(page, log)
                 if len(retry) > len(fields):
                     log(f"[apply]   found the form after another hop: {len(retry)} field(s)")
-                    fields = retry
+                    form, fields = form2, retry
 
             log(f"[apply]   {len(fields)} form field(s) detected")
             if not fields or not looks_like_application(fields):
@@ -1625,7 +1677,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     wants_resume = bool(re.search(r"resume|résumé|\bcv\b", label or "", re.I))
                     if resume and resume.is_file() and (wants_resume or len(file_fields) == 1):
                         try:
-                            _handle(page, f["idx"]).set_input_files(str(resume), timeout=15000)
+                            _handle(form, f["idx"]).set_input_files(str(resume), timeout=15000)
                             filled[label or "resume"] = resume.name
                             uploaded_labels.add((label or "resume").strip().lower())
                             log(f"[apply]   uploaded {resume.name} -> {label or 'file field'}")
@@ -1642,14 +1694,14 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     continue
                 try:
                     if f["type"] == "select":
-                        chosen = _fill_select(page, f["idx"], value, f["options"])
+                        chosen = _fill_select(form, f["idx"], value, f["options"])
                         if chosen:
                             filled[label] = chosen
                         else:
                             leftovers.append(f)
                     elif f["type"] in ("checkbox", "radio"):
                         leftovers.append(f)
-                    elif _fill_text(page, f["idx"], value):
+                    elif _fill_text(form, f["idx"], value):
                         filled[label] = value[:120]
                     else:
                         leftovers.append(f)
@@ -1686,7 +1738,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     value = ans["answer"].strip()
                     try:
                         if f["type"] == "select":
-                            chosen = _fill_select(page, f["idx"], value, f["options"])
+                            chosen = _fill_select(form, f["idx"], value, f["options"])
                             if chosen:
                                 filled[f["label"]] = chosen
                             else:
@@ -1694,12 +1746,12 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                                               "type": f["type"], "reason": "no matching option"})
                         elif f["type"] == "checkbox":
                             if value.lower() in ("yes", "true", "on", "agree", "accept", "1"):
-                                _handle(page, f["idx"]).check(timeout=6000)
+                                _handle(form, f["idx"]).check(timeout=6000)
                                 filled[f["label"]] = "checked"
                         elif f["type"] == "radio":
-                            _handle(page, f["idx"]).check(timeout=6000)
+                            _handle(form, f["idx"]).check(timeout=6000)
                             filled[f["label"]] = value[:80]
-                        elif _fill_text(page, f["idx"], value):
+                        elif _fill_text(form, f["idx"], value):
                             filled[f["label"]] = value[:120]
                         else:
                             still.append({"label": f["label"], "required": f["required"],
@@ -1712,20 +1764,20 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             # Pass 3 — Yes/No button groups (screening questions that are not
             # <input> elements at all, so passes 1 and 2 cannot see them).
             group_filled, group_blocking = _answer_choice_groups(
-                page, {**job, "company_name": company}, profile, log)
+                form, {**job, "company_name": company}, profile, log)
             filled.update(group_filled)
 
             result["fields_filled"] = filled
 
             page.wait_for_timeout(600)
-            blocking = _unfilled_required(page) + group_blocking
+            blocking = _unfilled_required(form) + group_blocking
             # React upload widgets (Ashby among them) read the file into their
             # own state and clear the <input>, so `el.files` is empty again even
             # though the upload took. If the page now shows our filename — the
             # chip these widgets render — the requirement is met.
             if blocking and uploaded_labels and resume:
                 try:
-                    body_text = (page.inner_text("body") or "")
+                    body_text = (form.inner_text("body") or "")
                 except Exception:
                     body_text = ""
                 if resume.name in body_text:
@@ -1779,7 +1831,9 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             submitted = False
             for name in ("Submit application", "Submit Application", "Submit",
                          "Send application", "Apply"):
-                btn = page.get_by_role(
+                # The submit control lives on the form surface — the frame, when
+                # the form is embedded in one.
+                btn = form.get_by_role(
                     "button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
                 try:
                     if btn.count() and btn.first.is_visible() and btn.first.is_enabled():
@@ -1790,7 +1844,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     log(f"[apply]   '{name}' was not clickable ({type(exc).__name__}); "
                         f"trying the next candidate")
             if not submitted:
-                inp = page.locator("input[type=submit]:visible")
+                inp = form.locator("input[type=submit]:visible")
                 try:
                     if inp.count():
                         inp.first.click(timeout=8000)
@@ -1818,14 +1872,21 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             deadline = time.time() + 30
             while time.time() < deadline:
                 page.wait_for_timeout(2500)
+                # An embedded form shows its confirmation inside the frame, so
+                # read both surfaces.
                 body = (page.inner_text("body") or "").lower()
+                if form is not page:
+                    try:
+                        body += "\n" + (form.inner_text("body") or "").lower()
+                    except Exception:
+                        pass
                 if any(sig in body for sig in REJECTED):
                     verdict = "rejected"
                     break
                 if any(sig in body for sig in ACCEPTED):
                     verdict = "accepted"
                     break
-                if page.locator('input[type="email"], input[type="file"]').count() == 0:
+                if form.locator('input[type="email"], input[type="file"]').count() == 0:
                     # The form is gone and nothing complained: accepted.
                     verdict = "accepted"
                     break
