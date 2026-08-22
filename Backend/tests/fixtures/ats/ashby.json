@@ -1,0 +1,6 @@
+{"jobs":[
+  {"id":"job-1","title":"Machine Learning Engineer","location":"San Francisco","isRemote":false,"isListed":true,
+   "jobUrl":"https://jobs.ashbyhq.com/acme/job-1","applyUrl":"https://jobs.ashbyhq.com/acme/job-1/application",
+   "descriptionHtml":"<p>Train models in PyTorch.</p>","department":"AI","employmentType":"FullTime","publishedAt":"2026-08-18"},
+  {"id":"job-2","title":"Hidden Role","isListed":false,"location":"NY"}
+]}

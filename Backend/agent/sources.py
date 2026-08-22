@@ -392,7 +392,9 @@ ATS_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("recruitee", re.compile(r"([a-z0-9_-]+)\.recruitee\.com", re.I)),
     ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([A-Za-z0-9_-]+)", re.I)),
     ("personio", re.compile(r"([a-z0-9_-]+)\.jobs\.personio\.(?:de|com)", re.I)),
-    ("teamtailor", re.compile(r"([a-z0-9_-]+)\.teamtailor\.com", re.I)),
+    ("bamboohr", re.compile(r"([a-z0-9_-]+)\.bamboohr\.com", re.I)),
+    # Teamtailor is intentionally absent: its board API needs a key, so there is
+    # no free reader for it, and detecting a board we cannot fetch is a dead end.
 ]
 
 CAREER_PATHS = ("/careers", "/jobs", "/careers/", "/join-us", "/work-with-us", "/company/careers")
@@ -493,6 +495,8 @@ def fetch_ats_jobs(platform: str, token: str, *,
             "recruitee": _jobs_recruitee,
             "breezy": _jobs_breezy,
             "rippling": _jobs_rippling,
+            "bamboohr": _jobs_bamboohr,
+            "personio": _jobs_personio,
         }.get(platform)
         if not fetcher:
             return []
@@ -700,6 +704,83 @@ def _jobs_rippling(token: str) -> list[dict[str, Any]]:
             "source": "rippling",
         })
     return out
+
+
+def _parse_bamboohr(data: dict[str, Any], token: str) -> list[dict[str, Any]]:
+    """Pure parser for a BambooHR careers list, split out so a fixture can drive
+    it offline (NFR-4). The board carries no description; the JD fetcher fills
+    it afterwards from the detail page."""
+    out = []
+    for j in data.get("result", []) if isinstance(data, dict) else []:
+        loc = j.get("location") or {}
+        parts = [loc.get(k) for k in ("city", "state", "country")]
+        location = ", ".join(p for p in parts if p) or _named(j.get("atsLocation"))
+        jid = str(j.get("id") or "")
+        out.append({
+            "external_id": jid,
+            "title": j.get("jobOpeningName") or j.get("title") or "",
+            "location": location,
+            "remote": bool(j.get("isRemote")) or "remote" in location.lower(),
+            "url": f"https://{token}.bamboohr.com/careers/{jid}",
+            "apply_url": f"https://{token}.bamboohr.com/careers/{jid}",
+            "description": "",
+            "department": j.get("departmentLabel") or "",
+            "employment_type": j.get("employmentStatusLabel") or "",
+            "posted_at": j.get("datePosted"),
+            "source": "bamboohr",
+        })
+    return out
+
+
+def _jobs_bamboohr(token: str) -> list[dict[str, Any]]:
+    """BambooHR publishes its board at {token}.bamboohr.com/careers/list, no key."""
+    return _parse_bamboohr(_get(f"https://{token}.bamboohr.com/careers/list"), token)
+
+
+def _parse_personio(xml_text: str, token: str) -> list[dict[str, Any]]:
+    """Pure parser for a Personio XML feed, split out for an offline fixture
+    test (NFR-4). Personio ships the full description inside the feed, so these
+    rows arrive complete."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    def text(node, tag):
+        el = node.find(tag)
+        return (el.text or "").strip() if el is not None and el.text else ""
+
+    out = []
+    for pos in root.findall(".//position"):
+        jid = text(pos, "id")
+        office = text(pos, "office")
+        descriptions = pos.find("jobDescriptions")
+        body = ""
+        if descriptions is not None:
+            body = "\n\n".join(
+                strip_html((d.findtext("value") or "")) for d in descriptions.findall("jobDescription"))
+        out.append({
+            "external_id": jid,
+            "title": text(pos, "name"),
+            "location": office,
+            "remote": "remote" in office.lower(),
+            "url": f"https://{token}.jobs.personio.de/job/{jid}",
+            "apply_url": f"https://{token}.jobs.personio.de/job/{jid}",
+            "description": body[:20000],
+            "department": text(pos, "department"),
+            "employment_type": text(pos, "employmentType"),
+            "seniority": text(pos, "seniority"),
+            "posted_at": text(pos, "createdAt"),
+            "source": "personio",
+        })
+    return out
+
+
+def _jobs_personio(token: str) -> list[dict[str, Any]]:
+    """Personio publishes its board as XML at {token}.jobs.personio.de/xml."""
+    return _parse_personio(_get(f"https://{token}.jobs.personio.de/xml", as_json=False), token)
 
 
 # --------------------------------------------------------------------------

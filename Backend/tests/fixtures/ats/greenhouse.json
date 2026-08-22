@@ -1,0 +1,10 @@
+{"jobs":[
+  {"id":101,"title":"Senior Backend Engineer","location":{"name":"Remote - US"},
+   "absolute_url":"https://boards.greenhouse.io/acme/jobs/101",
+   "content":"<p>Build <b>APIs</b> in Python and Go.</p>","updated_at":"2026-08-20T10:00:00Z",
+   "departments":[{"name":"Engineering"}]},
+  {"id":102,"title":"Product Designer","location":{"name":"London, UK"},
+   "absolute_url":"https://boards.greenhouse.io/acme/jobs/102",
+   "content":"<p>Design flows in Figma.</p>","updated_at":"2026-08-19T10:00:00Z",
+   "departments":[{"name":"Design"}]}
+]}
