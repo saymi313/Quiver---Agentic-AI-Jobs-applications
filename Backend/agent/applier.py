@@ -1751,6 +1751,38 @@ def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
     return status
 
 
+def _classify_outcome(result: dict[str, Any], *, dry_run: bool) -> tuple[str, str]:
+    """
+    Sort one attempt into a human bucket and a next-step reason.
+
+    Buckets, in the order a person cares about them: what went in, what is
+    waiting on them, and what needs nothing. This is what turns a wall of
+    per-job log lines into a report you can act on without reading them.
+    """
+    status = result.get("status")
+    error = (result.get("error") or "").strip()
+    if result.get("closed"):
+        return "closed", "posting taken down — removed from your queue"
+    if status == "submitted":
+        return "submitted", ""
+    if status == "needs_review":
+        # Genuine "needs you" reasons are read before the review/dry-run holds,
+        # so an unanswered question in a dry run still surfaces as an action, not
+        # a clean hold.
+        if result.get("input_required"):
+            return "needs_you", error or "the site is waiting on a code or a link"
+        if re.search(r"required question|cannot answer|answer truthfully", error, re.I):
+            return "needs_you", "a question needs a saved answer — " + error
+        if re.search(r"no submit button", error, re.I):
+            return "needs_you", "filled, but no submit button was found"
+        if result.get("awaiting") == "review":
+            return "held", "filled and waiting for your approval to submit"
+        if dry_run:
+            return "held", "dry run — filled but not submitted"
+        return "needs_you", error or "paused for your review"
+    return "failed", error or "could not complete the form"
+
+
 def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = True,
                  workers: int = 1, review: bool | None = None,
                  log: Callable[[str], None] = print) -> dict[str, Any]:
@@ -1778,6 +1810,7 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
     already = store.applied_hashes()
     counts = {"attempted": 0, "submitted": 0, "failed": 0, "needs_review": 0,
               "closed": 0, "already": 0}
+    outcomes: list[dict[str, str]] = []
     guard = threading.Lock()
 
     # ---- what is actually worth attempting -------------------------------
@@ -1847,6 +1880,10 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
             counts[status] = counts.get(status, 0) + 1
             if status == "submitted" and not dry_run and job_hash:
                 already.add(job_hash)
+            bucket, reason = _classify_outcome(result, dry_run=dry_run)
+            outcomes.append({"bucket": bucket, "reason": reason,
+                             "company": job.get("company_name") or "?",
+                             "title": (job.get("title") or "?")[:48]})
 
     if lanes == 1:
         for job in queue:
@@ -1857,8 +1894,30 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
             for _ in pool.map(attempt, queue):
                 pass
 
-    log(f"[apply] done — submitted={counts['submitted']} "
-        f"needs-review={counts.get('needs_review', 0)} "
-        f"failed={counts['failed']} closed={counts.get('closed', 0)} "
-        f"already-applied={counts['already']}")
+    # ---- the report ------------------------------------------------------
+    # Grouped by what the user has to do next, so a batch run ends in an action
+    # list rather than a scroll-back through per-job logs.
+    log("[apply] ──────── summary ────────")
+    LABELS = [
+        ("submitted", "Submitted" if not dry_run else "Would submit"),
+        ("held", "Held for your review"),
+        ("needs_you", "Needs you"),
+        ("closed", "Closed / removed"),
+        ("failed", "Failed"),
+    ]
+    for bucket, label in LABELS:
+        rows = [o for o in outcomes if o["bucket"] == bucket]
+        if not rows:
+            continue
+        log(f"[apply] {label}: {len(rows)}")
+        # The two buckets that carry an action are itemised; the rest are counts.
+        if bucket in ("needs_you", "failed"):
+            for o in rows:
+                log(f"[apply]    - {o['company']} — {o['title']}: {o['reason']}")
+    if counts["already"]:
+        log(f"[apply] Already applied: {counts['already']}")
+    if any(o["bucket"] == "needs_you" for o in outcomes):
+        log("[apply] Hand back a code or link on the dashboard, or add a saved "
+            "answer in Settings, then run apply again for those jobs.")
+    counts["outcomes"] = outcomes
     return counts

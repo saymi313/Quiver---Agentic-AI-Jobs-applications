@@ -86,6 +86,21 @@ def test_apply_link_text_matches_german_labels():
         assert A.APPLY_LINK_TEXT.match(label), label
 
 
+def test_outcome_classifier_buckets_each_result():
+    c = A._classify_outcome
+    assert c({"status": "submitted"}, dry_run=False)[0] == "submitted"
+    assert c({"status": "failed", "closed": True}, dry_run=False)[0] == "closed"
+    assert c({"status": "failed", "error": "no form"}, dry_run=False)[0] == "failed"
+    # A code/link wall and an unanswerable question are both "needs you" —
+    # even in a dry run, where a clean fill is only "held".
+    assert c({"status": "needs_review", "input_required": "otp"}, dry_run=True)[0] == "needs_you"
+    assert c({"status": "needs_review",
+              "error": "required question(s) the profile cannot answer truthfully"},
+             dry_run=True)[0] == "needs_you"
+    assert c({"status": "needs_review", "error": None}, dry_run=True)[0] == "held"
+    assert c({"status": "needs_review", "awaiting": "review"}, dry_run=False)[0] == "held"
+
+
 def test_closed_markers_catch_taken_down_postings():
     # Ashby serves a soft 404: HTTP 200 with a "page not found" body. The status
     # code lies, so the body text is the tell.

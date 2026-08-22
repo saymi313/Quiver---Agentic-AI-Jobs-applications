@@ -611,6 +611,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="apply to this many jobs at once (headless only, max 3)")
     ap.add_argument("--job-ids", default="",
                     help="comma list of job ids to apply to (per-job or bulk apply)")
+    ap.add_argument("--all", action="store_true",
+                    help="apply across the whole ready queue (capped by settings), not just --job-ids")
     ap.add_argument("--no-resumes", action="store_true",
                     help="discover without generating tailored resumes")
     # Arguments for the query commands.
@@ -656,10 +658,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "apply":
             # Apply is user-triggered only. `full` deliberately stops before it:
             # discovery and resume generation are safe to automate, submitting an
-            # application on someone's behalf without them asking is not.
+            # application on someone's behalf without them asking is not. `--all`
+            # is still that explicit ask — the human ran this command — so it
+            # applies across the whole ready queue in one resilient pass rather
+            # than one --job-ids at a time.
+            if args.all and not job_ids:
+                cap = int((store.get_setting("limits", {}) or {}).get(
+                    "max_applications_per_run", 10))
+                ready = store.list_jobs(limit=max(cap, 1), status="not_applied")
+                job_ids = [int(j["id"]) for j in ready]
+                _log(f"[apply] --all: {len(job_ids)} ready job(s) in the queue "
+                     f"(capped at {cap} per run).")
             if not job_ids:
-                _log("[apply] no --job-ids given. Select jobs in the dashboard, or pass "
-                     "--job-ids 12,15,18. Nothing was submitted.")
+                _log("[apply] no --job-ids given. Select jobs in the dashboard, pass "
+                     "--job-ids 12,15,18, or use --all for the whole ready queue. "
+                     "Nothing was submitted.")
                 stats["apply"] = {"attempted": 0}
             else:
                 _log(_rule("Applying to the selected jobs"))
