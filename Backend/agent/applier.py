@@ -250,7 +250,21 @@ def try_clear_wall(page, job: dict[str, Any], log: Callable[[str], None]) -> boo
         text = ""
 
     if OTP_MARKERS.search(text):
+        # A code the user handed back wins — it is the one they were looking at.
         code = credentials.pop_otp(job.get("id"))
+        # Otherwise, the form just triggered a code by email. Since the mailbox
+        # is already connected, read it: poll a few times because the mail takes
+        # a few seconds to arrive, then fall through to needs-review if it never
+        # does (a code sent by SMS, say, which Quiver cannot see).
+        if not code:
+            from . import inbox
+            if inbox.available()[0]:
+                log("[apply]   a one-time code was requested — checking the inbox for it")
+                for _ in range(3):
+                    page.wait_for_timeout(7000)
+                    code = inbox.latest_verification_code(within_seconds=180, log=log)
+                    if code:
+                        break
         if code and _fill_otp(page, code, log):
             page.wait_for_timeout(1800)
             return diagnose_wall(page) is None

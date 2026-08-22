@@ -750,3 +750,81 @@ def compose(to: str, subject: str, body: str, *,
 
     log(f"[inbox] sent a message to {to}")
     return {"ok": True, "to": to, "subject": msg["Subject"]}
+
+
+# --------------------------------------------------------------------------
+# One-time codes, read from the inbox
+# --------------------------------------------------------------------------
+
+# A message is only mined for a code if it looks like a verification mail, so a
+# stray six-digit number in an ordinary email is never mistaken for an OTP.
+_OTP_CONTEXT = re.compile(
+    r"\b(one[- ]time|verification|verify|security code|confirmation code|access code|"
+    r"login code|sign[- ]?in code|authentication code|passcode|\bOTP\b|your code)\b", re.I)
+
+# Strongest signal: digits sitting right after the word code/otp/pin.
+_CODE_NEAR = re.compile(r"\b(?:code|otp|passcode|pin)\b[^0-9]{0,25}(\d[\d\s-]{2,9}\d)", re.I)
+# A six-digit code standing on its own — the shape almost every provider uses.
+_CODE_SIX = re.compile(r"(?<!\d)(\d{6})(?!\d)")
+
+
+def extract_code(subject: str, body: str) -> str | None:
+    """
+    The verification code in a message, or None.
+
+    Deliberately conservative: the message must read as a verification mail
+    before any number in it is trusted, because entering the wrong six digits
+    into a real login form is worse than entering none. Pure, so a fixture can
+    pin every shape a provider uses.
+    """
+    text = f"{subject}\n{body}"
+    if not _OTP_CONTEXT.search(text):
+        return None
+    m = _CODE_NEAR.search(text)
+    if m:
+        digits = re.sub(r"[\s-]", "", m.group(1))
+        if 4 <= len(digits) <= 8:
+            return digits
+    m = _CODE_SIX.search(subject) or _CODE_SIX.search(body)
+    if m:
+        return m.group(1)
+    return None
+
+
+def latest_verification_code(within_seconds: int = 300, *,
+                             log: Callable[[str], None] = print) -> str | None:
+    """
+    The newest verification code the mailbox has received, if it is recent.
+
+    Used during an apply run when a site emails a one-time code: the form just
+    triggered it, so a code that arrived in the last few minutes is almost
+    certainly this one. Never raises — a mailbox hiccup means "no code", and the
+    run parks for the user to enter it by hand instead.
+    """
+    import datetime as _dt
+
+    try:
+        messages = fetch(days=1, limit=10, log=lambda _m: None)
+    except Exception:
+        return None
+
+    def when(msg: dict[str, Any]):
+        raw = (msg.get("received_at") or "").replace("Z", "+00:00")
+        try:
+            return _dt.datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+
+    dated = [(when(m), m) for m in messages]
+    dated = [(t, m) for t, m in dated if t is not None]
+    dated.sort(key=lambda pair: pair[0], reverse=True)
+    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=within_seconds)
+
+    for t, m in dated:
+        if t < cutoff:
+            break
+        code = extract_code(m.get("subject", ""), m.get("body", ""))
+        if code:
+            log(f"[inbox] read a verification code from a message sent by {m.get('from_addr')}")
+            return code
+    return None

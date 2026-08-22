@@ -1071,7 +1071,7 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | FR-A2 Tsenta's status machine | **built** | queued / running / needs_review / submitted / failed |
 | FR-A3 receipt per application | **built** | `fields_filled`, `unanswered`, `screenshot` |
 | FR-A4 review the filled form | **built** | applier holds one click short; Approve submits |
-| FR-A5 logins and OTP | **built** | login fill + OTP hand-back parked against the job |
+| FR-A5 logins and OTP | **built** | login fill; OTP read from the connected inbox, or handed back by the user |
 | FR-A6 never submit twice | **built** | `applied_hashes()` checked in `applier.py:1298` |
 | FR-A7 never guess an answer | **built** | `unanswered` stops the run |
 | FR-A8 batch apply | **built** | `job_ids` list through one run |
