@@ -317,7 +317,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "custom_answers": [],
     # Auto Apply, as a review queue rather than a free hand.
     #
-    # Tsenta's version picks roles and submits them. Quiver's picks roles and
+    # Tsenta's version picks roles and submits them. Jobenzy's picks roles and
     # *proposes* them: a human approves the batch, and only then do those job
     # ids reach the applier. `agent_apply` still refuses to run without explicit
     # ids, so the guarantee is structural rather than a promise — no setting,

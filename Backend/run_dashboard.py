@@ -56,7 +56,7 @@ def start_api(port: int) -> subprocess.Popen:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Run the Quiver dashboard")
+    ap = argparse.ArgumentParser(description="Run the Jobenzy dashboard")
     ap.add_argument("--api-only", action="store_true", help="Start only the FastAPI backend")
     ap.add_argument("--build", action="store_true", help="Build the UI, then serve it from FastAPI")
     ap.add_argument("--no-browser", action="store_true", help="Do not open a browser window")

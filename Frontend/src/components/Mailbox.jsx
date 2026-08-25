@@ -5,7 +5,7 @@ import { Disclosure, Metric, Note, Status } from './ui'
 /*
   The mailbox, as a connection you can see the state of.
 
-  Quiver reads replies over IMAP with the same Gmail app password the outreach
+  Jobenzy reads replies over IMAP with the same Gmail app password the outreach
   sender already uses — one credential, no OAuth, nothing hosted. That is worth
   saying plainly on the settings page, because "connect your mailbox" usually
   means handing an account to somebody else's server, and here it does not.

@@ -1813,7 +1813,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             # with the filled fields and the screenshot captured, exactly one
             # click short of submitting. Approving re-runs this with the flag
             # off, which re-fills and submits. Unlike Tsenta, this pauses on any
-            # system — Quiver owns the submit click, so it can always hold it.
+            # system — Jobenzy owns the submit click, so it can always hold it.
             if review_before_submit:
                 result["status"] = "needs_review"
                 result["awaiting"] = "review"

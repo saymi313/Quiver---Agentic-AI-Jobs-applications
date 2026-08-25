@@ -25,7 +25,7 @@ pymongo[srv]>=4.8.0       # MongoDB backend; falls back to bundled SQLite if uns
 playwright>=1.45.0        # then run once:  python -m playwright install chromium
 dnspython>=2.6.0          # MX lookups for email verification
 
-# MCP server:  claude mcp add quiver -- python -m agent.mcp_server
+# MCP server:  claude mcp add jobenzy -- python -m agent.mcp_server
 # Pinned below 2.0 on purpose: mcp 2.x requires starlette>=1.0, which the
 # installed FastAPI refuses, and the dashboard is the more important surface.
 mcp>=1.9.0,<2.0.0

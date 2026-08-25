@@ -16,7 +16,7 @@ import { api } from './api'
   silences the other.
 */
 
-const SEEN_KEY = 'quiver.notified.job.ids'
+const SEEN_KEY = 'jobenzy.notified.job.ids'
 const POLL_MS = 90_000
 
 function loadSeen() {
@@ -72,13 +72,13 @@ export function useMatchAlerts({ enabled, desktop, minScore }) {
         const top = fresh[0]
         const more = fresh.length - 1
         const note = new Notification(
-          fresh.length === 1 ? 'New match on Quiver' : `${fresh.length} new matches on Quiver`,
+          fresh.length === 1 ? 'New match on Jobenzy' : `${fresh.length} new matches on Jobenzy`,
           {
             body:
               `${Math.round(top.fit_score || 0)} · ${top.title}` +
               (top.company_name ? ` — ${top.company_name}` : '') +
               (more ? ` and ${more} more` : ''),
-            tag: 'quiver-match',
+            tag: 'jobenzy-match',
           },
         )
         note.onclick = () => {

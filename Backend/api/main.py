@@ -1,5 +1,5 @@
 """
-FastAPI backend for Quiver.
+FastAPI backend for Jobenzy.
 
 Run from the Backend/ folder:
 
@@ -41,7 +41,7 @@ from .jobs import manager
 from .resume_build import build_resume, render_docx, render_pdf, render_txt
 from .resume_parse import parse_resume
 
-app = FastAPI(title="Quiver", version="1.0.0")
+app = FastAPI(title="Jobenzy", version="1.0.0")
 
 
 @app.on_event("startup")
@@ -1095,7 +1095,7 @@ def agent_decide_proposals(req: ProposalDecision) -> dict[str, Any]:
 @app.get("/api/agent/portals")
 def agent_portals() -> dict[str, Any]:
     """
-    What Quiver can do with each applicant tracking system.
+    What Jobenzy can do with each applicant tracking system.
 
     Reading a board and submitting to it are tracked separately, because they
     genuinely are separate: a job can be perfectly discoverable through a system
@@ -1388,7 +1388,7 @@ class ManualApplication(BaseModel):
 @app.post("/api/agent/applications")
 def agent_add_application(body: ManualApplication) -> dict[str, Any]:
     """
-    Add an application made outside Quiver.
+    Add an application made outside Jobenzy.
 
     A tracker that only knows what the agent submitted is only half a tracker —
     the roles you applied to by hand belong in the same pipeline. Recorded as
@@ -1476,7 +1476,7 @@ def agent_export_applications() -> Any:
     return Response(
         content=buffer.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=quiver-tracker.csv"})
+        headers={"Content-Disposition": "attachment; filename=jobenzy-tracker.csv"})
 
 
 class ComposeRequest(BaseModel):
@@ -1571,7 +1571,7 @@ def agent_submit_otp(job_id: int, body: OtpRequest) -> dict[str, Any]:
     Hand back what a site is waiting on — a one-time code, or a confirmation
     link — for the next apply run to use.
 
-    Quiver's local stand-in for Tsenta's `POST /applications/{id}/otp`: the
+    Jobenzy's local stand-in for Tsenta's `POST /applications/{id}/otp`: the
     browser does not stay alive between runs, so the code or link waits against
     the job until you apply again, and is spent the moment it is used.
     """

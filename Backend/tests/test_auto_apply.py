@@ -1,7 +1,7 @@
 """
 Auto Apply, and the guarantee that makes it safe to have at all.
 
-Tsenta's version picks roles and submits them. Quiver's picks roles and
+Tsenta's version picks roles and submits them. Jobenzy's picks roles and
 *proposes* them. The difference is the whole feature, so most of what is worth
 testing here is what the proposer must never do.
 """

@@ -1,7 +1,7 @@
 """
 The ATS board readers, driven offline from recorded fixtures (NFR-4).
 
-A reader normalises one vendor's board into Quiver's job shape. The failure
+A reader normalises one vendor's board into Jobenzy's job shape. The failure
 mode is silent: a vendor tweaks a field name, the reader keeps returning rows
 that are subtly wrong — a blank location, a link that 404s — and nothing
 complains until an application goes to the wrong place. So each reader is pinned

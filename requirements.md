@@ -1,4 +1,4 @@
-# Quiver requirements: reach feature parity with Tsenta
+# Jobenzy requirements: reach feature parity with Tsenta
 
 Researched from tsenta.com and docs.tsenta.com on 2026-08-21, and re-checked
 against the same sources on 2026-08-22 — including the developer docs, which are
@@ -14,12 +14,12 @@ satisfy it, rather than trusting the `[DONE]` markers. Two did not survive it.
 
 ## 1. Purpose
 
-Quiver today is a local, single-user job-hunting tool: it discovers roles, tailors
+Jobenzy today is a local, single-user job-hunting tool: it discovers roles, tailors
 a LaTeX resume per posting, and drives a browser to fill application forms the user
 selects. Tsenta is a hosted, multi-user, paid product doing the same job at much
 larger scale, with more surfaces and a developer API on top.
 
-This document states what Quiver must become to work the way Tsenta works. Each
+This document states what Jobenzy must become to work the way Tsenta works. Each
 requirement is written so it can be picked up, built and verified on its own.
 
 ---
@@ -28,7 +28,7 @@ requirement is written so it can be picked up, built and verified on its own.
 
 ### 2.1 The pipeline
 
-Tsenta describes four stages. Quiver should adopt the same vocabulary, because the
+Tsenta describes four stages. Jobenzy should adopt the same vocabulary, because the
 stages map cleanly onto code that already exists.
 
 | Stage | Tsenta's headline | What it means |
@@ -73,7 +73,7 @@ whether it can pause for review before submitting.*
 
 Eighteen of the twenty-nine can pause for review. That number matters: it is the
 ceiling on FR-A4, and it says the review step is a per-ATS capability rather
-than a global setting — which is exactly the mistake Quiver currently makes (see
+than a global setting — which is exactly the mistake Jobenzy currently makes (see
 the audit in section 9).
 
 Two caveats from the same docs, both worth adopting as rules rather than
@@ -165,7 +165,7 @@ reading and unread count, profile editing, remaining-allowance check.
 - The feed shows matched roles **with a match score**, and is worked through by
   **swipe or tap to apply or skip** — a triage gesture, not a table.
 - Feed filters: **location, salary, role type, and work setting.** Salary is the
-  one Quiver cannot currently offer, because it never captures it.
+  one Jobenzy cannot currently offer, because it never captures it.
 - The Chrome extension **does not fill the form in your tab**. It extracts the
   posting and hands it to the same cloud worker the dashboard uses. Worth
   knowing before treating the extension as a different apply path — it is the
@@ -237,7 +237,7 @@ automated session against the account.
 **Navigation.** Seven top-level screens: **Dashboard, Browse jobs, Auto Apply,
 Tracker, Networking, Profile, Research.** Two - Networking and Research - appear
 nowhere in the docs. Networking is Tsenta's name for outbound contact and maps
-onto Quiver's Outreach; Research is unknown from a screenshot alone and is
+onto Jobenzy's Outreach; Research is unknown from a screenshot alone and is
 recorded as a gap to investigate, not a built comparison.
 
 **The job panel is a parsed document, not a link.** Opening a match shows, as
@@ -246,7 +246,7 @@ structured fields: a salary range with currency ("GBP 43k - 64k /yr"), seniority
 function ("Software Engineering"), a **Skills & Technologies** list pulled from
 the posting (twenty-plus chips), an application **deadline** ("End Date Sunday 30
 August 2026"), and a description with the matched search term highlighted. A
-bookmark icon saves the role. Quiver stores a title, a score and a reason;
+bookmark icon saves the role. Jobenzy stores a title, a score and a reason;
 everything else here is new.
 
 **The feed is triaged, not tabled.** Each match card carries **Pass** and
@@ -285,8 +285,8 @@ These change the size of the work by an order of magnitude, so they are stated
 rather than assumed silently.
 
 - **A1. Single user or multi-tenant.** Tsenta is multi-tenant with accounts,
-  billing and per-user isolation. Quiver is one user, one machine, one SQLite or
-  Atlas database, no auth. Everything in section 5.7 is only meaningful if Quiver
+  billing and per-user isolation. Jobenzy is one user, one machine, one SQLite or
+  Atlas database, no auth. Everything in section 5.7 is only meaningful if Jobenzy
   becomes multi-tenant. This document specifies both and marks multi-tenant items
   `[MT]`.
 - **A2. Hosting.** "50,000 pages watched" and "100 applications per minute" need
@@ -298,13 +298,13 @@ rather than assumed silently.
   model, roughly 60 per day across the fallback rotation. Tsenta's volumes assume
   paid inference. Any per-application LLM work must stay inside the existing budget
   manager, or the tier has to change.
-- **A4. Charging.** Quiver has no payment integration and no reason to bill its
+- **A4. Charging.** Jobenzy has no payment integration and no reason to bill its
   only user. Pricing tiers are specified for completeness but are the last thing to
   build.
 
 ---
 
-## 4. Baseline: what Quiver has today
+## 4. Baseline: what Jobenzy has today
 
 | Area | Present | Where |
 |---|---|---|
@@ -340,7 +340,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-F2 (P0) [DONE].** Every tracked job carries a match score and a readable reason for
   that score, both visible in the jobs table. *Score exists; `fit_reason` is stored
   but only surfaced on skipped rows.*
-- **FR-F3 (P0) [DONE].** The user can paste a job URL and have Quiver detect the ATS,
+- **FR-F3 (P0) [DONE].** The user can paste a job URL and have Jobenzy detect the ATS,
   fetch the description, score it and queue it, without that job coming from a
   discovery source. Equivalent to Tsenta's `POST /detect`.
 - **FR-F4 (P1).** Expand ATS board readers from 6 towards the 28 systems in section
@@ -359,7 +359,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   *Built in phase 5: multiple categories, multiple portals, posted-within,
   minimum match, remote or on-site, company, place name, free text and four sort
   orders, each shown as a chip that clears itself. Salary is the one filter
-  Tsenta has that Quiver cannot offer, because no source parses it into a field —
+  Tsenta has that Jobenzy cannot offer, because no source parses it into a field —
   see FR-F9.*
 - **FR-F7 (P2) [DONE].** Notify the user when a high-match role appears, by desktop
   notification or email, within one scan cycle of publication.
@@ -368,7 +368,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 - **FR-F9 (P1) [DONE].** Capture salary where a posting publishes it, and filter on it.
   *Confirmed a real Tsenta feature 2026-08-22: the signed-in job panel shows a
-  parsed range with currency ("GBP 43k - 64k /yr").* No Quiver source parses a
+  parsed range with currency ("GBP 43k - 64k /yr").* No Jobenzy source parses a
   compensation range into a field today, so there is nothing to filter. Needs a
   `salary_min` / `salary_max` / `salary_currency` trio on the job row and a
   parser per source, most of which publish it as free text.
@@ -376,13 +376,13 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   discarded, surviving the retention purge. *Confirmed: a bookmark control sits
   on every job panel.*
 - **FR-F11 (P2) [DONE].** A triage gesture over the feed - Tsenta puts **Pass** and
-  **Apply** on each match card. Quiver's table answers "what is there"; it has
+  **Apply** on each match card. Jobenzy's table answers "what is there"; it has
   no fast way to work down a list making one decision per role. *Confirmed on
   the feed cards.*
 - **FR-F12 (P1) [DONE].** Parse the posting into a structured detail panel rather than a
   score and a link: seniority, work arrangement, employment type, function, an
   extracted skills-and-technologies list, and the application deadline, with the
-  matched terms highlighted in the description. Quiver has the description and
+  matched terms highlighted in the description. Jobenzy has the description and
   the score; none of the rest is broken out. The skills list is the highest
   value of these - it is what a keyword-aligned resume is aimed at.
 
@@ -391,14 +391,14 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-P1 (P0) [DONE].** Three tailoring modes exactly as Tsenta defines them: **Off**,
   **Honest** (reword using only what the profile already contains), **Aggressive**
   (rewrite freely for keyword match). Aggressive requires review before submission.
-  *Quiver has one mode today, closest to Honest.*
+  *Jobenzy has one mode today, closest to Honest.*
 - **FR-P2 (P0) [DONE].** A per-application diff view: original bullet, rewritten bullet, a
   change count, and Edit and Approve controls. Nothing may be submitted from an
   unapproved tailored document while auto-approve is off.
 - **FR-P3 (P0) [DONE].** An auto-approve toggle, independent of the review-the-form toggle
   in FR-A4.
 - **FR-P4 (P1) [DONE].** Multiple named resume profiles: create, duplicate, import, mark a
-  default, and choose which profile an application uses. *Quiver has one
+  default, and choose which profile an application uses. *Jobenzy has one
   `profile.yaml` and three built variants.*
 - **FR-P5 (P1).** Cover letters generated only where the form accepts or requires
   one, and attached as a file when a file is wanted rather than pasted into a text
@@ -413,7 +413,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   mechanical gate, not a prompt instruction.
 
 - **FR-P9 (P1) [DONE].** A profile completeness indicator: which fields are missing, and
-  which of those employers commonly require. Quiver has the data to compute this
+  which of those employers commonly require. Jobenzy has the data to compute this
   and never shows it, so a profile gap is only discovered when an application
   stops on it.
 - **FR-P10 (P2) [DONE].** Import a resume from DOCX as well as YAML, preserving what
@@ -421,7 +421,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-P11 (P1) [DONE].** An in-browser resume editor with the controls Tsenta exposes:
   a choice of templates (it ships **Standard** and **Jake**), font family and
   point size, left or justified alignment, a fit-to-one-page toggle, and section
-  reordering. Quiver renders LaTeX server-side with fixed styling and a two-page
+  reordering. Jobenzy renders LaTeX server-side with fixed styling and a two-page
   target; the document cannot be adjusted without editing the profile and
   rebuilding. The Cover Letter is a first-class editable tab beside the resume,
   not only a generated artefact (see FR-P5).
@@ -431,10 +431,10 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A1 (P0) [DONE].** Submission works across the systems in 2.2, tracked as a per-ATS
   capability table with two independent flags, `detects` and `submits`. That table
   is visible in the UI so the user knows before selecting a job.
-- **FR-A2 (P0) [DONE].** Adopt Tsenta's application status machine in place of Quiver's:
+- **FR-A2 (P0) [DONE].** Adopt Tsenta's application status machine in place of Jobenzy's:
   `queued`, `running`, `needs_review`, `submitted`, `failed`. Map the existing
   `pending/filled/submitted/failed/skipped` onto it. `needs_review` is the state
-  Quiver currently has no name for and instead treats as failure.
+  Jobenzy currently has no name for and instead treats as failure.
 - **FR-A3 (P0) [DONE].** Every application produces a receipt: fields filled, fields
   skipped, generated answers, documents submitted, final result, viewable
   afterwards. *Data is captured; there is no receipt view.*
@@ -449,7 +449,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A5 (P1) [DONE].** Handle logins and one-time codes instead of failing
   on them. Tsenta exposes this as `POST /applications/{id}/otp` with an
   `application.needs_otp` webhook, and its worker "signs in when needed".
-  *Audited 2026-08-22: Quiver detects both — `OTP_MARKERS` and `LOGIN_MARKERS` in
+  *Audited 2026-08-22: Jobenzy detects both — `OTP_MARKERS` and `LOGIN_MARKERS` in
   `agent/applier.py` — and parks the run as `needs_review` with an instruction
   naming what the site asked for. That is the detection half. There is no way to
   hand the code back to a waiting session, so the application is finished, not
@@ -464,7 +464,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   running progress line. *Partly built.*
 - **FR-A9 (P2) [DONE].** Auto Apply: the agent selects and submits eligible roles on
   its own, bounded by a match threshold, a daily cap and the user's filters. This is
-  the one behaviour Quiver forbids today, structurally: `apply` requires explicit
+  the one behaviour Jobenzy forbids today, structurally: `apply` requires explicit
   `--job-ids`. Enabling it is a product decision with real consequences and must be
   opt-in, capped and revocable.
 - **FR-A10 (P1) [DONE].** Apply to several jobs in parallel with a bounded worker pool,
@@ -473,7 +473,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-A11 (P1) [DONE].** An employer-account credential store. Workday and iCIMS will
   not take an application without an account first, which is why Tsenta sets a
   **separate application password** during onboarding and creates accounts with
-  it. Quiver stops at these systems today. Any implementation must keep the
+  it. Jobenzy stops at these systems today. Any implementation must keep the
   secret out of the repository and out of the settings JSON — `Backend/.env` or
   the OS keychain, never the store.
 
@@ -491,7 +491,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   link. Otherwise leave the status alone and mark the message for review.
 - **FR-T5 (P1) [DONE].** An application inbox grouped by the classes in FR-T3, with an
   unread count.
-- **FR-T6 (P1) [DONE].** Manual add and CSV import of applications made outside Quiver.
+- **FR-T6 (P1) [DONE].** Manual add and CSV import of applications made outside Jobenzy.
   *Not built in Phase 1: it only matters once there is a history worth importing,
   and nothing else depends on it.*
 - **FR-T7 (P1) [DONE].** Bounce detection: a hard bounce demotes the guessed address
@@ -501,23 +501,23 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
   more applications than exist to mean anything yet.*
 
 - **FR-T9 (P1) [DONE].** The tracker as a board, with a card dragged from one column to
-  the next. Quiver has the stages and a per-row dropdown; the gesture Tsenta
+  the next. Jobenzy has the stages and a per-row dropdown; the gesture Tsenta
   leads with is missing.
 - **FR-T10 (P1) [DONE].** The inbox as a mail client: full thread bodies, search,
-  attachments. *Reply landed in phase 5; the other three did not. Quiver stores a
+  attachments. *Reply landed in phase 5; the other three did not. Jobenzy stores a
   snippet per message and never fetches the body, so there is nothing to thread
   or search yet.*
 - **FR-T11 (P2) [DONE].** An in-progress indicator on an application while its run is
   still going, rather than only in the console.
 - **FR-T12 (P1) [DONE].** Export the tracker to CSV, alongside the import in FR-T6.
-  Tsenta offers both on the Pipeline view; Quiver has neither.
+  Tsenta offers both on the Pipeline view; Jobenzy has neither.
 - **FR-T13 (decision, not a gap).** Tsenta routes application mail through an
   address it provisions (`...@my-privatemail.com`), selectable from an "Active
-  mailbox" switcher, and lets the user **Compose** as well as reply. Quiver reads
+  mailbox" switcher, and lets the user **Compose** as well as reply. Jobenzy reads
   the user's own Gmail over IMAP instead. For a single-user local tool the IMAP
   route is the right one - no relay to run, no third-party address to trust, mail
   stays in the account the user already has. The one thing worth taking from
-  Tsenta here is **Compose a new message**, not only reply, which Quiver could do
+  Tsenta here is **Compose a new message**, not only reply, which Jobenzy could do
   over the SMTP it already uses.
 
 ### 5.5 Surfaces
@@ -525,22 +525,22 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 - **FR-S1 (P0) [DONE].** Web dashboard covering Find, Prep, Apply and Track as four
   first-class areas. *Three tabs exist; Track does not.*
 - **FR-S2 (P1) [DONE].** Chrome extension: on any job posting, one click sends the URL to
-  Quiver, which detects the ATS, tailors and applies. The highest-value surface
+  Jobenzy, which detects the ATS, tailors and applies. The highest-value surface
   after the dashboard, because it needs no scale to be useful.
-- **FR-S3 (P1) [DONE].** MCP server exposing Quiver to Claude Code and other agents:
+- **FR-S3 (P1) [DONE].** MCP server exposing Jobenzy to Claude Code and other agents:
   discovery with filters, apply single and batch, resume profile management, tracker
   read and import, inbox read and unread count, profile edit, remaining allowance.
-  Local stdio transport first; HTTP with OAuth only if Quiver becomes hosted.
+  Local stdio transport first; HTTP with OAuth only if Jobenzy becomes hosted.
 - **FR-S4 (P2).** CLI parity with the MCP tool surface. *Partly built:
   `python -m agent.runner {discover,resumes,apply,outreach,tasks}`.*
 - **FR-S7 (P1) [DONE as Outreach].** A "Networking" surface for outbound contact
-  to founders and recruiters. Tsenta names it Networking; Quiver has had it as
+  to founders and recruiters. Tsenta names it Networking; Jobenzy has had it as
   **Outreach** since before this document - verified addresses, per-day caps, a
   dry run. Same capability, different label.
 - **FR-S8 (P2) [DONE].** A "Research" surface. Present in Tsenta's navigation and absent
   from its public docs, so its contents are unknown from a screenshot; recorded
   as a gap to investigate rather than a scoped requirement. Likely company or
-  role research, given the name and Quiver's existing company dataset.
+  role research, given the name and Jobenzy's existing company dataset.
 - **FR-S5 (P2) [MT].** iOS and Android apps.
 - **FR-S6 (P2) [MT].** A text-message surface over WhatsApp or iMessage for matching
   and approval.
@@ -591,7 +591,7 @@ Priority: **P0** parity-critical, **P1** important, **P2** desirable.
 
 ## 6. Gap summary
 
-| Capability | Tsenta | Quiver now | Gap |
+| Capability | Tsenta | Jobenzy now | Gap |
 |---|---|---|---|
 | Scheduled discovery | Continuous, 50k pages | Scheduled, ~9 sources | Scale, not behaviour |
 | ATS detection | 28 systems | 6 board readers | 22 systems |
@@ -853,7 +853,7 @@ Verified end to end against the live mailbox: 16 messages read in 19 seconds,
 
 Three tailoring modes exactly as Tsenta defines them, in
 `settings.tailoring.mode`. **Off** makes no model call at all. **Honest** is
-what Quiver already did. **Aggressive** gets its own prompt that may restructure
+what Jobenzy already did. **Aggressive** gets its own prompt that may restructure
 a bullet and reach for the posting's vocabulary, and always requires review.
 
 The important part is what the modes do *not* change. `api/resume_facts.py` is a
@@ -966,7 +966,7 @@ or 70` silently turned it into 70 — the user would have got the default they h
 just changed.
 
 **A Chrome extension** in `Extension/`. One click sends the current tab's URL to
-Quiver on `127.0.0.1:8000`, and reports the backend's own words: tracked, already
+Jobenzy on `127.0.0.1:8000`, and reports the backend's own words: tracked, already
 tracked, closed posting, or not running. It holds no credentials and stores
 nothing; `activeTab` gives it a URL only at the moment you click. The API's CORS
 had to learn `chrome-extension://` origins, verified by loading the real
@@ -1012,7 +1012,7 @@ Stated plainly so nobody plans around it.
   volumes needs paid inference.
 - **iOS and Android apps, and iMessage.** Each is a separate product with its own
   store, review process and push infrastructure.
-- **Captcha solving.** Tsenta does not claim it either. Quiver detects a real
+- **Captcha solving.** Tsenta does not claim it either. Jobenzy detects a real
   challenge and stops, which stays correct.
 - **LinkedIn and Indeed ingestion.** Blocked by anti-bot measures and their terms.
   Not attempted.
@@ -1027,7 +1027,7 @@ claims to satisfy it, on the day. Two markers did not survive it.
 
 Scope note: this audit treats the multi-tenant items (5.6 Developer API, 5.7
 accounts and billing, plus FR-S5 and FR-S6) as **out of scope by your decision** —
-Quiver is for one person, so allowances, plan tiers and per-user isolation have
+Jobenzy is for one person, so allowances, plan tiers and per-user isolation have
 nothing to isolate. They are listed as *excluded*, not as gaps.
 
 ### Find
@@ -1115,17 +1115,17 @@ nothing to isolate. They are listed as *excluded*, not as gaps.
 | NFR-6 data stays local | **held** | nothing leaves the machine but LLM calls and applications |
 | NFR-7 suite green and growing | **held** | 131 passing |
 
-### Two places Quiver is deliberately not at parity
+### Two places Jobenzy is deliberately not at parity
 
 Both are choices, not gaps, and both should stay:
 
 - **Auto Apply proposes; it does not submit.** Tsenta's auto-applies within your
-  filters and daily cap. Quiver's shortlists and waits for a human to approve the
+  filters and daily cap. Jobenzy's shortlists and waits for a human to approve the
   batch. `agent_apply` refuses to run without explicit job ids, so this is
   structural rather than a promise — no misconfiguration can make it submit
   something nobody saw.
 - **The MCP server has no submit tool.** Tsenta's connector can "apply to a
-  single role or a batch" from inside an assistant. Quiver's exposes 14 tools and
+  single role or a batch" from inside an assistant. Jobenzy's exposes 14 tools and
   none of them send an application, for the same reason.
 
 ### The honest summary

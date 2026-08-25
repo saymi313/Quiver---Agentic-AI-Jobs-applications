@@ -3,7 +3,7 @@ import { api } from '../lib/api'
 import { Disclosure, Empty, Status, Table, Td, Tr } from './ui'
 
 /*
-  What Quiver can do with each applicant tracking system.
+  What Jobenzy can do with each applicant tracking system.
 
   Reading a board and submitting to it are shown as separate columns because
   they are separate capabilities: a role can be perfectly discoverable through
@@ -48,7 +48,7 @@ export default function Portals({ open, onToggle }) {
       description={
         data
           ? `${s.detects} of ${s.total} readable · ${s.proven} proven for submitting`
-          : 'Which portals Quiver can read, and which it can submit to.'
+          : 'Which portals Jobenzy can read, and which it can submit to.'
       }
       open={open}
       onToggle={onToggle}

@@ -170,7 +170,7 @@ export default function App() {
         border-r border-line px-3 py-4 md:flex">
         <div className="flex items-center gap-2 px-2.5 pb-5">
           <Icon.Logo className="size-5 text-n-100" />
-          <span className="text-base font-semibold tracking-tight text-n-100">Quiver</span>
+          <span className="text-base font-semibold tracking-tight text-n-100">Jobenzy</span>
         </div>
 
         <nav className="flex flex-col gap-4" aria-label="Main">

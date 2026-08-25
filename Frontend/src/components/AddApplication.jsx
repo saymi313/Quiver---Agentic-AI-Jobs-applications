@@ -4,11 +4,11 @@ import { Sheet } from './apple'
 import { Button, Field, Input, Note, Select, Textarea } from './ui'
 
 /*
-  An application made outside Quiver, entered by hand — or a whole spreadsheet
+  An application made outside Jobenzy, entered by hand — or a whole spreadsheet
   of them imported at once.
 
   A tracker that only holds what the agent submitted is only half a tracker: the
-  roles applied to before Quiver, or on a site it cannot reach, belong in the
+  roles applied to before Jobenzy, or on a site it cannot reach, belong in the
   same pipeline. Both routes land in the same place as a submitted application,
   marked as the user's own rather than the applier's.
 */
@@ -64,7 +64,7 @@ export default function AddApplication({ open, onClose, onAdded }) {
       open={open}
       onClose={onClose}
       title="Add an application"
-      description="One you made outside Quiver, by hand or from a spreadsheet."
+      description="One you made outside Jobenzy, by hand or from a spreadsheet."
       footer={
         <div className="flex items-center gap-2">
           <Button variant="primary" busy={busy} disabled={!form.title.trim()} onClick={save}>

@@ -389,7 +389,7 @@ REWRITE_SCHEMA = {
 #
 #   off         submit the curated resume unchanged. No model call at all.
 #   honest      reword for the posting using only what the profile already
-#               says. This is what Quiver has always done.
+#               says. This is what Jobenzy has always done.
 #   aggressive  rewrite more freely to maximise keyword match, and always
 #               require review before the result can be used.
 #

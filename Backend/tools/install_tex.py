@@ -44,7 +44,7 @@ def main() -> int:
         return 0
 
     print("[1/3] finding the latest Tectonic release...")
-    req = urllib.request.Request(RELEASES, headers={"User-Agent": "quiver"})
+    req = urllib.request.Request(RELEASES, headers={"User-Agent": "jobenzy"})
     data = json.load(urllib.request.urlopen(req, timeout=60,
                                             context=ssl.create_default_context()))
     asset = asset_for_platform(data.get("assets", []))
@@ -57,7 +57,7 @@ def main() -> int:
     size_mb = asset["size"] // 1024 // 1024
     print(f"[2/3] downloading {asset['name']} ({size_mb} MB)...")
     req = urllib.request.Request(asset["browser_download_url"],
-                                 headers={"User-Agent": "quiver"})
+                                 headers={"User-Agent": "jobenzy"})
     blob = urllib.request.urlopen(req, timeout=600,
                                   context=ssl.create_default_context()).read()
 

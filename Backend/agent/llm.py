@@ -275,7 +275,7 @@ def _call_provider(provider: str, key: str, model: str, prompt: str,
         return _openai_compatible(
             OPENROUTER_URL, prompt, system, schema,
             model or OPENROUTER_FALLBACKS[0], key, OPENROUTER_FALLBACKS,
-            {"HTTP-Referer": "http://localhost", "X-Title": "Quiver"})
+            {"HTTP-Referer": "http://localhost", "X-Title": "Jobenzy"})
     if provider == "ollama":
         return _ollama(prompt, system, schema, model)
     raise LLMError(f"Unknown provider '{provider}'.")

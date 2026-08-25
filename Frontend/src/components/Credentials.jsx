@@ -94,7 +94,7 @@ export default function Credentials({ open, onToggle }) {
           <div>
             <p className="text-sm font-medium text-n-100">Auto sign-up</p>
             <p className="mt-0.5 text-micro leading-relaxed text-n-500">
-              When a site insists on an account, Quiver creates one with this email and the
+              When a site insists on an account, Jobenzy creates one with this email and the
               application password below, and reuses it there from then on. If the new account needs
               a code or a confirmation link, the job is marked <em>input required</em> and waits for you.
             </p>
@@ -192,7 +192,7 @@ export default function Credentials({ open, onToggle }) {
         <p className="text-sm font-medium text-n-100">Application password</p>
         <p className="mt-0.5 text-micro leading-relaxed text-n-500">
           Used for the accounts the agent registers when a site demands one, so your real passwords
-          never do. Set it once, or let Quiver generate a strong one.
+          never do. Set it once, or let Jobenzy generate a strong one.
         </p>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <div className="min-w-[12rem] flex-1">

@@ -1232,7 +1232,7 @@ MANUAL_APPLICATION_FIELDS = ("title", "company_name", "url", "notes",
 
 def add_manual_application(data: dict[str, Any]) -> int:
     """
-    An application the user made outside Quiver, entered by hand or imported.
+    An application the user made outside Jobenzy, entered by hand or imported.
 
     Recorded as a real submitted application so it counts in the tracker and the
     reply-rate figures — the user did apply — with `source='manual'` marking that

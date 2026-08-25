@@ -1,1 +1,1 @@
-"""Dashboard backend package for Quiver."""
+"""Dashboard backend package for Jobenzy."""

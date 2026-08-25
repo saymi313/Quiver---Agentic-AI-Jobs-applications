@@ -1,8 +1,8 @@
 """
-Quiver over MCP: the agent's own surface, for Claude Code and anything else
+Jobenzy over MCP: the agent's own surface, for Claude Code and anything else
 that speaks the protocol.
 
-    claude mcp add quiver -- python -m agent.mcp_server
+    claude mcp add jobenzy -- python -m agent.mcp_server
 
 Local stdio, not hosted HTTP with OAuth. There is no account to authenticate
 against: the server runs as you, on your machine, against the same database the
@@ -29,7 +29,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import portals, store
 
-mcp = FastMCP("quiver")
+mcp = FastMCP("jobenzy")
 
 
 def _ok(payload: Any) -> str:
@@ -296,7 +296,7 @@ def set_stage(application_id: int, stage: str) -> str:
 
 @mcp.tool()
 def status() -> str:
-    """What Quiver knows and what it can do right now."""
+    """What Jobenzy knows and what it can do right now."""
     from . import inbox, llm
 
     store.init()
@@ -315,13 +315,13 @@ def status() -> str:
 
 @mcp.tool()
 def supported_portals() -> str:
-    """Which application systems Quiver can read, and which it can submit to."""
+    """Which application systems Jobenzy can read, and which it can submit to."""
     return _ok({"summary": portals.summary(), "portals": portals.table()})
 
 
 @mcp.tool()
 def get_profile() -> str:
-    """The stock answers Quiver puts into application forms."""
+    """The stock answers Jobenzy puts into application forms."""
     store.init()
     profile = dict(store.get_setting("profile", {}) or {})
     profile.pop("default_resume", None)

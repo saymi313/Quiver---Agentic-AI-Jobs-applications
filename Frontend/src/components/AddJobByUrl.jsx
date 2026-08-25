@@ -35,7 +35,7 @@ export default function AddJobByUrl({ onAdded }) {
   return (
     <Section
       title="Add a job by link"
-      description="Paste any posting URL. Quiver reads it, works out the role and scores it like any other."
+      description="Paste any posting URL. Jobenzy reads it, works out the role and scores it like any other."
     >
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-[16rem] flex-1">

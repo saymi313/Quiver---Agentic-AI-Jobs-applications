@@ -21,7 +21,7 @@ def app(app_id, company, domain, title="Backend Engineer", message_id=None, subm
 
 
 APPS = [
-    app(1, "Acme Labs", "acmelabs.com", message_id="<sent-1@quiver>"),
+    app(1, "Acme Labs", "acmelabs.com", message_id="<sent-1@jobenzy>"),
     app(2, "Globex", "globex.io", title="Frontend Engineer"),
     app(3, "Initech", "initech.com", title="Full Stack Engineer"),
 ]
@@ -38,7 +38,7 @@ def test_threaded_reply_wins_outright():
     """A reply in our own thread is near-certain, even from an unrelated
     domain — recruiters forward and reply from personal addresses."""
     link = inbox.link_message(
-        msg(in_reply_to="<sent-1@quiver>", from_domain="gmail.com"), APPS)
+        msg(in_reply_to="<sent-1@jobenzy>", from_domain="gmail.com"), APPS)
     assert link["application_id"] == 1
     assert link["linked_by"] == "thread"
     assert link["confidence"] > LINK_CONFIDENCE_THRESHOLD
@@ -46,7 +46,7 @@ def test_threaded_reply_wins_outright():
 
 def test_references_header_also_links():
     link = inbox.link_message(
-        msg(references=["<other@x>", "<sent-1@quiver>"], from_domain="x.com"), APPS)
+        msg(references=["<other@x>", "<sent-1@jobenzy>"], from_domain="x.com"), APPS)
     assert link["application_id"] == 1
 
 

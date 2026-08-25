@@ -15,7 +15,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND))
 
-_tmp = tempfile.mkdtemp(prefix="quiver-tests-")
+_tmp = tempfile.mkdtemp(prefix="jobenzy-tests-")
 os.environ["JOBSCRIPT_FORCE_SQLITE"] = "1"
 os.environ["JOBSCRIPT_DB_PATH"] = str(Path(_tmp) / "test.sqlite3")
 

@@ -58,7 +58,7 @@ def notify_new_matches(*, log: Callable[[str], None] = print) -> dict[str, Any]:
 
     subject = (f"{len(matches)} new match{'es' if len(matches) != 1 else ''} — "
                f"top {round(matches[0].get('fit_score') or 0)}")
-    body = ("Quiver found roles that scored at or above your "
+    body = ("Jobenzy found roles that scored at or above your "
             f"{round(min_score)} threshold:\n\n"
             + "\n\n".join(_fmt(j) for j in matches)
             + "\n\nOpen the dashboard to review or apply.")

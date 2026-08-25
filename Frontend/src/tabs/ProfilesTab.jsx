@@ -145,7 +145,7 @@ export default function ProfilesTab() {
         <div className="mt-4 border-t border-line pt-4">
           <p className="text-tiny font-medium text-n-200">Or import from a resume</p>
           <p className="mt-0.5 text-micro leading-relaxed text-n-500">
-            Upload a PDF or DOCX and Quiver reads it into a new profile —
+            Upload a PDF or DOCX and Jobenzy reads it into a new profile —
             {newName.trim() ? ` named “${newName.trim()}”` : ' name it above first'}. A complex
             two-column layout may not carry across perfectly.
           </p>

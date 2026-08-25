@@ -2,7 +2,7 @@
   One click, one request, one honest answer.
 
   The extension holds no state and no credentials: it posts the current tab's
-  URL to Quiver running on this machine and reports exactly what came back.
+  URL to Jobenzy running on this machine and reports exactly what came back.
   Everything that decides whether the posting is real, readable or closed
   already lives in the backend, and duplicating any of it here would give two
   places to fix the next time a board changes.
@@ -56,7 +56,7 @@ goEl.addEventListener('click', async () => {
   let reached = false
   try {
     // 127.0.0.1 first, then localhost: which one resolves depends on how the
-    // user started uvicorn, and guessing wrong reads as "Quiver is not running".
+    // user started uvicorn, and guessing wrong reads as "Jobenzy is not running".
     for (const host of HOSTS) {
       let attempt
       try {
@@ -89,7 +89,7 @@ goEl.addEventListener('click', async () => {
     if (!reached) {
       show(
         'bad',
-        'Quiver is not running',
+        'Jobenzy is not running',
         'Start it from the Backend folder with python run_dashboard.py, then try again.',
       )
     }

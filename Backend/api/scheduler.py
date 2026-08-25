@@ -170,7 +170,7 @@ def start() -> None:
     if _thread is not None and _thread.is_alive():
         return
     _stop.clear()
-    _thread = threading.Thread(target=_loop, name="quiver-scheduler", daemon=True)
+    _thread = threading.Thread(target=_loop, name="jobenzy-scheduler", daemon=True)
     _thread.start()
 
 

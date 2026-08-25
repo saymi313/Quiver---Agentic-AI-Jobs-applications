@@ -1,4 +1,4 @@
-# Quiver
+# Jobenzy
 
 **One resume per target, drawn and ready.**
 
@@ -40,7 +40,7 @@ the agent fragile and get accounts limited.
 ## Project structure
 
 ```
-quiver/
+jobenzy/
 ├── .gitignore
 ├── README.md                      ← you are here
 │

@@ -634,7 +634,7 @@ def _demote_bounced_pattern(msg: dict[str, Any], *,
 def reply(message_id: int, body: str, *, subject: str | None = None,
           log: Callable[[str], None] = print) -> dict[str, Any]:
     """
-    Answer one message from the mailbox Quiver already reads.
+    Answer one message from the mailbox Jobenzy already reads.
 
     A recruiter's "can you do Tuesday at 3?" wants a one-line answer within the
     hour, and the whole point of reading the mailbox here is to know it arrived.

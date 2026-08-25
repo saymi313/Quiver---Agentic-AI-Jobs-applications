@@ -8,7 +8,7 @@ import { Empty, Icon, Input, PageHead, Status } from '../components/ui'
 /*
   Research — what is known about the companies you are applying to.
 
-  Everything here Quiver already gathered on the way to finding a role: the
+  Everything here Jobenzy already gathered on the way to finding a role: the
   company's own facts, the founders and recruiters whose addresses were verified,
   and every posting seen there. Pulled into one place, it is what you read before
   an interview or before writing to someone — the difference between "I applied"
@@ -45,7 +45,7 @@ export default function ResearchTab() {
     <div className="space-y-4">
       <PageHead
         title="Research"
-        description="What Quiver already knows about the companies behind your roles — facts, contacts and every posting seen there. Grounded in what was found, not generated."
+        description="What Jobenzy already knows about the companies behind your roles — facts, contacts and every posting seen there. Grounded in what was found, not generated."
       />
 
       {rows.length === 0 ? (

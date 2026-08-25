@@ -1,7 +1,7 @@
-# Quiver browser extension
+# Jobenzy browser extension
 
-One click on any job posting sends its URL to Quiver running on your own
-machine. Quiver reads the page, works out the role, scores it against your
+One click on any job posting sends its URL to Jobenzy running on your own
+machine. Jobenzy reads the page, works out the role, scores it against your
 profile and adds it to the tracked jobs table — the same pipeline a discovered
 job goes through, entered at the point where the URL is already known.
 
@@ -12,13 +12,13 @@ It is not on the Chrome Web Store, so load it unpacked:
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
 3. **Load unpacked**, and choose this `Extension` folder.
-4. Pin Quiver to the toolbar so the button is one click away.
+4. Pin Jobenzy to the toolbar so the button is one click away.
 
 Firefox and Edge load it the same way (`about:debugging` and `edge://extensions`).
 
 ## Use
 
-Open a job posting and click the Quiver button. It reports what happened in the
+Open a job posting and click the Jobenzy button. It reports what happened in the
 extension's own words rather than a generic success:
 
 - **Tracked** — the role, the company, its category and its match score.
@@ -27,7 +27,7 @@ extension's own words rather than a generic success:
   nothing was added.
 - **That link opens a job board** — the posting was taken down, or the link
   points at the board rather than one role.
-- **Quiver is not running** — start it from `Backend/` with
+- **Jobenzy is not running** — start it from `Backend/` with
   `python run_dashboard.py`.
 
 ## What it sends, and where

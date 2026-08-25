@@ -3,7 +3,7 @@ Turn a posting's prose into fields.
 
 Tsenta's job panel is a parsed document: a salary range, a seniority, a work
 arrangement, an extracted list of skills, and a deadline — not just a link and a
-score. This module is the parser behind the same panel in Quiver. It is
+score. This module is the parser behind the same panel in Jobenzy. It is
 deliberately deterministic and free: no LLM call, because it runs over every
 scored job and the day's model budget is small. Regex and a dictionary get the
 large majority right, and a wrong salary is worse than a missing one — so every

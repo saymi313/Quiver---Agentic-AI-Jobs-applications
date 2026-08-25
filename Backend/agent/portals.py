@@ -1,13 +1,13 @@
 """
-What Quiver can do with each applicant tracking system, as data.
+What Jobenzy can do with each applicant tracking system, as data.
 
 Two capabilities, tracked separately, because they genuinely are separate and
 conflating them is how a job ends up in the table with an Apply button that was
 never going to work:
 
-  * **detects** — Quiver can read this system's public board and pull its open
+  * **detects** — Jobenzy can read this system's public board and pull its open
     roles, so jobs from it appear during discovery.
-  * **submits** — Quiver can fill and submit this system's application form.
+  * **submits** — Jobenzy can fill and submit this system's application form.
 
 Tsenta states the same distinction in their docs ("Tsenta may recognize a job
 page even when that page does not have an active submission workflow"), and

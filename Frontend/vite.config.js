@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -21,5 +22,17 @@ export default defineConfig({
       },
     },
   },
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: {
+      // Two entry points: the marketing landing page at / and the React
+      // dashboard at /dashboard/. StaticFiles(html=True) serves each in
+      // production; Vite's dev server serves both directly.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        dashboard: resolve(__dirname, 'dashboard/index.html'),
+      },
+    },
+  },
 })

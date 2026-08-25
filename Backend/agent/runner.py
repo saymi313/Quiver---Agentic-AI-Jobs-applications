@@ -720,7 +720,7 @@ def main(argv: list[str] | None = None) -> int:
 # Auto Apply — the proposing half
 # --------------------------------------------------------------------------
 #
-# This is the whole of Auto Apply on Quiver's side, and it deliberately stops
+# This is the whole of Auto Apply on Jobenzy's side, and it deliberately stops
 # one step short of Tsenta's. Their agent picks roles and submits them. This one
 # picks roles and *proposes* them: rows go into a review queue, a human approves
 # the batch, and only then do those job ids reach `apply_to_ids`.
