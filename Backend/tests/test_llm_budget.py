@@ -75,8 +75,9 @@ def test_a_spent_gemini_day_rolls_to_groq(fake, monkeypatch):
 
 def test_no_key_anywhere_raises(fake, monkeypatch):
     fake()
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.delenv("GROK_API_KEY", raising=False)
+    # No provider key from any source — patch the env resolver so a real key
+    # loaded from .env into os.environ by another test cannot leak in.
+    monkeypatch.setattr(L, "_env_key", lambda provider: "")
     monkeypatch.setattr(L, "config",
                         lambda: {"provider": "gemini", "api_key": "", "model": ""})
     with pytest.raises(L.LLMError):

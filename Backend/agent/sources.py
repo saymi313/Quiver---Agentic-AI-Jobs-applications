@@ -810,6 +810,139 @@ def _section(results: list[Any], label: str, prefix: str, log: Callable[[str], N
     return _Guard()
 
 
+# --------------------------------------------------------------------------
+# Keyed aggregators — Adzuna and Jooble
+# --------------------------------------------------------------------------
+#
+# Both aggregate the whole market (LinkedIn, Indeed, company sites, ATS boards)
+# into one clean feed and hand back an apply URL that is usually the employer's
+# own ATS — the legitimate way to reach those postings without scraping the
+# hostile front doors. They activate only when their free keys are present, so
+# the tool works with or without them. The countries queried follow the user's
+# target regions; anything that slips through is caught by the region gate.
+
+# Adzuna's supported markets, intersected with the regions this profile targets.
+_ADZUNA_MARKETS = {
+    "uk": ["gb"],
+    "eu": ["gb", "de", "nl"],   # kept small — Adzuna's free tier is 1,000 calls/month
+    "remote": ["gb"],
+}
+# Jooble takes one location per call; these cover the user's regions plus remote.
+_JOOBLE_LOCATIONS = {
+    "remote": "Remote",
+    "uk": "United Kingdom",
+    "eu": "Germany",
+    "me": "United Arab Emirates",
+    "pk": "Pakistan",
+}
+
+
+def _env(name: str) -> str:
+    import os
+    return os.environ.get(name, "") or ""
+
+
+def _search_term(wanted: list[str]) -> str:
+    return " ".join(wanted[:4]) if wanted else "software developer"
+
+
+def _adzuna_markets() -> list[str]:
+    from . import store
+    regions = [r.lower() for r in (store.get_setting("targeting", {}) or {}).get("regions", [])]
+    codes: list[str] = []
+    for r in regions:
+        for c in _ADZUNA_MARKETS.get(r, []):
+            if c not in codes:
+                codes.append(c)
+    return codes or ["gb"]
+
+
+def _fetch_adzuna(results: list, wanted: list[str], limit: int,
+                  log: Callable[[str], None]) -> None:
+    from . import env as _envmod
+    _envmod.load()
+    app_id, app_key = _env("ADZUNA_APP_ID"), _env("ADZUNA_APP_KEY")
+    if not (app_id and app_key):
+        return
+    term = _search_term(wanted)
+    excludes = _region_excludes()
+    for country in _adzuna_markets():
+        data = _safe(lambda c=country: _get(
+            f"https://api.adzuna.com/v1/api/jobs/{c}/search/1",
+            {"app_id": app_id, "app_key": app_key, "results_per_page": 50,
+             "what_or": term, "max_days_old": 14, "content-type": "application/json"}), {})
+        for j in (data or {}).get("results", []):
+            loc = ((j.get("location") or {}).get("display_name")) or "Europe"
+            company = (j.get("company") or {}).get("display_name") or ""
+            cat = (j.get("category") or {}).get("label") or ""
+            if _off_region(loc, excludes):
+                continue
+            if not matches_kw(wanted, j.get("title", ""), f"{cat} {j.get('description','')[:200]}"):
+                continue
+            results.append(_board_entry(
+                name=company, source="adzuna",
+                location=loc, remote="remote" in loc.lower(),
+                title=j.get("title", ""), url=j.get("redirect_url", ""),
+                description=strip_html(j.get("description")), tags=[cat] if cat else [],
+                posted_at=j.get("created")))
+
+
+def _fetch_jooble(results: list, wanted: list[str], limit: int,
+                  log: Callable[[str], None]) -> None:
+    import requests
+    from . import env as _envmod
+    _envmod.load()
+    key = _env("JOOBLE_API_KEY")
+    if not key:
+        return
+    from . import store
+    regions = [r.lower() for r in (store.get_setting("targeting", {}) or {}).get("regions", [])]
+    locations = [v for r, v in _JOOBLE_LOCATIONS.items() if r in regions] or ["Remote"]
+    term = _search_term(wanted)
+    excludes = _region_excludes()
+    for loc in locations:
+        def call(location=loc):
+            resp = requests.post(f"https://jooble.org/api/{key}",
+                                 json={"keywords": term, "location": location},
+                                 timeout=SEARCH_TIMEOUT if "SEARCH_TIMEOUT" in globals() else 30)
+            resp.raise_for_status()
+            return resp.json()
+        data = _safe(call, {})
+        for j in (data or {}).get("jobs", []):
+            jloc = j.get("location") or loc
+            if _off_region(jloc, excludes):
+                continue
+            if not matches_kw(wanted, j.get("title", ""), j.get("snippet", "")):
+                continue
+            results.append(_board_entry(
+                name=j.get("company", ""), source="jooble",
+                location=jloc, remote="remote" in jloc.lower(),
+                title=j.get("title", ""), url=j.get("link", ""),
+                description=strip_html(j.get("snippet")),
+                tags=[j.get("type")] if j.get("type") else [],
+                posted_at=j.get("updated")))
+
+
+def matches_kw(wanted: list[str], title: str, tags: str) -> bool:
+    if not wanted:
+        return True
+    blob = f"{title} {tags}".lower()
+    return any(k in blob for k in wanted)
+
+
+def _region_excludes() -> list[str]:
+    """The exclude-location list, for pre-filtering aggregator results at fetch."""
+    from . import store
+    targeting = store.get_setting("targeting", {}) or {}
+    return list(targeting.get("exclude_locations")
+                or store.DEFAULT_SETTINGS["targeting"]["exclude_locations"])
+
+
+def _off_region(location: str, excludes: list[str]) -> bool:
+    from .matcher import location_excluded
+    return location_excluded(location, excludes) is not None
+
+
 def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
                         log: Callable[[str], None] = print) -> list[dict[str, Any]]:
     """
@@ -884,6 +1017,12 @@ def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
                 title=j.get("title", ""), url=j.get("applicationLink") or j.get("guid") or "",
                 description=strip_html(j.get("description") or j.get("excerpt")),
                 tags=j.get("categories") or [], posted_at=str(j.get("pubDate") or "")))
+
+    # -- Adzuna & Jooble (keyed aggregators; skipped silently without keys)
+    with section("adzuna"):
+        _fetch_adzuna(results, wanted, limit, log)
+    with section("jooble"):
+        _fetch_jooble(results, wanted, limit, log)
 
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
