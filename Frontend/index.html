@@ -82,6 +82,9 @@
     .nav-links { display: flex; align-items: center; gap: 26px; }
     .nav-links a { font-size: 14px; color: var(--ink-soft); transition: color 200ms var(--ease-out); }
     .nav-links a:hover { color: var(--ink); }
+    /* The primary pill keeps pure white text — it must beat the grey link rule
+       above, which is more specific than .btn-primary on its own. */
+    .nav-links .btn-primary, .nav-links .btn-primary:hover { color: #fff; }
     @media (max-width: 720px) { .nav-links .hide-sm { display: none; } }
 
     /* --------------------------------------------------------------- buttons */
