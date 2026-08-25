@@ -23,6 +23,7 @@ const FONTS = [
   ['times', 'Times'],
   ['charter', 'Charter'],
   ['palatino', 'Palatino'],
+  ['computer_modern', 'Computer Modern'],
 ]
 const SIZES = [10, 10.5, 11, 11.5]
 const SECTION_LABELS = {

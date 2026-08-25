@@ -158,13 +158,13 @@
   --text-3xl--line-height: 1.1;
   --text-3xl--letter-spacing: -0.025em;
 
-  /* Inter for text and Geist Mono for code — the same faces Tsenta uses,
-     loaded from Google Fonts in index.html. The system stack stays behind them
-     as a fallback for the moment before the webfont arrives (font-display:swap)
-     and for anyone offline. */
+  /* Satoshi for text and Geist Mono for code — the same faces Tsenta uses,
+     loaded in index.html (Satoshi from Fontshare, Geist Mono from Google). Inter
+     and the system stack stay behind them as the swap-in fallback before the
+     webfont arrives (font-display:swap) and for anyone offline. */
   --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
-    ui-sans-serif, system-ui, Roboto, sans-serif;
+    "Satoshi", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable",
+    "Segoe UI", ui-sans-serif, system-ui, Roboto, sans-serif;
   --font-mono:
     "Geist Mono", "SF Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
     Menlo, Consolas, monospace;

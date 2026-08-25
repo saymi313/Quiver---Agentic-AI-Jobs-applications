@@ -89,7 +89,9 @@ def audit_pdf(pdf: Path) -> list[str]:
 
     # -- fonts -------------------------------------------------------------
     fonts = {c["fontname"].split("+")[-1] for c in chars}
-    non_times = {f for f in fonts if not re.search(r"(Times|NimbusRom|Termes|TeXGyreTermes|txtt|ntx)", f, re.I)}
+    non_times = {f for f in fonts if not re.search(
+        r"(Times|NimbusRom|Termes|TeXGyreTermes|txtt|ntx|"
+        r"LMRoman|LMMono|LMSans|CMR|CMSY|CMMI|Latin ?Modern|Computer ?Modern)", f, re.I)}
     if non_times:
         fails.append(f"non-Times fonts: {sorted(non_times)}")
 

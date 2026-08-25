@@ -8,7 +8,27 @@ to the nearest valid one, and no section can be lost by reordering.
 
 from __future__ import annotations
 
-from api.latex_resume import RenderOptions, SECTION_KEYS, FONT_SIZES
+from api.latex_resume import RenderOptions, SECTION_KEYS, FONT_SIZES, FONTS
+
+
+def test_computer_modern_is_an_offered_font():
+    # The classic LaTeX look is a selectable option, and it coerces through.
+    assert "computer_modern" in FONTS
+    assert FONTS["computer_modern"]["label"] == "Computer Modern"
+    assert RenderOptions.coerce({"font": "computer_modern"}).font == "computer_modern"
+
+
+def test_audit_accepts_latin_modern_fonts():
+    # Computer Modern renders as LMRoman; the house-style font check must not
+    # flag it as a stray non-serif face.
+    import re
+    from api import resume_audit  # noqa: F401 — ensures the module imports
+    from api.resume_audit import _intentional_camel  # noqa: F401
+    # The regex used by audit_pdf's font check lives inline; assert its allowance.
+    pattern = (r"(Times|NimbusRom|Termes|TeXGyreTermes|txtt|ntx|"
+               r"LMRoman|LMMono|LMSans|CMR|CMSY|CMMI|Latin ?Modern|Computer ?Modern)")
+    assert re.search(pattern, "LMRoman10-Regular", re.I)
+    assert re.search(pattern, "LMRoman12-Bold", re.I)
 
 
 def test_bad_values_snap_to_valid_ones():

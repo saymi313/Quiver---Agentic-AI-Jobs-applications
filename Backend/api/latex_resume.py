@@ -63,6 +63,10 @@ FONTS = {
     "times": {"label": "Times", "pkg": r"\usepackage{newtxtext}\usepackage{newtxmath}"},
     "charter": {"label": "Charter", "pkg": r"\usepackage[charter]{mathdesign}"},
     "palatino": {"label": "Palatino", "pkg": r"\usepackage{newpxtext}\usepackage{newpxmath}"},
+    # The classic LaTeX look. Latin Modern is Computer Modern in a scalable Type-1
+    # form, so it keeps the clean ToUnicode map that the extraction-based ATS
+    # checks depend on — the bitmap original does not.
+    "computer_modern": {"label": "Computer Modern", "pkg": r"\usepackage{lmodern}"},
 }
 FONT_SIZES = (10.0, 10.5, 11.0, 11.5)
 SECTION_KEYS = ("summary", "experience", "projects", "skills", "education", "achievements")
