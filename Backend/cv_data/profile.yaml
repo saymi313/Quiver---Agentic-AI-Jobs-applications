@@ -48,8 +48,9 @@ modes:
     UI/UX Designer and Frontend Team Lead with 2+ years shipping production interfaces.
     Runs the work end to end — user research, wireframes and interactive prototypes in
     Figma and Adobe XD — then builds the React and Tailwind CSS front end that implements
-    them. Leads a team of 10 and owns the handoff from design system to shipped product,
-    keeping accessibility and usability in view the whole way.
+    them. Maintains the design system and validates flows through usability testing.
+    Leads a team of 10 and owns the handoff from design to shipped product, keeping
+    accessibility and usability in view.
 
 modes_triggers:
   ai_summary: [ai, machine learning, ml, nlp, deep learning, data science, llm, computer vision]

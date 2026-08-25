@@ -409,7 +409,8 @@ _SHARED_CONSTRAINTS = """
 - Preserve every number exactly as written. If a bullet has no number, do not add one.
 - Keep each bullet to one line, roughly 15 to 28 words.
 - Open each bullet with a past-tense action verb (or present tense for a current role).
-- The summary must fit two lines: 220 characters at most.
+- The summary is a substantial paragraph of four full lines — aim for 440 to 520 characters,
+  and never write fewer than four lines. A two-line summary reads as thin and is rejected.
 
 Return only bullets you actually improved. `original` must be a byte-exact copy of the input.
 """
@@ -616,14 +617,16 @@ def _llm_rewrite(content: ResumeContent, jd_text: str, *, mode: str = DEFAULT_MO
             b.text = revised
             changed += 1
 
-    # A summary of three to four rendered lines (~520 chars in 10.5pt Times
-    # across 7.5in). Two lines read as thin on a senior resume; four is the
-    # ceiling before it starts eating the space the experience needs. A rewrite
-    # longer than that is rejected and the curated summary — itself written to
-    # this fuller length — is kept. The page fitter still guarantees two pages,
-    # so a long summary trims a weak bullet rather than spilling over.
+    # A summary of four rendered lines (~440-520 chars in 10.5pt Times across
+    # 7.5in). Two lines read as thin on a senior resume, so a rewrite shorter
+    # than four lines is rejected outright and the curated summary — itself
+    # written to this fuller length — is kept, guaranteeing the summary is never
+    # trimmed below four lines. Four is also the ceiling before it eats the space
+    # the experience needs, so a longer one is rejected too. The page fitter
+    # still guarantees two pages, so a full summary trims a weak bullet rather
+    # than spilling over.
     new_summary = (data.get("summary") or "").strip()
-    if (40 < len(new_summary) <= 520
+    if (400 <= len(new_summary) <= 520
             and not resume_style.lint(resume_style.enforce(new_summary))
             and not resume_facts.check_rewrite(content.summary, new_summary, vocabulary)):
         changes.append({"original": content.summary, "revised": new_summary,
