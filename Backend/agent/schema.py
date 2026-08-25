@@ -239,10 +239,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
                    "Backend Engineer", "React Developer"],
         "exclude_titles": ["Senior Staff", "Principal", "Director", "VP", "Manager",
                            "Head of", "Intern"],
-        "locations": ["Remote", "Europe", "Pakistan"],
+        "locations": ["Remote", "Europe", "United Kingdom", "Germany", "Netherlands",
+                      "Ireland", "United Arab Emirates", "Saudi Arabia", "Qatar", "Pakistan"],
         "keywords": ["react", "node", "typescript", "javascript", "mongodb", "full stack"],
         "min_fit_score": 55,
-        "regions": ["us", "eu", "remote", "pk"],
+        "regions": ["eu", "uk", "me", "remote", "pk"],
+        # Countries whose postings are filtered out even when they otherwise
+        # match — the regions the user is not targeting. Pakistan is always kept,
+        # and a purely-remote posting with no country is never excluded on this.
+        "exclude_locations": ["India", "Bangladesh", "Sri Lanka", "Nepal", "Bhutan",
+                              "United States", "USA", " US ", "U.S.", "Canada"],
         # Freshness: applying to a week-old posting means joining hundreds of
         # applicants already in the pile.
         "max_age_days": 3,

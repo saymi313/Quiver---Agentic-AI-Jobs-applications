@@ -204,6 +204,44 @@ def enrich_pending(limit: int = 400, *, log=print) -> int:
     return done
 
 
+# North America is rarely written as "United States" on a job — it is a city and
+# a two-letter state ("San Francisco, CA"). These catch the common shapes a bare
+# country-name list misses. A comma-prefixed state code is US-specific enough to
+# be safe; a handful of unmistakable NA cities cover the rest.
+_US_STATE = re.compile(
+    r",\s*(a[klzr]|c[aot]|d[ce]|fl|ga|hi|i[adln]|k[sy]|la|m[adeinost]|n[cdehjmvy]|"
+    r"o[hkr]|pa|ri|s[cd]|t[nx]|ut|v[at]|w[aivy])\b", re.I)
+_NA_CITY = re.compile(
+    r"\b(new york|nyc|san francisco|sf bay|bay area|silicon valley|los angeles|"
+    r"chicago|seattle|boston|austin|denver|atlanta|dallas|houston|miami|"
+    r"washington dc|toronto|vancouver|montreal|ottawa|calgary)\b", re.I)
+
+
+def location_excluded(location: str, exclude: list[str]) -> str | None:
+    """
+    The excluded country a posting's location matches, or None.
+
+    Pakistan is always kept, and a location with no country (a bare "Remote") is
+    never excluded on this — the regions the user does not want are filtered, not
+    everything without an explicit match. North America is also caught by state
+    code and major city, since postings there rarely name the country.
+    """
+    if not exclude:
+        return None
+    loc = f" {(location or '').lower()} "
+    if not loc.strip() or "pakistan" in loc:
+        return None
+    for token in exclude:
+        # Keep the token's own spacing — " US " is padded on purpose so it does
+        # not match "aUStria" or "hoUSe"; stripping it would.
+        t = (token or "").lower()
+        if t.strip() and t in loc:
+            return token.strip()
+    if _US_STATE.search(location or "") or _NA_CITY.search(location or ""):
+        return "North America"
+    return None
+
+
 def regate_experience(*, log=print) -> dict[str, int]:
     """
     Re-run the experience gate over jobs already scored, and skip the ones it now
@@ -221,10 +259,21 @@ def regate_experience(*, log=print) -> dict[str, int]:
     allow_interns = bool(targeting.get("allow_internships", False))
     max_age_days = int(targeting.get("max_age_days", 3) or 0)
     stale_cutoff = int(time.time() - max_age_days * 86400) if max_age_days > 0 else 0
+    exclude_locations = list(targeting.get("exclude_locations")
+                             or store.DEFAULT_SETTINGS["targeting"]["exclude_locations"])
 
     jobs = store.list_jobs(limit=2000, status="not_applied")
     demoted = 0
     for job in jobs:
+        bad_loc = location_excluded(job.get("location") or "", exclude_locations)
+        if bad_loc:
+            store.set_job_fit(job["id"], 0.0,
+                              f"Region gate: {job.get('location')} outside your regions",
+                              "skipped")
+            demoted += 1
+            log(f"[regate] skipped {job.get('company_name') or '?'} — "
+                f"{job['title'][:44]} ({job.get('location')})")
+            continue
         posted = job.get("posted_ts")
         if stale_cutoff and posted and posted < stale_cutoff:
             days = int((time.time() - posted) / 86400)
@@ -259,12 +308,25 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
     allow_interns = bool(targeting.get("allow_internships", False))
     max_age_days = int(targeting.get("max_age_days", 3) or 0)
     stale_cutoff = int(time.time() - max_age_days * 86400) if max_age_days > 0 else 0
+    exclude_locations = list(targeting.get("exclude_locations")
+                             or store.DEFAULT_SETTINGS["targeting"]["exclude_locations"])
 
     jobs = store.jobs_needing_scoring(limit)
-    matched = skipped = out_of_range = stale = 0
+    matched = skipped = out_of_range = stale = off_region = 0
 
     for job in jobs:
-        # Freshness is the first gate. A three-week-old posting has hundreds of
+        # Region is the first gate: a posting in a country the user is not
+        # targeting is filtered out however well it otherwise matches. Remote and
+        # Pakistan are always kept (see location_excluded).
+        bad_loc = location_excluded(job.get("location") or "", exclude_locations)
+        if bad_loc:
+            off_region += 1
+            store.set_job_fit(job["id"], 0.0,
+                              f"Region gate: {job.get('location')} is outside your "
+                              f"target regions", "skipped")
+            continue
+
+        # Freshness is the next gate. A three-week-old posting has hundreds of
         # applicants already in the pile, so it is filtered out of the actionable
         # list here — not only at apply-selection, where the dashboard and a
         # direct apply could still reach it. A posting with no date is left to
@@ -311,6 +373,8 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
 
     log(f"[match] {matched} matched, {skipped} below the {threshold:.0f} threshold, "
         f"{out_of_range} outside the {min_years}-{max_years} year window, "
-        f"{stale} past the {max_age_days}-day freshness window")
+        f"{stale} past the {max_age_days}-day freshness window, "
+        f"{off_region} outside your target regions")
     return {"scored": len(jobs), "matched": matched, "skipped": skipped,
-            "outOfExperienceRange": out_of_range, "stale": stale}
+            "outOfExperienceRange": out_of_range, "stale": stale,
+            "offRegion": off_region}
