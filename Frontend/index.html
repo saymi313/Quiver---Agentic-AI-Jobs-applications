@@ -16,22 +16,21 @@
 
   <style>
     /* ---------------------------------------------------------------- tokens */
+    /* Apple mono: near-black ink on white and off-white, one restrained blue
+       touch used only for links, the primary edge, and a couple of status dots. */
     :root {
-      --bg:        #f6f7fb;
-      --ink:       #16161a;
-      --ink-soft:  #4a4a52;
-      --ink-mute:  #8a8a94;
-      --line:      rgba(20, 20, 40, 0.10);
-      --line-soft: rgba(20, 20, 40, 0.06);
-      --accent:    #0071e3;
-      --accent-ink:#0a5fc0;
-      --violet:    #6c4cf1;
-      --ok:        #12915a;
+      --bg:        #ffffff;
+      --bg-tint:   #f5f5f7;
+      --ink:       #1d1d1f;
+      --ink-soft:  #515154;
+      --ink-mute:  #86868b;
+      --line:      rgba(0, 0, 0, 0.10);
+      --line-soft: rgba(0, 0, 0, 0.06);
+      --accent:    #0071e3;   /* the single touch of colour */
 
-      /* Liquid Glass material (§12): translucent, bright top edge, inner glow. */
-      --glass:      rgba(255, 255, 255, 0.55);
-      --glass-brd:  rgba(255, 255, 255, 0.6);
-      --glass-shadow: 0 14px 40px -14px rgba(30, 30, 80, 0.22);
+      --glass:      rgba(255, 255, 255, 0.6);
+      --glass-brd:  rgba(255, 255, 255, 0.65);
+      --glass-shadow: 0 12px 36px -14px rgba(0, 0, 0, 0.14);
 
       --maxw: 1080px;
       --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -47,128 +46,121 @@
       -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       text-rendering: optimizeLegibility; overflow-x: hidden;
     }
-    ::selection { background: rgba(108, 76, 241, 0.18); }
+    ::selection { background: rgba(0, 113, 227, 0.14); }
     a { color: inherit; text-decoration: none; }
     .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
 
-    /* ---------------------------------------------- fluid aurora background */
-    /* A living gradient the glass surfaces refract. Fixed, slow, blurred, and
-       frozen entirely under reduced-motion (§14). */
-    .aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
-    .aurora .blob { position: absolute; border-radius: 50%; filter: blur(72px); opacity: 0.85; will-change: transform; }
-    .b1 { width: 46vw; height: 46vw; left: -6vw;  top: -10vh; background: radial-gradient(circle at 30% 30%, #6cb8ff, #0071e3 70%); animation: drift1 26s ease-in-out infinite; }
-    .b2 { width: 42vw; height: 42vw; right: -8vw; top: -6vh;  background: radial-gradient(circle at 60% 40%, #b79cff, #6c4cf1 72%); animation: drift2 32s ease-in-out infinite; }
-    .b3 { width: 40vw; height: 40vw; left: 18vw;  top: 24vh;  background: radial-gradient(circle at 50% 50%, #7ef1e6, #22c3d6 74%); opacity: 0.55; animation: drift3 38s ease-in-out infinite; }
-    .b4 { width: 34vw; height: 34vw; right: 6vw;  top: 40vh;  background: radial-gradient(circle at 40% 60%, #ff9ec9, #ff5da2 76%); opacity: 0.42; animation: drift1 44s ease-in-out infinite reverse; }
-    @keyframes drift1 { 0%,100%{ transform: translate(0,0) scale(1); }    50%{ transform: translate(6vw,4vh) scale(1.12); } }
-    @keyframes drift2 { 0%,100%{ transform: translate(0,0) scale(1.05); } 50%{ transform: translate(-5vw,5vh) scale(0.94); } }
-    @keyframes drift3 { 0%,100%{ transform: translate(0,0) scale(1); }    50%{ transform: translate(4vw,-4vh) scale(1.1); } }
-    /* A veil keeps content legible: the aurora blooms at the top, then washes to
-       a soft near-solid ground so text and glass stay readable further down. */
-    .veil { position: fixed; inset: 0; z-index: -1; pointer-events: none;
-      background: linear-gradient(180deg, rgba(246,247,251,0.06) 0%, rgba(246,247,251,0.60) 46%, rgba(246,247,251,0.88) 100%); }
-    /* Fine grain for that matte, physical surface (§11). */
-    .grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.035; mix-blend-mode: multiply;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-
     /* --------------------------------------------------------- typography */
-    .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
-      background: linear-gradient(90deg, var(--accent), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    h1, h2, h3 { margin: 0; font-weight: 900; }
-    .display { font-size: clamp(2.7rem, 7.4vw, 5.4rem); line-height: 1.0; letter-spacing: -0.04em; font-weight: 900; }
-    .headline { font-size: clamp(1.9rem, 4.4vw, 3.2rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 900; }
-    .kicker { font-size: clamp(1.15rem, 2vw, 1.45rem); line-height: 1.34; letter-spacing: -0.012em; font-weight: 500; color: var(--ink-soft); }
-    .lead { font-size: clamp(1.05rem, 1.6vw, 1.28rem); line-height: 1.5; letter-spacing: -0.01em; color: var(--ink-soft); font-weight: 500; }
+    /* Size-specific tracking (§15). All ink, no gradients. */
+    .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+    h1, h2, h3 { margin: 0; font-weight: 900; color: var(--ink); }
+    .display  { font-size: clamp(2.7rem, 7.4vw, 5.2rem); line-height: 1.0;  letter-spacing: -0.04em; }
+    .headline { font-size: clamp(1.9rem, 4.4vw, 3.2rem); line-height: 1.05; letter-spacing: -0.03em; }
+    .kicker { font-size: clamp(1.15rem, 2vw, 1.42rem); line-height: 1.34; letter-spacing: -0.012em; font-weight: 500; color: var(--ink-soft); }
+    .lead { font-size: clamp(1.05rem, 1.6vw, 1.26rem); line-height: 1.5; letter-spacing: -0.01em; color: var(--ink-soft); font-weight: 500; }
 
     /* --------------------------------------------------------------- glass */
     .glass {
       background: var(--glass);
-      -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%);
+      -webkit-backdrop-filter: blur(26px) saturate(180%); backdrop-filter: blur(26px) saturate(180%);
       border: 1px solid var(--glass-brd);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), var(--glass-shadow);
-      border-radius: 22px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), var(--glass-shadow);
+      border-radius: 20px;
     }
 
     /* --------------------------------------------------------------- nav */
-    .nav { position: sticky; top: 0; z-index: 60; }
-    .nav-inner { margin: 12px auto 0; height: 54px; display: flex; align-items: center; justify-content: space-between;
-      padding: 0 8px 0 18px; border-radius: 999px;
-      background: rgba(255,255,255,0.55);
-      -webkit-backdrop-filter: blur(24px) saturate(190%); backdrop-filter: blur(24px) saturate(190%);
-      border: 1px solid var(--glass-brd);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 10px 30px -12px rgba(30,30,80,0.18);
+    /* Apple bar: a slim translucent strip, content scrolls under it, a scroll
+       edge instead of a hard divider (§12). Monochrome. */
+    .nav { position: sticky; top: 0; z-index: 60;
+      background: rgba(255,255,255,0.72);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
       transition: box-shadow 400ms var(--ease-out); }
-    .nav[data-scrolled="true"] .nav-inner { box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 16px 40px -14px rgba(30,30,80,0.28); }
-    .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: -0.02em; font-size: 18px; }
-    .brand .dot { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-size: 12px;
-      background: linear-gradient(150deg, var(--accent), var(--violet)); box-shadow: 0 4px 12px -2px rgba(108,76,241,0.5); }
-    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav[data-scrolled="true"] { box-shadow: 0 1px 0 var(--line-soft); }
+    .nav-inner { height: 48px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: -0.02em; font-size: 18px; color: var(--ink); }
+    .brand .dot { width: 21px; height: 21px; border-radius: 6px; display: grid; place-items: center; color: #fff; font-size: 11px; background: var(--ink); }
+    .nav-links { display: flex; align-items: center; gap: 26px; }
     .nav-links a { font-size: 14px; color: var(--ink-soft); transition: color 200ms var(--ease-out); }
     .nav-links a:hover { color: var(--ink); }
     @media (max-width: 720px) { .nav-links .hide-sm { display: none; } }
 
     /* --------------------------------------------------------------- buttons */
-    .btn { display: inline-flex; align-items: center; gap: 7px; font-family: inherit; font-size: 15px; font-weight: 600;
-      letter-spacing: -0.01em; padding: 10px 20px; border-radius: 999px; border: 1px solid transparent; cursor: pointer; user-select: none;
-      transition: transform 140ms var(--ease-out), box-shadow 240ms var(--ease-out), filter 200ms var(--ease-out); will-change: transform; }
-    .btn-primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--violet));
-      box-shadow: 0 10px 26px -8px rgba(108,76,241,0.5), inset 0 1px 0 rgba(255,255,255,0.3); }
-    .btn-primary:hover { filter: brightness(1.06); box-shadow: 0 14px 34px -8px rgba(108,76,241,0.6), inset 0 1px 0 rgba(255,255,255,0.35); }
-    .btn-glass { background: rgba(255,255,255,0.5); -webkit-backdrop-filter: blur(18px) saturate(180%); backdrop-filter: blur(18px) saturate(180%);
-      border: 1px solid var(--glass-brd); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
-    .btn-glass:hover { background: rgba(255,255,255,0.7); }
-    .btn:active { transform: scale(0.96); }
+    /* Apple's button system: a solid pill for the primary action, and a plain
+       blue text link with a chevron for the secondary. No gradients, no
+       coloured labels beyond the one blue link. */
+    .btn { display: inline-flex; align-items: center; gap: 7px; font-family: inherit; font-size: 15px; font-weight: 500;
+      letter-spacing: -0.01em; padding: 10px 21px; border-radius: 980px; border: 1px solid transparent; cursor: pointer; user-select: none;
+      transition: transform 140ms var(--ease-out), background 200ms var(--ease-out), box-shadow 240ms var(--ease-out); will-change: transform; }
+    .btn-primary { background: var(--ink); color: #fff; }
+    .btn-primary:hover { background: #000; box-shadow: 0 8px 22px -8px rgba(0,0,0,0.3); }
+    .btn:active { transform: scale(0.97); }                 /* pointer-down feedback (§1) */
     .btn-arrow { transition: transform 260ms var(--ease-out); }
     .btn:hover .btn-arrow { transform: translateX(3px); }
-    .btn-sm { padding: 8px 15px; font-size: 13.5px; }
+    .btn-sm { padding: 7px 16px; font-size: 13.5px; }
+    /* Apple secondary: a text link */
+    .link { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 500; color: var(--accent); letter-spacing: -0.01em; }
+    .link .chev { transition: transform 240ms var(--ease-out); }
+    .link:hover .chev { transform: translateX(3px); }
 
     /* --------------------------------------------------------------- hero */
-    .hero { position: relative; padding: 84px 0 44px; text-align: center; }
+    .hero { position: relative; padding: 96px 0 48px; text-align: center; overflow: hidden; }
+
+    /* cursor-reactive water: soft light pools that ease toward the pointer and
+       ripple through an animated displacement, over a near-white ground. Muted,
+       and frozen entirely under reduced motion (§14). */
+    .hero-fluid { position: absolute; inset: -20% -10% auto -10%; height: 760px; z-index: 0; pointer-events: none; filter: url(#water); }
+    .hero-fluid .drop { position: absolute; border-radius: 50%; filter: blur(56px); }
+    .d-a { width: 40vw; height: 40vw; left: 8%;  top: 4%;  background: radial-gradient(circle at 50% 50%, rgba(120,170,255,0.5), rgba(120,170,255,0) 70%); animation: floatA 22s ease-in-out infinite; }
+    .d-b { width: 34vw; height: 34vw; right: 6%; top: 0;   background: radial-gradient(circle at 50% 50%, rgba(180,160,255,0.42), rgba(180,160,255,0) 70%); animation: floatB 28s ease-in-out infinite; }
+    .d-follow { width: 30vw; height: 30vw; left: 0; top: 0; background: radial-gradient(circle at 50% 50%, rgba(150,190,255,0.55), rgba(150,190,255,0) 70%); will-change: transform; }
+    @keyframes floatA { 0%,100%{ transform: translate(0,0) scale(1); } 50%{ transform: translate(4vw,3vh) scale(1.08); } }
+    @keyframes floatB { 0%,100%{ transform: translate(0,0) scale(1.04); } 50%{ transform: translate(-3vw,4vh) scale(0.95); } }
+    .hero > .wrap, .hero > .shot-stage { position: relative; z-index: 1; }
+
     .hero .display { max-width: 15ch; margin: 20px auto 0; }
-    .hero .display .grad { background: linear-gradient(115deg, var(--accent) 10%, var(--violet) 60%, #ff5da2 110%);
-      -webkit-background-clip: text; background-clip: text; color: transparent; }
     .hero .kicker { max-width: 44ch; margin: 24px auto 0; }
-    .hero-actions { margin-top: 36px; display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap; }
-    .hero-note { margin-top: 22px; font-size: 13px; color: var(--ink-mute); letter-spacing: -0.005em; }
+    .hero-actions { margin-top: 36px; display: flex; gap: 22px; justify-content: center; align-items: center; flex-wrap: wrap; }
+    .hero-note { margin-top: 24px; font-size: 13px; color: var(--ink-mute); letter-spacing: -0.005em; }
     .hero-note b { color: var(--ink-soft); font-weight: 600; }
 
     /* --------------------------------------------------------- product shot */
-    .shot-stage { padding: 36px 0 8px; }
-    .browser { max-width: 940px; margin: 0 auto; border-radius: 20px; overflow: hidden; will-change: transform;
-      background: rgba(255,255,255,0.62);
-      -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%);
+    .shot-stage { padding: 40px 0 8px; }
+    .browser { max-width: 940px; margin: 0 auto; border-radius: 18px; overflow: hidden; will-change: transform;
+      background: rgba(255,255,255,0.72);
+      -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%);
       border: 1px solid var(--glass-brd);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 40px 90px -40px rgba(30,30,80,0.42), 0 20px 50px -30px rgba(30,30,80,0.3); }
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 40px 80px -40px rgba(0,0,0,0.32), 0 18px 40px -28px rgba(0,0,0,0.24); }
     .browser-bar { height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
-    .tl { width: 11px; height: 11px; border-radius: 50%; background: rgba(20,20,40,0.14); }
-    .browser-url { margin-left: 10px; font-size: 12px; color: var(--ink-mute); background: rgba(255,255,255,0.6);
+    .tl { width: 11px; height: 11px; border-radius: 50%; background: rgba(0,0,0,0.13); }
+    .browser-url { margin-left: 10px; font-size: 12px; color: var(--ink-mute); background: rgba(255,255,255,0.7);
       border: 1px solid var(--line-soft); border-radius: 8px; padding: 4px 12px; flex: 1; max-width: 360px; text-align: center;
       font-family: "Geist Mono", ui-monospace, monospace; letter-spacing: -0.01em; }
     .app { display: grid; grid-template-columns: 190px 1fr; min-height: 396px; text-align: left; }
-    .side { background: rgba(255,255,255,0.35); border-right: 1px solid var(--line-soft); padding: 16px 12px; }
+    .side { background: rgba(245,245,247,0.6); border-right: 1px solid var(--line-soft); padding: 16px 12px; }
     .side .item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 9px; font-size: 13.5px; color: var(--ink-soft); font-weight: 500; }
-    .side .item.active { background: rgba(255,255,255,0.85); color: var(--ink); box-shadow: 0 1px 3px rgba(30,30,80,0.08); }
+    .side .item.active { background: rgba(255,255,255,0.9); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .side .item .ic { width: 15px; height: 15px; border-radius: 5px; background: var(--line); }
-    .side .item.active .ic { background: linear-gradient(135deg, var(--accent), var(--violet)); }
+    .side .item.active .ic { background: var(--accent); }
     .panel { padding: 20px 22px; }
     .panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
     .panel-head h4 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
     .panel-head span { font-size: 12px; color: var(--ink-mute); }
     .row { display: grid; grid-template-columns: 1fr 92px 74px 64px; gap: 10px; align-items: center; padding: 11px 12px;
-      border-radius: 11px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: rgba(255,255,255,0.5);
+      border-radius: 11px; border: 1px solid var(--line-soft); margin-bottom: 8px; background: rgba(255,255,255,0.6);
       transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out); }
-    .row:hover { transform: translateY(-1px); box-shadow: 0 8px 24px -10px rgba(30,30,80,0.2); }
+    .row:hover { transform: translateY(-1px); box-shadow: 0 8px 22px -12px rgba(0,0,0,0.18); }
     .role { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
     .co { font-size: 12px; color: var(--ink-mute); }
-    .pill { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; text-align: center; letter-spacing: -0.005em; }
-    .pill.ready { background: rgba(0,113,227,0.12); color: var(--accent); }
-    .pill.applied { background: rgba(18,145,90,0.14); color: var(--ok); }
-    .pill.review { background: rgba(180,120,0,0.14); color: #9a6b00; }
+    .pill { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 980px; text-align: center; letter-spacing: -0.005em; }
+    .pill.ready { background: rgba(0,113,227,0.12); color: var(--accent); }        /* small touch */
+    .pill.applied { background: rgba(0,0,0,0.06); color: var(--ink-soft); }
+    .pill.review { background: rgba(0,0,0,0.06); color: var(--ink-soft); }
     .score { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; color: var(--ink-soft); text-align: right; }
     .mini-btn { font-size: 11.5px; font-weight: 600; color: var(--accent); text-align: right; }
 
     /* --------------------------------------------------------------- sections */
     section { padding: clamp(76px, 11vw, 128px) 0; position: relative; }
+    .tint { background: var(--bg-tint); }
     .center { text-align: center; }
     .sec-head { max-width: 32ch; }
     .center .sec-head { margin: 0 auto; }
@@ -177,9 +169,8 @@
     .loop { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
     @media (max-width: 800px) { .loop { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 460px) { .loop { grid-template-columns: 1fr; } }
-    .loop .step { padding: 22px 20px; border-radius: 18px; text-align: left; }
-    .loop .step .n { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; font-weight: 500;
-      background: linear-gradient(90deg, var(--accent), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .loop .step { padding: 22px 20px; border-radius: 16px; text-align: left; background: #fff; border: 1px solid var(--line-soft); box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+    .loop .step .n { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; color: var(--accent); }
     .loop .step h3 { font-size: 19px; letter-spacing: -0.02em; margin-top: 8px; font-weight: 700; }
     .loop .step p { margin: 8px 0 0; font-size: 14.5px; color: var(--ink-soft); line-height: 1.46; }
 
@@ -191,55 +182,47 @@
     .feature p { margin-top: 16px; font-size: 17px; line-height: 1.55; color: var(--ink-soft); max-width: 40ch; }
     .feature .detail { margin-top: 20px; display: flex; flex-direction: column; gap: 11px; }
     .feature .detail div { display: flex; gap: 11px; align-items: flex-start; font-size: 14.5px; color: var(--ink-soft); }
-    .feature .detail .tick { flex: none; width: 19px; height: 19px; border-radius: 50%; margin-top: 1px; color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), var(--violet)); }
+    .feature .detail .tick { flex: none; width: 19px; height: 19px; border-radius: 50%; margin-top: 1px; color: var(--accent);
+      background: rgba(0,113,227,0.1); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
 
-    .card { padding: 22px; border-radius: 20px; will-change: transform; }
+    .card { padding: 22px; border-radius: 18px; will-change: transform; }
     .doc-line { height: 8px; border-radius: 4px; background: var(--line); margin: 9px 0; }
     .doc-line.short { width: 55%; }
-    .doc-line.accent { background: linear-gradient(90deg, var(--accent), var(--violet)); }
-    .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
-      background: rgba(255,255,255,0.6); border: 1px solid var(--line-soft); margin: 3px 3px 0 0; letter-spacing: -0.01em; }
-    .chip .on { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+    .doc-line.accent { background: rgba(0,113,227,0.35); }
+    .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 980px;
+      background: rgba(255,255,255,0.7); border: 1px solid var(--line-soft); margin: 3px 3px 0 0; letter-spacing: -0.01em; }
+    .chip .on { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
     .gate { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-radius: 11px;
-      border: 1px solid var(--line-soft); font-size: 13.5px; margin-bottom: 8px; background: rgba(255,255,255,0.4); }
+      border: 1px solid var(--line-soft); font-size: 13.5px; margin-bottom: 8px; background: rgba(255,255,255,0.5); }
     .gate .tag { font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: var(--ink-mute); }
-    .gate.pass { background: rgba(18,145,90,0.07); }
+    .gate.pass { background: rgba(0,0,0,0.02); }
     .gate.cut { opacity: 0.5; }
     .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .pipe .stage { text-align: center; padding: 14px 6px; border-radius: 12px; background: rgba(255,255,255,0.5); }
+    .pipe .stage { text-align: center; padding: 14px 6px; border-radius: 12px; background: rgba(0,0,0,0.03); }
     .pipe .stage b { display: block; font-family: "Geist Mono", ui-monospace, monospace; font-size: 18px; letter-spacing: -0.01em; }
     .pipe .stage span { font-size: 11px; color: var(--ink-mute); }
-    .pipe .stage.hot { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #fff; }
-    .pipe .stage.hot span { color: rgba(255,255,255,0.7); }
+    .pipe .stage.hot { background: var(--ink); color: #fff; }
+    .pipe .stage.hot span { color: rgba(255,255,255,0.65); }
 
-    /* dark statement — a slab of black glass over the aurora */
-    .dark-wrap { padding: clamp(76px, 11vw, 128px) 0; }
-    .dark { border-radius: 30px; padding: clamp(56px, 8vw, 96px) 24px; text-align: center; position: relative; overflow: hidden;
-      background: rgba(12, 12, 20, 0.72);
-      -webkit-backdrop-filter: blur(30px) saturate(160%); backdrop-filter: blur(30px) saturate(160%);
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 40px 90px -40px rgba(0,0,0,0.6); }
+    /* dark statement — clean black, no coloured bleed */
+    .dark { background: #0a0a0a; color: #f5f5f7; }
     .dark .headline { color: #fff; }
-    .dark .lead { color: #b4b4c0; }
-    .dark .eyebrow { background: linear-gradient(90deg, #6db3ff, #b79cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .control-grid { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 960px; margin-left: auto; margin-right: auto; }
+    .dark .lead { color: #a1a1a6; }
+    .dark .eyebrow { color: #6db3ff; }
+    .control-grid { margin-top: 50px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; overflow: hidden; }
     @media (max-width: 720px) { .control-grid { grid-template-columns: 1fr; } }
-    .control-grid .cell { padding: 26px 24px; border-radius: 18px; text-align: left;
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
+    .control-grid .cell { background: #0a0a0a; padding: 28px 26px; }
     .control-grid .cell h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: #fff; }
-    .control-grid .cell p { margin: 9px 0 0; font-size: 14.5px; line-height: 1.5; color: #b4b4c0; }
+    .control-grid .cell p { margin: 9px 0 0; font-size: 14.5px; line-height: 1.5; color: #a1a1a6; }
 
-    .specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    @media (max-width: 720px) { .specs { grid-template-columns: 1fr; } }
-    .specs .spec { padding: 26px 24px; border-radius: 18px; text-align: center; }
-    .specs .spec b { display: block; font-size: clamp(1.4rem, 3vw, 2rem); letter-spacing: -0.03em; font-weight: 900;
-      background: linear-gradient(120deg, var(--accent), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; text-align: center; }
+    @media (max-width: 720px) { .specs { grid-template-columns: 1fr; gap: 40px; } }
+    .specs .spec b { display: block; font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -0.03em; font-weight: 900; color: var(--ink); }
     .specs .spec span { font-size: 14px; color: var(--ink-soft); margin-top: 8px; display: block; }
 
     .cta { text-align: center; }
     .cta .headline { max-width: 18ch; margin: 0 auto; }
-    .cta .headline .grad { background: linear-gradient(115deg, var(--accent), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .cta .lead { max-width: 44ch; margin: 18px auto 0; }
     .cta .hero-actions { margin-top: 30px; }
 
@@ -248,59 +231,62 @@
       border-top: 1px solid var(--line); padding-top: 28px; }
 
     /* --------------------------------------------- reveal-on-scroll (§3, §12) */
-    .reveal { opacity: 0; transform: translateY(24px) scale(0.985); filter: blur(8px);
-      transition: opacity 760ms var(--ease-out), transform 760ms var(--ease-out), filter 760ms var(--ease-out);
+    .reveal { opacity: 0; transform: translateY(22px) scale(0.99); filter: blur(6px);
+      transition: opacity 720ms var(--ease-out), transform 720ms var(--ease-out), filter 720ms var(--ease-out);
       transition-delay: var(--d, 0ms); will-change: transform, opacity; }
     .reveal.in { opacity: 1; transform: none; filter: none; }
 
-    /* reduced motion: freeze the aurora, cross-fade only, no parallax (§14) */
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
-      .aurora .blob { animation: none !important; }
+      .hero-fluid { filter: none; }
+      .hero-fluid .drop { animation: none !important; }
       .reveal { transform: none; filter: none; transition: opacity 320ms ease; }
-      .btn, .row, .btn-arrow { transition: none; }
+      .btn, .row, .btn-arrow, .link .chev { transition: none; }
       [data-speed] { transform: none !important; }
     }
-    /* reduced transparency: frost surfaces solid (§14) */
     @media (prefers-reduced-transparency: reduce) {
-      .glass, .nav-inner, .browser, .btn-glass { background: #fff !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-      .dark { background: #0c0c14 !important; backdrop-filter: none !important; }
+      .glass, .browser { background: #fff !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+      .nav { background: #fff !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
     }
   </style>
 </head>
 <body id="top">
 
-  <!-- fluid background -->
-  <div class="aurora" aria-hidden="true">
-    <div class="blob b1" data-speed="0.06"></div>
-    <div class="blob b2" data-speed="0.10"></div>
-    <div class="blob b3" data-speed="0.04"></div>
-    <div class="blob b4" data-speed="0.08"></div>
-  </div>
-  <div class="veil" aria-hidden="true"></div>
-  <div class="grain" aria-hidden="true"></div>
+  <!-- water displacement filter for the hero fluid -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="water">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.013" numOctaves="2" seed="6" result="noise">
+        <animate attributeName="baseFrequency" dur="26s" values="0.009 0.013; 0.013 0.009; 0.009 0.013" repeatCount="indefinite" />
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="44" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </svg>
 
   <!-- ============================================================= nav -->
   <header class="nav" id="nav">
-    <div class="wrap">
-      <div class="nav-inner">
-        <a class="brand" href="#top"><span class="dot">◆</span> Jobenzy</a>
-        <nav class="nav-links">
-          <a class="hide-sm" href="#how">How it works</a>
-          <a class="hide-sm" href="#features">Features</a>
-          <a class="hide-sm" href="#control">Control</a>
-          <a class="btn btn-primary btn-sm" href="/dashboard/">Open the dashboard</a>
-        </nav>
-      </div>
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><span class="dot">◆</span> Jobenzy</a>
+      <nav class="nav-links">
+        <a class="hide-sm" href="#how">How it works</a>
+        <a class="hide-sm" href="#features">Features</a>
+        <a class="hide-sm" href="#control">Control</a>
+        <a class="btn btn-primary btn-sm" href="/dashboard/">Open the dashboard</a>
+      </nav>
     </div>
   </header>
 
   <main>
     <!-- ============================================================ hero -->
     <section class="hero">
+      <div class="hero-fluid" id="fluid" aria-hidden="true">
+        <span class="drop d-a"></span>
+        <span class="drop d-b"></span>
+        <span class="drop d-follow"></span>
+      </div>
+
       <div class="wrap">
         <div class="eyebrow reveal">Local-first · Private · Yours</div>
-        <h1 class="display reveal" style="--d:60ms">One résumé<br><span class="grad">per target.</span></h1>
+        <h1 class="display reveal" style="--d:60ms">One résumé<br>per target.</h1>
         <p class="kicker reveal" style="--d:120ms">
           Jobenzy finds the roles worth applying to, writes a résumé tuned to each one,
           submits it through the real application form, and tracks every reply, while you
@@ -308,7 +294,7 @@
         </p>
         <div class="hero-actions reveal" style="--d:180ms">
           <a class="btn btn-primary" href="/dashboard/">Open the dashboard <span class="btn-arrow">→</span></a>
-          <a class="btn btn-glass" href="#how">See how it works</a>
+          <a class="link" href="#how">See how it works <span class="chev">›</span></a>
         </div>
         <p class="hero-note reveal" style="--d:240ms">
           Runs on your machine. <b>Your data never leaves it.</b> Free to run.
@@ -342,7 +328,7 @@
     </section>
 
     <!-- =========================================================== the loop -->
-    <section id="how">
+    <section id="how" class="tint">
       <div class="wrap center">
         <div class="sec-head reveal">
           <div class="eyebrow">The loop</div>
@@ -350,10 +336,10 @@
           <p class="lead">Four steps run on their own. The fifth, pressing submit, is always yours.</p>
         </div>
         <div class="loop">
-          <div class="step glass reveal" style="--d:0ms"><div class="n">01</div><h3>Find</h3><p>Sweeps job boards and company ATS feeds, then keeps only what is fresh, in range, and in your regions.</p></div>
-          <div class="step glass reveal" style="--d:80ms"><div class="n">02</div><h3>Tailor</h3><p>Rewrites your résumé for each posting, typeset in LaTeX, ATS readable, and gated so it never invents a skill.</p></div>
-          <div class="step glass reveal" style="--d:160ms"><div class="n">03</div><h3>Apply</h3><p>Fills the employer's own form, including logins, one-time codes, sign-ups and embedded widgets.</p></div>
-          <div class="step glass reveal" style="--d:240ms"><div class="n">04</div><h3>Track</h3><p>Reads the replies in your inbox, sorts them, and moves each application along its pipeline.</p></div>
+          <div class="step reveal" style="--d:0ms"><div class="n">01</div><h3>Find</h3><p>Sweeps job boards and company ATS feeds, then keeps only what is fresh, in range, and in your regions.</p></div>
+          <div class="step reveal" style="--d:80ms"><div class="n">02</div><h3>Tailor</h3><p>Rewrites your résumé for each posting, typeset in LaTeX, ATS readable, and gated so it never invents a skill.</p></div>
+          <div class="step reveal" style="--d:160ms"><div class="n">03</div><h3>Apply</h3><p>Fills the employer's own form, including logins, one-time codes, sign-ups and embedded widgets.</p></div>
+          <div class="step reveal" style="--d:240ms"><div class="n">04</div><h3>Track</h3><p>Reads the replies in your inbox, sorts them, and moves each application along its pipeline.</p></div>
         </div>
       </div>
     </section>
@@ -452,28 +438,28 @@
     </section>
 
     <!-- =========================================================== control -->
-    <section id="control" class="dark-wrap">
-      <div class="wrap">
-        <div class="dark reveal">
+    <section id="control" class="dark">
+      <div class="wrap center">
+        <div class="sec-head reveal">
           <div class="eyebrow">Agency, by design</div>
           <h2 class="headline" style="margin-top:14px;">Autonomous up to the one<br>decision that's yours.</h2>
-          <p class="lead" style="max-width:38ch;margin:16px auto 0;">Submitting an application is done in your name. Jobenzy will never do it without you.</p>
-          <div class="control-grid">
-            <div class="cell"><h3>Nothing submits on its own</h3><p>Discovery, tailoring and form-filling run hands-off. The submit click is held for a human, every time.</p></div>
-            <div class="cell"><h3>Batch, then approve</h3><p>Run the whole ready queue in one pass and read a clear list back: submitted, held, needs you, closed.</p></div>
-            <div class="cell"><h3>Answers you keep</h3><p>Answer an unusual question once and it is reused everywhere, never fabricated, always yours.</p></div>
-          </div>
+          <p class="lead">Submitting an application is done in your name. Jobenzy will never do it without you.</p>
+        </div>
+        <div class="control-grid">
+          <div class="cell reveal"><h3>Nothing submits on its own</h3><p>Discovery, tailoring and form-filling run hands-off. The submit click is held for a human, every time.</p></div>
+          <div class="cell reveal" style="--d:100ms"><h3>Batch, then approve</h3><p>Run the whole ready queue in one pass and read a clear list back: submitted, held, needs you, closed.</p></div>
+          <div class="cell reveal" style="--d:200ms"><h3>Answers you keep</h3><p>Answer an unusual question once and it is reused everywhere, never fabricated, always yours.</p></div>
         </div>
       </div>
     </section>
 
     <!-- =========================================================== specs -->
-    <section>
+    <section class="tint">
       <div class="wrap">
         <div class="specs">
-          <div class="spec glass reveal"><b>Local-first</b><span>Runs on your machine. Your history, résumés and inbox stay with you.</span></div>
-          <div class="spec glass reveal" style="--d:90ms"><b>Free to run</b><span>Built on free tiers, with a second model ready when the first hits its limit.</span></div>
-          <div class="spec glass reveal" style="--d:180ms"><b>Honest by rule</b><span>A fact gate blocks any claim your profile cannot back, in every mode.</span></div>
+          <div class="spec reveal"><b>Local-first</b><span>Runs on your machine. Your history, résumés and inbox stay with you.</span></div>
+          <div class="spec reveal" style="--d:90ms"><b>Free to run</b><span>Built on free tiers, with a second model ready when the first hits its limit.</span></div>
+          <div class="spec reveal" style="--d:180ms"><b>Honest by rule</b><span>A fact gate blocks any claim your profile cannot back, in every mode.</span></div>
         </div>
       </div>
     </section>
@@ -483,11 +469,11 @@
       <div class="wrap">
         <div class="reveal">
           <div class="eyebrow">Get started</div>
-          <h2 class="headline" style="margin-top:14px;">Point it at a role.<br><span class="grad">Watch it do the rest.</span></h2>
+          <h2 class="headline" style="margin-top:14px;">Point it at a role.<br>Watch it do the rest.</h2>
           <p class="lead">Open the dashboard, pick the jobs worth your time, and approve the batch. That is the job.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/dashboard/">Open the dashboard <span class="btn-arrow">→</span></a>
-            <a class="btn btn-glass" href="#top">Back to top</a>
+            <a class="link" href="#top">Back to top <span class="chev">›</span></a>
           </div>
         </div>
       </div>
@@ -519,26 +505,36 @@
       reveals.forEach((el) => io.observe(el));
     }
 
-    // parallax: base positions measured once, so applying a transform never
-    // feeds back into the next measurement.
+    // hero water: a light pool eases toward the cursor, so the background flows
+    // where you move. Idle drift keeps it alive; off under reduced motion (§14).
+    const hero = document.querySelector('.hero');
+    const follow = document.querySelector('.d-follow');
+    if (hero && follow && fine && !reduce) {
+      const r0 = hero.getBoundingClientRect();
+      let tx = r0.width * 0.5, ty = r0.height * 0.42, cx = tx, cy = ty;
+      hero.addEventListener('pointermove', (e) => { const r = hero.getBoundingClientRect(); tx = e.clientX - r.left; ty = e.clientY - r.top; });
+      hero.addEventListener('pointerleave', () => { const r = hero.getBoundingClientRect(); tx = r.width * 0.5; ty = r.height * 0.42; });
+      (function flow() {
+        cx += (tx - cx) * 0.05; cy += (ty - cy) * 0.05;   // slow, watery lag
+        follow.style.transform = `translate(${cx}px, ${cy}px) translate(-50%, -50%)`;
+        requestAnimationFrame(flow);
+      })();
+    }
+
+    // parallax: measured once so a transform never feeds back
     let layers = [];
     const measure = () => {
       layers = [...document.querySelectorAll('[data-speed]')].map((el) => {
         el.style.transform = '';
-        return { el, speed: parseFloat(el.dataset.speed),
-                 base: el.getBoundingClientRect().top + window.scrollY + el.offsetHeight / 2 };
+        return { el, speed: parseFloat(el.dataset.speed), base: el.getBoundingClientRect().top + window.scrollY + el.offsetHeight / 2 };
       });
     };
-    const applyParallax = (y) => {
-      const mid = innerHeight / 2;
-      for (const L of layers) L.el.style.transform = `translate3d(0, ${-((L.base - y) - mid) * L.speed}px, 0)`;
-    };
+    const applyParallax = (y) => { const mid = innerHeight / 2; for (const L of layers) L.el.style.transform = `translate3d(0, ${-((L.base - y) - mid) * L.speed}px, 0)`; };
     measure();
     addEventListener('resize', () => { measure(); applyParallax(window.scrollY); });
 
-    // buttery smooth scroll on a fine pointer (mouse / trackpad on desktop);
-    // native scroll on touch keeps its own momentum, and none of this runs
-    // under reduced motion. One rAF loop drives both the scroll and the parallax.
+    // smooth scroll on a fine pointer (native momentum on touch); one rAF loop
+    // drives the scroll and the parallax together.
     if (fine && !reduce) {
       document.documentElement.style.scrollBehavior = 'auto';
       let target = window.scrollY, cur = target, raf = null;
@@ -547,8 +543,7 @@
       const loop = () => {
         cur += (target - cur) * 0.14;
         if (Math.abs(target - cur) < 0.4) cur = target;
-        window.scrollTo(0, cur);
-        setNav(); applyParallax(cur);
+        window.scrollTo(0, cur); setNav(); applyParallax(cur);
         raf = cur !== target ? requestAnimationFrame(loop) : null;
       };
       const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
@@ -557,17 +552,14 @@
       document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
         const id = a.getAttribute('href'); if (id.length < 2) return;
         const t = document.querySelector(id); if (!t) return;
-        e.preventDefault(); target = clamp(t.getBoundingClientRect().top + cur - 72); kick();
+        e.preventDefault(); target = clamp(t.getBoundingClientRect().top + cur - 64); kick();
       }));
       setNav(); applyParallax(cur);
     } else {
       setNav();
       if (!reduce) {
         let ticking = false;
-        addEventListener('scroll', () => {
-          setNav();
-          if (!ticking) { requestAnimationFrame(() => { applyParallax(window.scrollY); ticking = false; }); ticking = true; }
-        }, { passive: true });
+        addEventListener('scroll', () => { setNav(); if (!ticking) { requestAnimationFrame(() => { applyParallax(window.scrollY); ticking = false; }); ticking = true; } }, { passive: true });
         applyParallax(window.scrollY);
       }
     }
