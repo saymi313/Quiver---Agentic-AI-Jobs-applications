@@ -71,11 +71,11 @@ export default function ResumeProfilePage({ profileName, onBack }) {
     if (!profileName) return
     setError('')
     Promise.all([
-      api.agentResumeProfiles(),
+      api.agentResumeProfiles().catch(() => ({ rows: [] })),
       api.agentGetProfileData(profileName).catch(() => null),
     ])
       .then(([profilesRes, dataRes]) => {
-        const found = (profilesRes.rows || []).find((p) => p.name === profileName)
+        const found = (profilesRes?.rows || []).find((p) => p.name === profileName)
         if (found) {
           setProfileData(found)
           const savedRender = found.render || {}
@@ -87,8 +87,8 @@ export default function ResumeProfilePage({ profileName, onBack }) {
           setOpts(newOpts)
         }
 
-        if (dataRes?.ok && dataRes.data) {
-          const d = dataRes.data
+        const d = (dataRes?.ok && dataRes.data) || found?.data
+        if (d) {
           setRawYamlData(d)
           const cand = d.candidate || {}
           const candState = {
@@ -97,21 +97,32 @@ export default function ResumeProfilePage({ profileName, onBack }) {
             email: cand.email || '',
             phone: cand.phone || '',
             location: cand.location || '',
-            summary: cand.summary || '',
+            summary: (cand.summary || '').trim(),
             links: cand.links || [],
           }
           const expState = (d.experience || []).map((e) => ({
-            ...e,
-            bullets: (e.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
+            company: e.company || '',
+            role: e.role || '',
+            period: e.period || '',
+            location: e.location || '',
+            bullets: (e.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : { text: b?.text || '' })),
           }))
           const projState = (d.projects || []).map((p) => ({
-            ...p,
-            bullets: (p.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
+            name: p.name || '',
+            tech: p.tech || '',
+            period: p.period || '',
+            bullets: (p.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : { text: b?.text || '' })),
           }))
-          const skillsState = (d.skills || []).map((s) =>
-            typeof s === 'string' ? { line: s } : s,
-          )
-          const eduState = d.education || []
+          const skillsState = (d.skills || []).map((s) => ({
+            line: typeof s === 'string' ? s : (s?.line || ''),
+          }))
+          const eduState = (d.education || []).map((edu) => ({
+            institution: edu.institution || '',
+            location: edu.location || '',
+            degree: edu.degree || '',
+            period: edu.period || '',
+            courses: edu.courses || '',
+          }))
           const awardsState = d.awards || []
           const certsState = d.certifications || []
 

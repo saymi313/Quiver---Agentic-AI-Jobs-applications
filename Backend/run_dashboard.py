@@ -50,7 +50,7 @@ def ensure_node_modules(npm: str) -> bool:
 
 def start_api(port: int) -> subprocess.Popen:
     return subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(port)],
+        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(port), "--reload"],
         cwd=str(BASE_DIR),
     )
 
