@@ -361,9 +361,9 @@ export default function ResumeProfilePage({ profileName, onBack }) {
             value={activeView}
             onChange={setActiveView}
             options={[
-              { value: 'split', label: '⚡ Split View' },
-              { value: 'content', label: '📝 Content & Data' },
-              { value: 'style', label: '🎨 Typography & Style' },
+              { value: 'split', label: 'Split View' },
+              { value: 'content', label: 'Content & Data' },
+              { value: 'style', label: 'Typography & Style' },
             ]}
           />
           {isDefault ? <Status tone="ok">Default Profile</Status> : null}
