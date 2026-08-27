@@ -69,7 +69,7 @@ def _escape_typst(text: str) -> str:
 
 
 def generate_typst_source(profile: dict[str, Any], options: TypstRenderOptions | None = None) -> str:
-    """Generates clean Typst markup from structured candidate profile."""
+    """Generates clean Jake-style Typst markup from candidate profile."""
     opts = options or TypstRenderOptions()
     font_name = TYPST_FONTS.get(opts.font, "Times New Roman")
 
@@ -80,55 +80,81 @@ def generate_typst_source(profile: dict[str, Any], options: TypstRenderOptions |
     linkedin = _escape_typst(profile.get("linkedin") or "")
     github = _escape_typst(profile.get("github") or "")
 
-    contact_parts = [p for p in [email, phone, location, linkedin, github] if p]
-    contact_line = " #h(10pt) | #h(10pt) ".join(contact_parts)
+    contact_parts = [p for p in [phone, email, linkedin, github, location] if p]
+    contact_line = " #h(8pt) | #h(8pt) ".join(contact_parts)
 
     lines = [
         f'#set page(paper: "a4", margin: (x: {opts.margins}, y: {opts.margins}))',
         f'#set text(font: "{font_name}", size: {opts.font_size}pt, fill: rgb("{opts.accent_color}"))',
-        '#set par(justify: true, leading: 0.52em)',
+        '#set par(justify: true, leading: 0.48em)',
         "",
-        "// Header",
+        "// ---------- JAKE'S RESUME HEADING ----------",
         "#align(center)[",
-        f"  #text(size: {opts.font_size * 1.8}pt, weight: \"bold\")[{full_name}] \\",
-        f"  #v(-4pt)",
-        f"  #text(size: {opts.font_size * 0.9}pt, fill: rgb(\"#444446\"))[{contact_line}]",
+        f"  #text(size: {opts.font_size * 1.9}pt, weight: \"bold\")[{full_name}] \\",
+        f"  #v(-3pt)",
+        f"  #text(size: {opts.font_size * 0.9}pt)[{contact_line}]",
         "]",
         "",
-        "#v(6pt)",
+        "#v(4pt)",
     ]
 
-    # Helper for Section Titles
+    # Helper for Jake's Section Titles
     def section_header(title: str):
         return [
-            f"#v(6pt)",
+            f"#v(5pt)",
             f"#text(size: {opts.font_size * 1.15}pt, weight: \"bold\")[{title.upper()}]",
             f"#v(-5pt)",
-            f"#line(length: 100%, stroke: 0.6pt + rgb(\"#b0b0b5\"))",
+            f"#line(length: 100%, stroke: 0.5pt + rgb(\"#000000\"))",
             f"#v(2pt)",
         ]
 
-    # Summary
-    summary = profile.get("summary")
-    if summary:
-        lines.extend(section_header("Summary"))
-        lines.append(f"{_escape_typst(summary)}")
-        lines.append("")
+    # Education
+    education = profile.get("education") or []
+    if education:
+        lines.extend(section_header("Education"))
+        for edu in education:
+            degree = _escape_typst(edu.get("degree") or "")
+            school = _escape_typst(edu.get("school") or edu.get("institution") or edu.get("university") or "")
+            dates = _escape_typst(edu.get("dates") or edu.get("year") or edu.get("period") or "")
+            loc = _escape_typst(edu.get("location") or "")
+            gpa = _escape_typst(edu.get("gpa") or "")
+
+            gpa_str = f" (GPA: {gpa})" if gpa else ""
+            lines.append(f"#grid(")
+            lines.append(f'  columns: (1fr, auto),')
+            lines.append(f'  [* {school} * -- _{degree}_{gpa_str}],')
+            lines.append(f'  [_{dates}_{f", {loc}" if loc else ""}],')
+            lines.append(f")")
+        lines.append("#v(2pt)")
+
+    # Technical Skills
+    skills = profile.get("skills")
+    if skills:
+        lines.extend(section_header("Technical Skills"))
+        if isinstance(skills, dict):
+            for cat, items in skills.items():
+                items_str = ", ".join([str(i) for i in items]) if isinstance(items, list) else str(items)
+                lines.append(f"- *{_escape_typst(cat)}:* {_escape_typst(items_str)}")
+        elif isinstance(skills, list):
+            lines.append(f"- *Skills:* {_escape_typst(', '.join([str(s) for s in skills]))}")
+        else:
+            lines.append(f"- *Skills:* {_escape_typst(str(skills))}")
+        lines.append("#v(2pt)")
 
     # Experience
     experience = profile.get("experience") or []
     if experience:
-        lines.extend(section_header("Professional Experience"))
+        lines.extend(section_header("Experience"))
         for role in experience:
             title = _escape_typst(role.get("title") or role.get("role") or "")
             company = _escape_typst(role.get("company") or "")
-            dates = _escape_typst(role.get("dates") or role.get("duration") or "")
+            dates = _escape_typst(role.get("dates") or role.get("duration") or role.get("period") or "")
             loc = _escape_typst(role.get("location") or "")
 
             lines.append(f"#grid(")
             lines.append(f'  columns: (1fr, auto),')
-            lines.append(f'  [* {title} * -- _{company}_, {loc}],')
-            lines.append(f'  [_{dates}_],')
+            lines.append(f'  [* {title} * | _{company}_],')
+            lines.append(f'  [_{dates}_{f", {loc}" if loc else ""}],')
             lines.append(f")")
 
             bullets = role.get("bullets") or role.get("responsibilities") or []
@@ -144,17 +170,18 @@ def generate_typst_source(profile: dict[str, Any], options: TypstRenderOptions |
     # Projects
     projects = profile.get("projects") or []
     if projects:
-        lines.extend(section_header("Projects & System Designs"))
+        lines.extend(section_header("Projects"))
         for proj in projects:
             p_name = _escape_typst(proj.get("name") or proj.get("title") or "")
             tech = _escape_typst(proj.get("tech") or proj.get("technologies") or "")
+            dates = _escape_typst(proj.get("dates") or proj.get("period") or "")
             link = _escape_typst(proj.get("link") or proj.get("url") or "")
 
-            title_part = f"* {p_name} *" + (f" ({tech})" if tech else "")
+            title_part = f"* {p_name} *" + (f" | _{tech}_" if tech else "")
             lines.append(f"#grid(")
             lines.append(f'  columns: (1fr, auto),')
             lines.append(f'  [{title_part}],')
-            lines.append(f'  [{link}],')
+            lines.append(f'  [_{dates or link}_],')
             lines.append(f")")
 
             p_bullets = proj.get("bullets") or []
@@ -170,37 +197,6 @@ def generate_typst_source(profile: dict[str, Any], options: TypstRenderOptions |
                         lines.append(f"  [{b_text}],")
                 lines.append(")")
             lines.append("#v(2pt)")
-
-    # Education
-    education = profile.get("education") or []
-    if education:
-        lines.extend(section_header("Education"))
-        for edu in education:
-            degree = _escape_typst(edu.get("degree") or "")
-            school = _escape_typst(edu.get("school") or edu.get("institution") or edu.get("university") or "")
-            dates = _escape_typst(edu.get("dates") or edu.get("year") or "")
-            gpa = _escape_typst(edu.get("gpa") or "")
-
-            gpa_str = f" -- GPA: {gpa}" if gpa else ""
-            lines.append(f"#grid(")
-            lines.append(f'  columns: (1fr, auto),')
-            lines.append(f'  [* {degree} * -- _{school}_{gpa_str}],')
-            lines.append(f'  [_{dates}_],')
-            lines.append(f")")
-
-    # Skills
-    skills = profile.get("skills")
-    if skills:
-        lines.extend(section_header("Technical Skills"))
-        if isinstance(skills, dict):
-            for cat, items in skills.items():
-                items_str = ", ".join([str(i) for i in items]) if isinstance(items, list) else str(items)
-                lines.append(f"- *{_escape_typst(cat)}:* {_escape_typst(items_str)}")
-        elif isinstance(skills, list):
-            lines.append(f"{_escape_typst(', '.join([str(s) for s in skills]))}")
-        else:
-            lines.append(f"{_escape_typst(str(skills))}")
-
     return "\n".join(lines)
 
 

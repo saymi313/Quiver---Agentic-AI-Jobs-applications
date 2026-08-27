@@ -702,6 +702,7 @@ def render_tex(content: ResumeContent, opts: RenderOptions | None = None) -> str
         } for b in content.experience],
         "projects": [{
             "name": _styled(b.name), "tech": _styled(b.tech),
+            "period": _styled(getattr(b, "period", "") or getattr(b, "dates", "") or ""),
             "bullets": [_styled(x.text) for x in b.bullets],
         } for b in content.projects],
         "opts": opts.to_context(),

@@ -1,81 +1,46 @@
 [# Jinja2 delimiters are [[ ]] and [% %] so LaTeX braces pass through. #]
-[#
-  ATS-safe LaTeX resume, house style.
+%-------------------------
+% Resume in LaTeX (Jake's Resume Style)
+% Adapted for Jobenzy ATS Engine
+%------------------------
 
-  Rules this template enforces, and why each one is here:
+\documentclass[letterpaper,11pt]{article}
 
-    * Times New Roman throughout (newtx is a metric-compatible Times). Serif
-      faces with a real ToUnicode map extract cleanly; the previous Latin Modern
-      build merged words on justified lines ("ImplementedStripe payment").
-    * \raggedright everywhere. Justification shrinks interword space, and once
-      it drops below a parser's threshold the words fuse on extraction. Ragged
-      right keeps every space at its natural width.
-    * Hyphenation penalties at 10000, so no word is ever broken across a line.
-      A line-broken "settle-ment" indexes as two non-words in an ATS.
-    * No colour, no shading, no rules other than a 0.4pt black hairline under
-      section headings. hyperref runs with hidelinks so links stay black.
-    * Single column, no tabular used for layout — parsers read table cells out
-      of document order.
-    * Every link is written as visible text as well as a hyperlink, because a
-      text parser never sees the annotation.
-#]
-\documentclass[11pt,letterpaper]{article}
-
-%% Engine-portable preamble: pdflatex needs inputenc/fontenc and the
-%% \pdfgentounicode primitive to emit a ToUnicode map; xelatex and lualatex
-%% produce Unicode-mapped output natively and reject that primitive.
 \usepackage{iftex}
+
 \ifPDFTeX
   \usepackage[utf8]{inputenc}
   \usepackage[T1]{fontenc}
   \pdfgentounicode=1
 \fi
 
-%% ---------- font (editor choice; all serif with clean ToUnicode) ----------
 [[ opts.font_pkg ]]
 
-%% 0.5in — the dense end of the allowed 0.5 to 0.6in range, matching the
-%% single-page-and-full look of the reference templates.
 \usepackage[letterpaper,margin=[[ opts.margin ]]]{geometry}
 \usepackage{titlesec}
 \usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
 
-%% ---------- pure black, no decoration ----------
 \pagestyle{empty}
 \hypersetup{colorlinks=false, pdfborder={0 0 0}}
 
-%% ---------- never break a word across lines ----------
 \hyphenpenalty=10000
 \exhyphenpenalty=10000
 \tolerance=9999
 \emergencystretch=3em
 [% if opts.align != 'justified' %]\raggedright[% endif %]
 
-%% ---------- interword space wide enough to survive text extraction ----------
-%% A PDF stores no space characters: a space is a positioning offset, and every
-%% pdfminer-based parser (pdfplumber, and a good share of real ATS software)
-%% splits words only when that gap exceeds ~3pt. Times' natural space at 11pt
-%% draws a 2.49pt gap, which lands just under the threshold and extracts as
-%% "SoftwareDeveloperandFrontendTeamLead". Widening it to 0.36em clears the
-%% threshold and is imperceptible on the page.
+% Interword spacing to ensure 100% clean word separation on ATS extraction
 \setlength{\spaceskip}{0.36em plus 0.10em minus 0.02em}
 \setlength{\xspaceskip}{0.48em plus 0.12em minus 0.02em}
 
 \setlength{\parindent}{0pt}
-%% parskip is deliberately not used: its inter-paragraph glue fires on every
-%% \\ in the education and languages lists and pushes a one-page resume onto
-%% two. Spacing is set explicitly per element below instead.
 \setlength{\parskip}{0pt}
 \linespread{1.0}
 
-%% Body at 10.5pt — the dense end of the 10.5 to 11pt band. Three roles at
-%% three bullets each plus Projects and Achievements only share one page at
-%% this size; at 11pt the fitter had to delete whole sections instead.
 \AtBeginDocument{\fontsize{[[ opts.font_size ]]}{[[ opts.leading ]]}\selectfont}
 
-%% ---------- section headings ----------
-%% The reference resume's headings: bold ALL CAPS over a full-width rule.
+% Sections formatting (Jake's Resume uppercase with full-width line)
 \titleformat{\section}
   {\normalfont\large\bfseries\MakeUppercase}{}{0em}{}[\vspace{-0.45em}\rule{\linewidth}{0.5pt}]
 \titlespacing*{\section}{0pt}{[[ opts.sec_before ]]}{0.3em}
@@ -83,24 +48,29 @@
 \setlist[itemize]{leftmargin=1.15em, itemsep=0.08em, parsep=0pt, topsep=0.14em,
                   partopsep=0pt, label=\textbullet}
 
-%% Experience entry, reference layout: bold role with the dates flush right in
-%% italics; the organisation and its location together on one italic line.
-\newcommand{\entry}[4]{%
+% Custom macros (Jake's subheadings and project headings)
+\newcommand{\resumeItem}[1]{\item #1}
+
+\newcommand{\resumeSubheading}[4]{%
   \textbf{#1}\hfill\textit{#2}\\
-  \textit{#3[% raw %][% endraw %]\ifx\relax#4\relax\else, #4\fi}\\[0.14em]}
+  \textit{#3[% raw %][% endraw %]\ifx\relax#4\relax\else, #4\fi}\\[0.12em]}
+
+\newcommand{\resumeProjectHeading}[2]{%
+  #1\hfill\textit{#2}\\[0.12em]}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}}
 
 \begin{document}
 
-%% ---------- header ----------
-%% The reference resume: name large bold in regular case, then the contact
-%% line with every URL spelled out, wrapping to a second centred line.
+%----------HEADING----------
 \begin{center}
-  {\fontsize{17}{20}\selectfont\bfseries [[ name ]]}\\[0.3em]
-  {\small [[ contact_line ]]}
+    {\fontsize{18}{22}\selectfont\bfseries [[ name ]]} \\[0.2em]
+    {\small [[ contact_line ]]}
 \end{center}
 
-[#- Sections render in the order the editor chose (FR-P11); each still
-    guards on having content, so an empty one never prints a bare heading. #]
 [% for sec in opts.sections %]
 [%- if sec == 'summary' and summary %]
 \section{Summary}
@@ -109,7 +79,7 @@
 [%- elif sec == 'experience' and experience %]
 \section{Professional Experience}
 [%- for e in experience %]
-\entry{[[ e.role ]]}{[[ e.period ]]}{[[ e.company ]]}{[[ e.location ]]}
+\resumeSubheading{[[ e.role ]]}{[[ e.period ]]}{[[ e.company ]]}{[[ e.location ]]}
 [%- if e.bullets %]
 \begin{itemize}
 [%- for b in e.bullets %]
@@ -123,7 +93,7 @@
 [%- elif sec == 'projects' and projects %]
 \section{Projects}
 [%- for p in projects %]
-\textbf{[[ p.name ]]}[% if p.tech %] \textbar{} \textbf{\textit{[[ p.tech ]]}}[% endif %]
+\resumeProjectHeading{\textbf{[[ p.name ]]} [% if p.tech %] \textbar{} \textbf{\textit{[[ p.tech ]]}}[% endif %]}{[[ p.period ]]}
 [%- if p.bullets %]
 \begin{itemize}
 [%- for b in p.bullets %]
@@ -131,7 +101,7 @@
 [%- endfor %]
 \end{itemize}
 [%- endif %]
-[%- if not loop.last %]\vspace{0.32em}[% endif %]
+[%- if not loop.last %]\vspace{0.30em}[% endif %]
 [%- endfor %]
 
 [%- elif sec == 'skills' and skills %]
@@ -143,12 +113,11 @@
 [%- elif sec == 'education' and (education_entries or education) %]
 \section{Education}
 [%- for e in education_entries %]
-\textbf{[[ e.institution ]][% if e.location %], [[ e.location ]][% endif %]}\hfill\textit{[[ e.period ]]}\\
-\textit{[[ e.degree ]]}
-[%- if e.courses %]\\
-Relevant Courses: [[ e.courses ]]
+\resumeSubheading{[[ e.degree ]]}{[[ e.period ]]}{[[ e.institution ]]}{[[ e.location ]]}
+[%- if e.courses %]
+Relevant Courses: [[ e.courses ]]\\
 [%- endif %]
-[%- if not loop.last %]\\[0.3em][% endif %]
+[%- if not loop.last %]\vspace{0.25em}[% endif %]
 [%- endfor %]
 [%- for line in education %]
 [[ line ]][% if not loop.last %]\\[0.12em][% endif %]
