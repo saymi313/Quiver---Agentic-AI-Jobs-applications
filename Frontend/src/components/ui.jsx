@@ -568,6 +568,11 @@ export const Icon = {
       <path d="m9 6 6 6-6 6" />
     </svg>
   ),
+  ArrowLeft: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  ),
 
   /* Navigation. Line icons at a consistent 1.6 weight, sized to sit on the
      same optical baseline as the label beside them. */

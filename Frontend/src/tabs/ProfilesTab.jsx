@@ -95,7 +95,9 @@ export default function ProfilesTab() {
             onCategories={(next) =>
               act(`cats:${p.name}`, () => api.agentSetProfileCategories(p.name, next))
             }
-            onEditStyle={() => setEditing({ name: p.name, render: p.render })}
+            onEditStyle={() => {
+              window.location.hash = `#/profiles/${p.name}`
+            }}
           />
         ))}
       </div>
@@ -166,14 +168,6 @@ export default function ProfilesTab() {
           />
         </div>
       </Section>
-
-      <ResumeEditor
-        open={!!editing}
-        profile={editing?.name}
-        initial={editing?.render}
-        onClose={() => setEditing(null)}
-        onSaved={load}
-      />
     </div>
   )
 }

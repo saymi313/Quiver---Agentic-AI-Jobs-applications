@@ -8,6 +8,7 @@ import TrackTab from './tabs/TrackTab'
 import ProfilesTab from './tabs/ProfilesTab'
 import ResearchTab from './tabs/ResearchTab'
 import SettingsTab from './tabs/SettingsTab'
+import ResumeProfilePage from './components/ResumeProfilePage'
 import { api } from './lib/api'
 import { springFor } from './lib/motion'
 import { usePress } from './lib/usePress'
@@ -130,11 +131,42 @@ function NavItem({ tab, active, badge, onSelect }) {
   )
 }
 
+function getRouteFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '').trim()
+  if (!hash) return { tab: 'dashboard', slug: null }
+  const parts = hash.split('/')
+  if (parts[0] === 'profiles' && parts[1]) {
+    return { tab: 'profile-detail', slug: decodeURIComponent(parts[1]) }
+  }
+  if (parts[0] === 'resumes' && parts[1]) {
+    return { tab: 'profile-detail', slug: decodeURIComponent(parts[1]) }
+  }
+  const known = ['dashboard', 'jobs', 'track', 'outreach', 'research', 'profiles', 'resume', 'settings']
+  if (known.includes(parts[0])) {
+    return { tab: parts[0], slug: null }
+  }
+  return { tab: 'dashboard', slug: null }
+}
+
 export default function App() {
-  const [tab, setTab] = useState('dashboard')
+  const [route, setRoute] = useState(getRouteFromHash)
   const [health, setHealth] = useState(null)
   const [offline, setOffline] = useState(false)
   const [counts, setCounts] = useState({})
+
+  const activeTab = route.tab === 'profile-detail' ? 'profiles' : route.tab
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setRoute(getRouteFromHash())
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  const navigateTab = (tabKey) => {
+    window.location.hash = `#/${tabKey}`
+  }
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setOffline(true))
@@ -161,7 +193,7 @@ export default function App() {
       alive = false
       clearInterval(timer)
     }
-  }, [tab])
+  }, [route])
 
   return (
     <div className="flex min-h-full">
@@ -182,9 +214,9 @@ export default function App() {
                   <NavItem
                     key={t.key}
                     tab={t}
-                    active={tab === t.key}
+                    active={activeTab === t.key}
                     badge={counts[t.key]}
-                    onSelect={() => setTab(t.key)}
+                    onSelect={() => navigateTab(t.key)}
                   />
                 ))}
               </div>
@@ -218,10 +250,10 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
-              aria-current={tab === t.key ? 'page' : undefined}
+              onClick={() => navigateTab(t.key)}
+              aria-current={activeTab === t.key ? 'page' : undefined}
               className={`press rounded-full px-3 py-1 text-sm ${
-                tab === t.key ? 'bg-n-850 font-medium text-n-100' : 'text-n-400'
+                activeTab === t.key ? 'bg-n-850 font-medium text-n-100' : 'text-n-400'
               }`}
             >
               {t.label}
@@ -240,25 +272,32 @@ export default function App() {
             // a stack, so there is no direction for one to come from.
             <AnimatePresence initial={false} mode="popLayout">
               <m.div
-                key={tab}
+                key={route.tab === 'profile-detail' ? `profile-${route.slug}` : route.tab}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={springFor()}
               >
-                {tab === 'dashboard' ? (
-                  <DashboardTab onOpenJobs={() => setTab('jobs')} />
-                ) : tab === 'jobs' ? (
+                {route.tab === 'profile-detail' ? (
+                  <ResumeProfilePage
+                    profileName={route.slug}
+                    onBack={() => {
+                      window.location.hash = '#/profiles'
+                    }}
+                  />
+                ) : route.tab === 'dashboard' ? (
+                  <DashboardTab onOpenJobs={() => navigateTab('jobs')} />
+                ) : route.tab === 'jobs' ? (
                   <JobsTab />
-                ) : tab === 'track' ? (
+                ) : route.tab === 'track' ? (
                   <TrackTab />
-                ) : tab === 'outreach' ? (
+                ) : route.tab === 'outreach' ? (
                   <OutreachTab />
-                ) : tab === 'research' ? (
+                ) : route.tab === 'research' ? (
                   <ResearchTab />
-                ) : tab === 'profiles' ? (
+                ) : route.tab === 'profiles' ? (
                   <ProfilesTab />
-                ) : tab === 'resume' ? (
+                ) : route.tab === 'resume' ? (
                   <ResumeTab aiStatus={health?.ai} />
                 ) : (
                   <SettingsTab />
