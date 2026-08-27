@@ -953,6 +953,32 @@ def agent_save_render(name: str, body: RenderPreview) -> dict[str, Any]:
     return out
 
 
+@app.get("/api/agent/resume-profiles/{name}/data")
+def agent_get_profile_data(name: str) -> dict[str, Any]:
+    """Retrieve full structured JSON data for a profile."""
+    from . import resume_profiles
+
+    data = resume_profiles.read_dict(name)
+    if not data:
+        raise HTTPException(404, f"No profile named '{name}'.")
+    return {"ok": True, "name": name, "data": data}
+
+
+class ProfileDataPayload(BaseModel):
+    data: dict[str, Any]
+
+
+@app.put("/api/agent/resume-profiles/{name}/data")
+def agent_save_profile_data(name: str, body: ProfileDataPayload) -> dict[str, Any]:
+    """Save full structured JSON data back to profile YAML."""
+    from . import resume_profiles
+
+    out = resume_profiles.write_dict(name, body.data)
+    if not out.get("ok"):
+        raise HTTPException(400, out.get("error", "Could not save profile data."))
+    return out
+
+
 @app.post("/api/agent/resume-profiles/import")
 async def agent_import_profile(name: str = Form(...), file: UploadFile = File(...)) -> dict[str, Any]:
     """

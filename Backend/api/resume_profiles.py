@@ -316,6 +316,32 @@ def read(name: str) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
+def read_dict(name: str) -> dict[str, Any]:
+    """Return full structured profile dictionary."""
+    path = path_for(name)
+    if not path.is_file():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def write_dict(name: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Save structured profile data directly to YAML."""
+    if not isinstance(data, dict) or not data.get("candidate"):
+        return {"ok": False, "error": "A profile needs a candidate section."}
+    path = path_for(name)
+    if _slug(name) != MAIN and not path.is_file():
+        return {"ok": False, "error": f"No profile called '{name}'."}
+    try:
+        text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+        path.write_text(text, encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not save profile: {exc}"}
+    return {"ok": True, "name": _slug(name) or MAIN}
+
+
 def write(name: str, text: str) -> dict[str, Any]:
     """
     Save an edited profile, after checking it still parses.

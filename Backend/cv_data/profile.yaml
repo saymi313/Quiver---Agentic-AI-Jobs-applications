@@ -436,3 +436,16 @@ certifications:
 - line: IBM Frontend Development with React
 languages:
 - line: English (Fluent), Urdu (Native), German (A1)
+render:
+  template: standard
+  font: computer_modern
+  font_size: 10.5
+  align: left
+  fit_one_page: false
+  sections:
+  - summary
+  - experience
+  - projects
+  - skills
+  - education
+  - achievements

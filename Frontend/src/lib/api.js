@@ -277,6 +277,16 @@ export const api = {
       method: 'POST',
     }).then(handle),
 
+  agentGetProfileData: (name) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/data`).then(handle),
+
+  agentSaveProfileData: (name, data) =>
+    fetch(`${BASE}/api/agent/resume-profiles/${encodeURIComponent(name)}/data`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data }),
+    }).then(handle),
+
   // ---- prep ----
   agentJobFromUrl: (url) =>
     fetch(`${BASE}/api/agent/job-from-url`, {
