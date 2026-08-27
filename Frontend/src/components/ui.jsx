@@ -573,6 +573,24 @@ export const Icon = {
       <path d="M19 12H5M12 19l-7-7 7-7" />
     </svg>
   ),
+  Menu: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  ),
+  Sidebar: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+    </svg>
+  ),
+  SidebarCollapse: (p) => (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke} {...p}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="m14 9-3 3 3 3" />
+    </svg>
+  ),
 
   /* Navigation. Line icons at a consistent 1.6 weight, sized to sit on the
      same optical baseline as the label beside them. */

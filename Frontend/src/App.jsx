@@ -14,29 +14,6 @@ import { springFor } from './lib/motion'
 import { usePress } from './lib/usePress'
 import { Icon, Note, Status } from './components/ui'
 
-/*
-  The app shell: a sidebar and a page.
-
-  Four screens, named for the job they do rather than for the machinery behind
-  them, in the order the work happens — find a role, aim a resume at it, watch
-  what comes back, and reach out directly where there is someone to reach.
-
-  A sidebar rather than a top tab bar because the destinations are a permanent
-  list rather than a mode switch, and because it has room for the counts that
-  say which of them needs you. The rail is a translucent material with the page
-  passing under it; content surfaces stay opaque, because stacking one
-  translucent layer on another is where legibility goes.
-*/
-
-/*
-  Two groups, because the destinations answer two different questions.
-
-  The first is the work: what is happening, what to act on, what came back, who
-  to reach. The second is the setup behind it — which resume, and how the agent
-  behaves. Splitting them is what let the search settings, the portal table and
-  the whole configuration panel come off the Jobs screen, where they had been
-  sitting above the table people actually open the app to use.
-*/
 const GROUPS = [
   {
     label: 'Workspace',
@@ -60,23 +37,17 @@ const GROUPS = [
 
 const TABS = GROUPS.flatMap((g) => g.tabs)
 
-/*
-  The AI badge. It reports remaining daily calls once they run low, because the
-  free tier is small enough to run out mid-session — and when it does, cover
-  letters and form answers are quietly skipped. Silence there is worse than a
-  warning.
-*/
-function AiStatus({ ai }) {
+function AiStatus({ ai, compact = false }) {
   const budget = ai.budget || {}
   const { cap = 0, remaining = 0, restingModels = [] } = budget
 
   if (!ai.available) {
-    return <Status tone="warn" title={ai.reason}>AI not configured</Status>
+    return <Status tone="warn" title={ai.reason}>{compact ? 'Offline' : 'AI not configured'}</Status>
   }
   if (cap && remaining <= 0) {
     return (
       <Status tone="bad" title="Every model has spent its daily free-tier allowance. Resets tomorrow.">
-        AI quota spent
+        {compact ? 'Quota 0' : 'AI quota spent'}
       </Status>
     )
   }
@@ -88,20 +59,18 @@ function AiStatus({ ai }) {
           restingModels.length ? `. Resting: ${restingModels.join(', ')}` : ''
         }`}
       >
-        {remaining} AI calls left
+        {compact ? `${remaining}` : `${remaining} AI calls left`}
       </Status>
     )
   }
   return (
     <Status tone="ok" title={cap ? `${remaining} of ${cap} daily calls left` : ai.reason}>
-      {ai.model}
+      {compact ? 'Active' : ai.model}
     </Status>
   )
 }
 
-/** One destination in the rail. The selected pill is a single shared element
- *  that springs between items, so the eye is carried rather than teleported. */
-function NavItem({ tab, active, badge, onSelect }) {
+function NavItem({ tab, active, badge, collapsed, onSelect }) {
   const { pressed, handlers } = usePress({ onPress: onSelect })
   const IconFor = tab.icon
   return (
@@ -110,8 +79,10 @@ function NavItem({ tab, active, badge, onSelect }) {
       onClick={(event) => event.detail === 0 && onSelect()}
       data-pressed={pressed}
       aria-current={active ? 'page' : undefined}
-      className={`press relative flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5
-        text-sm ${active ? 'font-medium text-n-100' : 'text-n-400 hover:text-n-100'}`}
+      title={collapsed ? `${tab.label}${badge ? ` (${badge})` : ''}` : undefined}
+      className={`press relative flex w-full items-center ${
+        collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-1.5'
+      } rounded-sm text-sm ${active ? 'font-medium text-n-100' : 'text-n-400 hover:text-n-100'}`}
     >
       {active ? (
         <m.span
@@ -120,12 +91,24 @@ function NavItem({ tab, active, badge, onSelect }) {
           className="absolute inset-0 -z-10 rounded-sm bg-n-850"
         />
       ) : null}
-      <IconFor className={active ? 'size-4 text-n-100' : 'size-4 text-n-500'} />
-      <span className="flex-1 text-left">{tab.label}</span>
-      {badge ? (
-        <span className="rounded-full bg-n-800 px-1.5 py-px text-micro font-medium text-n-400">
-          {badge > 99 ? '99+' : badge}
-        </span>
+      <div className="relative">
+        <IconFor className={active ? 'size-4 text-n-100' : 'size-4 text-n-500'} />
+        {collapsed && badge ? (
+          <span className="absolute -top-1 -right-1 flex size-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex rounded-full size-2 bg-blue-500" />
+          </span>
+        ) : null}
+      </div>
+      {!collapsed ? (
+        <>
+          <span className="flex-1 text-left truncate">{tab.label}</span>
+          {badge ? (
+            <span className="rounded-full bg-n-800 px-1.5 py-px text-micro font-medium text-n-400">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          ) : null}
+        </>
       ) : null}
     </button>
   )
@@ -153,27 +136,52 @@ export default function App() {
   const [health, setHealth] = useState(null)
   const [offline, setOffline] = useState(false)
   const [counts, setCounts] = useState({})
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('jobenzy_sidebar_collapsed') === 'true'
+  })
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const activeTab = route.tab === 'profile-detail' ? 'profiles' : route.tab
+  const currentTabObj = TABS.find((t) => t.key === activeTab) || TABS[0]
 
   useEffect(() => {
     const handleHashChange = () => {
       setRoute(getRouteFromHash())
+      setMobileOpen(false)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
+  // Keyboard shortcut: Cmd+B / Ctrl+B to toggle sidebar on desktop
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleSidebar()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      localStorage.setItem('jobenzy_sidebar_collapsed', String(next))
+      return next
+    })
+  }
+
   const navigateTab = (tabKey) => {
     window.location.hash = `#/${tabKey}`
+    setMobileOpen(false)
   }
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setOffline(true))
   }, [])
 
-  // The rail's counts: what is waiting on you, per destination. Polled rather
-  // than pushed, because nothing here changes faster than a person reads.
   useEffect(() => {
     let alive = true
     const read = () =>
@@ -197,18 +205,46 @@ export default function App() {
 
   return (
     <div className="flex min-h-full">
-      {/* ------------------------------------------------------------ rail */}
-      <aside className="material sticky top-0 hidden h-screen w-56 shrink-0 flex-col
-        border-r border-line px-3 py-4 md:flex">
-        <div className="flex items-center px-2.5 pb-5">
-          <img src="/logo.png" alt="Jobenzy logo" className="h-8 w-auto object-contain" />
+      {/* ------------------------------------------------------------ Desktop Rail */}
+      <m.aside
+        animate={{ width: sidebarCollapsed ? 68 : 224 }}
+        transition={springFor()}
+        className="material sticky top-0 hidden h-screen shrink-0 flex-col border-r border-line px-2.5 py-4 md:flex overflow-hidden z-20"
+      >
+        <div className="flex items-center justify-between px-1.5 pb-5">
+          {!sidebarCollapsed ? (
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="Jobenzy logo" className="h-7 w-auto object-contain" />
+            </div>
+          ) : (
+            <div className="mx-auto">
+              <img src="/logo.png" alt="Jobenzy logo" className="h-6 w-auto object-contain" />
+            </div>
+          )}
+          <button
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            className="press rounded-md p-1.5 text-n-400 hover:bg-n-800 hover:text-n-100 transition-colors"
+            aria-label="Toggle sidebar"
+          >
+            {sidebarCollapsed ? (
+              <Icon.Sidebar className="size-4" />
+            ) : (
+              <Icon.SidebarCollapse className="size-4" />
+            )}
+          </button>
         </div>
-        <nav className="flex-1 space-y-4">
+
+        <nav className="flex-1 space-y-4 overflow-y-auto">
           {GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="px-2.5 pb-1.5 text-micro font-medium tracking-wide text-n-500 uppercase">
-                {group.label}
-              </p>
+              {!sidebarCollapsed ? (
+                <p className="px-2.5 pb-1.5 text-micro font-medium tracking-wide text-n-500 uppercase">
+                  {group.label}
+                </p>
+              ) : (
+                <div className="my-1.5 border-t border-line/60 mx-1" />
+              )}
               <div className="flex flex-col gap-0.5">
                 {group.tabs.map((t) => (
                   <NavItem
@@ -216,6 +252,7 @@ export default function App() {
                     tab={t}
                     active={activeTab === t.key}
                     badge={counts[t.key]}
+                    collapsed={sidebarCollapsed}
                     onSelect={() => navigateTab(t.key)}
                   />
                 ))}
@@ -224,52 +261,144 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="mt-auto space-y-3 pt-6">
-          <div className="rounded-md border border-line bg-surface px-3 py-2.5">
-            <p className="text-micro font-medium tracking-wide text-n-500 uppercase">Model</p>
-            <div className="mt-1.5">
-              {offline ? (
-                <Status tone="bad">API offline</Status>
-              ) : health ? (
-                <AiStatus ai={health.ai} />
-              ) : (
-                <Status tone="neutral">connecting</Status>
-              )}
-            </div>
+        <div className="mt-auto space-y-2 pt-4">
+          <div className={`rounded-md border border-line bg-surface ${sidebarCollapsed ? 'p-2 text-center' : 'px-3 py-2.5'}`}>
+            {!sidebarCollapsed ? (
+              <>
+                <p className="text-micro font-medium tracking-wide text-n-500 uppercase">Model</p>
+                <div className="mt-1.5">
+                  {offline ? (
+                    <Status tone="bad">API offline</Status>
+                  ) : health ? (
+                    <AiStatus ai={health.ai} />
+                  ) : (
+                    <Status tone="neutral">connecting</Status>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-center" title={health?.ai?.model || 'Model'}>
+                {offline ? (
+                  <span className="size-2.5 rounded-full bg-bad-500" />
+                ) : health?.ai?.available ? (
+                  <span className="size-2.5 rounded-full bg-ok-500" />
+                ) : (
+                  <span className="size-2.5 rounded-full bg-amber-500" />
+                )}
+              </div>
+            )}
           </div>
         </div>
-      </aside>
+      </m.aside>
 
-      {/* ------------------------------------------------------------ page */}
-      <div className="min-w-0 flex-1">
-        {/* On a narrow screen the rail collapses to a top bar: the same four
-            destinations, still one tap away. */}
-        <header className="material sticky top-0 z-30 flex items-center gap-1 border-b
-          border-line px-4 py-2 md:hidden">
-          <img src="/logo.png" alt="Jobenzy logo" className="size-5 shrink-0 object-contain" />
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => navigateTab(t.key)}
-              aria-current={activeTab === t.key ? 'page' : undefined}
-              className={`press rounded-full px-3 py-1 text-sm ${
-                activeTab === t.key ? 'bg-n-850 font-medium text-n-100' : 'text-n-400'
-              }`}
+      {/* ------------------------------------------------------------ Mobile Navigation & Drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            {/* Backdrop */}
+            <m.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
+            />
+
+            {/* Mobile Drawer */}
+            <m.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={springFor()}
+              className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface p-4 shadow-2xl md:hidden"
             >
-              {t.label}
+              <div className="flex items-center justify-between pb-4 border-b border-line">
+                <div className="flex items-center gap-2">
+                  <img src="/logo.png" alt="Jobenzy logo" className="h-7 w-auto object-contain" />
+                  <span className="text-sm font-bold text-n-100">Jobenzy</span>
+                </div>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="press rounded-full p-1.5 text-n-400 hover:bg-n-800 hover:text-n-100"
+                  aria-label="Close navigation"
+                >
+                  <Icon.X className="size-4" />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-4 overflow-y-auto pt-4">
+                {GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <p className="px-2.5 pb-1.5 text-micro font-medium tracking-wide text-n-500 uppercase">
+                      {group.label}
+                    </p>
+                    <div className="flex flex-col gap-0.5">
+                      {group.tabs.map((t) => (
+                        <NavItem
+                          key={t.key}
+                          tab={t}
+                          active={activeTab === t.key}
+                          badge={counts[t.key]}
+                          collapsed={false}
+                          onSelect={() => navigateTab(t.key)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+
+              <div className="mt-auto pt-4 border-t border-line">
+                <div className="rounded-md border border-line bg-n-900 px-3 py-2.5">
+                  <p className="text-micro font-medium tracking-wide text-n-500 uppercase">Model</p>
+                  <div className="mt-1">
+                    {offline ? (
+                      <Status tone="bad">API offline</Status>
+                    ) : health ? (
+                      <AiStatus ai={health.ai} />
+                    ) : (
+                      <Status tone="neutral">connecting</Status>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </m.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ------------------------------------------------------------ Main Content Area */}
+      <div className="min-w-0 flex-1">
+        {/* Mobile Header Bar */}
+        <header className="material sticky top-0 z-30 flex items-center justify-between border-b border-line px-4 py-2.5 md:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="press rounded-md border border-line bg-surface p-1.5 text-n-200 hover:text-n-100 active:scale-[0.97]"
+              aria-label="Open navigation menu"
+            >
+              <Icon.Menu className="size-4" />
             </button>
-          ))}
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="Jobenzy logo" className="size-5 object-contain" />
+              <span className="text-sm font-semibold text-n-100 capitalize">
+                {route.tab === 'profile-detail' ? `Profile: ${route.slug}` : currentTabObj.label}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {health?.ai ? <AiStatus ai={health.ai} compact /> : null}
+          </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-6 py-8 lg:px-10">
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
           {offline ? (
             <Note tone="bad" title="The backend is not responding">
               From the <code className="text-n-200">Backend</code> folder run{' '}
               <code className="text-n-200">python run_dashboard.py</code>, then reload this page.
             </Note>
           ) : (
-            // A short settle rather than a slide: the screens are siblings, not
-            // a stack, so there is no direction for one to come from.
             <AnimatePresence initial={false} mode="popLayout">
               <m.div
                 key={route.tab === 'profile-detail' ? `profile-${route.slug}` : route.tab}

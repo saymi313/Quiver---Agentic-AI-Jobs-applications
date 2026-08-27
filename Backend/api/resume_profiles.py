@@ -83,7 +83,6 @@ def _describe(path: Path, name: str) -> dict[str, Any]:
         # The saved editor style, so the editor opens on it rather than the
         # defaults.
         "render": data.get("render") if isinstance(data.get("render"), dict) else None,
-        "data": data,
     })
     return info
 
