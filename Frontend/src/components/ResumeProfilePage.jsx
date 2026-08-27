@@ -45,7 +45,9 @@ export default function ResumeProfilePage({ profileName, onBack }) {
   const [error, setError] = useState('')
   const [savedNote, setSavedNote] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const lastUrl = useRef('')
+  const snapshotRef = useRef(null)
 
   // Form State
   const [candidate, setCandidate] = useState({
@@ -67,6 +69,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
   // Load Profile Metadata and Structured Data
   const loadData = useCallback(() => {
     if (!profileName) return
+    setError('')
     Promise.all([
       api.agentResumeProfiles(),
       api.agentGetProfileData(profileName).catch(() => null),
@@ -76,18 +79,19 @@ export default function ResumeProfilePage({ profileName, onBack }) {
         if (found) {
           setProfileData(found)
           const savedRender = found.render || {}
-          setOpts({
+          const newOpts = {
             ...DEFAULTS,
             ...savedRender,
             sections: savedRender.sections?.length ? savedRender.sections : DEFAULT_SECTIONS,
-          })
+          }
+          setOpts(newOpts)
         }
 
         if (dataRes?.ok && dataRes.data) {
           const d = dataRes.data
           setRawYamlData(d)
           const cand = d.candidate || {}
-          setCandidate({
+          const candState = {
             name: cand.name || '',
             title: cand.title || '',
             email: cand.email || '',
@@ -95,25 +99,42 @@ export default function ResumeProfilePage({ profileName, onBack }) {
             location: cand.location || '',
             summary: cand.summary || '',
             links: cand.links || [],
-          })
-          setExperience(
-            (d.experience || []).map((e) => ({
-              ...e,
-              bullets: (e.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
-            })),
+          }
+          const expState = (d.experience || []).map((e) => ({
+            ...e,
+            bullets: (e.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
+          }))
+          const projState = (d.projects || []).map((p) => ({
+            ...p,
+            bullets: (p.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
+          }))
+          const skillsState = (d.skills || []).map((s) =>
+            typeof s === 'string' ? { line: s } : s,
           )
-          setProjects(
-            (d.projects || []).map((p) => ({
-              ...p,
-              bullets: (p.bullets || []).map((b) => (typeof b === 'string' ? { text: b } : b)),
-            })),
-          )
-          setSkills(
-            (d.skills || []).map((s) => (typeof s === 'string' ? { line: s } : s)),
-          )
-          setEducation(d.education || [])
-          setAwards(d.awards || [])
-          setCertifications(d.certifications || [])
+          const eduState = d.education || []
+          const awardsState = d.awards || []
+          const certsState = d.certifications || []
+
+          setCandidate(candState)
+          setExperience(expState)
+          setProjects(projState)
+          setSkills(skillsState)
+          setEducation(eduState)
+          setAwards(awardsState)
+          setCertifications(certsState)
+
+          // Save baseline snapshot for Cancel / Reset
+          snapshotRef.current = {
+            candidate: candState,
+            experience: expState,
+            projects: projState,
+            skills: skillsState,
+            education: eduState,
+            awards: awardsState,
+            certifications: certsState,
+            opts: found?.render || DEFAULTS,
+          }
+          setIsDirty(false)
         }
       })
       .catch((e) => setError(e.message))
@@ -126,6 +147,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
   const setStyleOption = (patch) => {
     setOpts((o) => ({ ...o, ...patch }))
     setSavedNote(false)
+    setIsDirty(true)
   }
 
   const moveSection = (key, dir) => {
@@ -138,6 +160,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
       return { ...o, sections: arr }
     })
     setSavedNote(false)
+    setIsDirty(true)
   }
 
   // Rebuild preview with debounce
@@ -166,6 +189,27 @@ export default function ResumeProfilePage({ profileName, onBack }) {
   useEffect(() => () => {
     if (lastUrl.current) URL.revokeObjectURL(lastUrl.current)
   }, [])
+
+  // Cancel / Revert to last loaded snapshot
+  const handleCancel = () => {
+    if (!snapshotRef.current) return
+    const s = snapshotRef.current
+    setCandidate(JSON.parse(JSON.stringify(s.candidate)))
+    setExperience(JSON.parse(JSON.stringify(s.experience)))
+    setProjects(JSON.parse(JSON.stringify(s.projects)))
+    setSkills(JSON.parse(JSON.stringify(s.skills)))
+    setEducation(JSON.parse(JSON.stringify(s.education)))
+    setAwards(JSON.parse(JSON.stringify(s.awards)))
+    setCertifications(JSON.parse(JSON.stringify(s.certifications)))
+    setOpts({
+      ...DEFAULTS,
+      ...s.opts,
+      sections: s.opts?.sections?.length ? s.opts.sections : DEFAULT_SECTIONS,
+    })
+    setIsDirty(false)
+    setSavedNote(false)
+    setError('')
+  }
 
   // Save Style and Content Data
   const handleSaveAll = async () => {
@@ -204,6 +248,20 @@ export default function ResumeProfilePage({ profileName, onBack }) {
       }
 
       await api.agentSaveProfileData(profileName, updatedData)
+
+      // Update baseline snapshot
+      snapshotRef.current = {
+        candidate: JSON.parse(JSON.stringify(candidate)),
+        experience: JSON.parse(JSON.stringify(experience)),
+        projects: JSON.parse(JSON.stringify(projects)),
+        skills: JSON.parse(JSON.stringify(skills)),
+        education: JSON.parse(JSON.stringify(education)),
+        awards: JSON.parse(JSON.stringify(awards)),
+        certifications: JSON.parse(JSON.stringify(certifications)),
+        opts: JSON.parse(JSON.stringify(opts)),
+      }
+
+      setIsDirty(false)
       setSavedNote(true)
       buildPreview()
     } catch (e) {
@@ -218,27 +276,43 @@ export default function ResumeProfilePage({ profileName, onBack }) {
     setExperience((prev) => [
       {
         id: `exp_${Date.now()}`,
-        company: 'New Company',
-        role: 'Software Engineer',
+        company: 'Acme Technologies',
+        role: 'Senior Software Engineer',
         period: '2024 to Present',
         location: 'Remote',
-        bullets: [{ text: 'Built scalable backend microservices and APIs.' }],
+        bullets: [{ text: 'Architected high-throughput services and microservices.' }],
       },
       ...prev,
     ])
+    setIsDirty(true)
   }
 
   const handleAddProject = () => {
     setProjects((prev) => [
       {
         id: `proj_${Date.now()}`,
-        name: 'New Project',
-        tech: 'React, Node.js, TypeScript',
+        name: 'Distributed Cloud Storage',
+        tech: 'React, Node.js, TypeScript, Docker',
         period: '2025',
-        bullets: [{ text: 'Designed and deployed responsive web workflows.' }],
+        bullets: [{ text: 'Built real-time syncing workflows and responsive web clients.' }],
       },
       ...prev,
     ])
+    setIsDirty(true)
+  }
+
+  const handleAddEducation = () => {
+    setEducation((prev) => [
+      {
+        institution: 'University of Engineering and Technology',
+        location: 'Islamabad, Pakistan',
+        degree: 'Bachelor of Science in Software Engineering',
+        period: '2022 to 2026',
+        courses: 'Algorithms, Data Structures, Operating Systems, Distributed Systems',
+      },
+      ...prev,
+    ])
+    setIsDirty(true)
   }
 
   const isDefault = profileData?.isDefault || profileName === 'main'
@@ -291,8 +365,15 @@ export default function ResumeProfilePage({ profileName, onBack }) {
         description="Edit structured candidate data, adjust typography, and compile publication-grade ATS resumes in real time."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              disabled={!isDirty || saving}
+              onClick={handleCancel}
+            >
+              Cancel
+            </Button>
             <Button variant="primary" busy={saving} onClick={handleSaveAll}>
-              Save all changes
+              Update Profile
             </Button>
             {url ? (
               <a
@@ -340,7 +421,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
               transition={springFor()}
               className="space-y-4"
             >
-              {/* Personal Info Card */}
+              {/* 1. Candidate Info Card */}
               <div className="rounded-lg border border-line bg-surface p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between border-b border-line pb-3">
                   <p className="text-xs font-semibold tracking-wide text-n-100 uppercase">
@@ -353,36 +434,51 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                   <Field label="Full Name">
                     <Input
                       value={candidate.name}
-                      onChange={(e) => setCandidate((c) => ({ ...c, name: e.target.value }))}
-                      placeholder="e.g. Usairam Saeed"
+                      onChange={(e) => {
+                        setCandidate((c) => ({ ...c, name: e.target.value }))
+                        setIsDirty(true)
+                      }}
+                      placeholder="e.g. Alex Morgan"
                     />
                   </Field>
                   <Field label="Target Headline / Title">
                     <Input
                       value={candidate.title}
-                      onChange={(e) => setCandidate((c) => ({ ...c, title: e.target.value }))}
-                      placeholder="e.g. Full Stack Developer"
+                      onChange={(e) => {
+                        setCandidate((c) => ({ ...c, title: e.target.value }))
+                        setIsDirty(true)
+                      }}
+                      placeholder="e.g. Senior Full Stack Engineer"
                     />
                   </Field>
                   <Field label="Email Address">
                     <Input
                       value={candidate.email}
-                      onChange={(e) => setCandidate((c) => ({ ...c, email: e.target.value }))}
-                      placeholder="e.g. saeed.usairam@gmail.com"
+                      onChange={(e) => {
+                        setCandidate((c) => ({ ...c, email: e.target.value }))
+                        setIsDirty(true)
+                      }}
+                      placeholder="e.g. alex.morgan@example.com"
                     />
                   </Field>
                   <Field label="Phone Number">
                     <Input
                       value={candidate.phone}
-                      onChange={(e) => setCandidate((c) => ({ ...c, phone: e.target.value }))}
-                      placeholder="e.g. +92 301 8165385"
+                      onChange={(e) => {
+                        setCandidate((c) => ({ ...c, phone: e.target.value }))
+                        setIsDirty(true)
+                      }}
+                      placeholder="e.g. +1 (555) 019-2834"
                     />
                   </Field>
                   <Field label="Location">
                     <Input
                       value={candidate.location}
-                      onChange={(e) => setCandidate((c) => ({ ...c, location: e.target.value }))}
-                      placeholder="e.g. Islamabad, Pakistan"
+                      onChange={(e) => {
+                        setCandidate((c) => ({ ...c, location: e.target.value }))
+                        setIsDirty(true)
+                      }}
+                      placeholder="e.g. San Francisco, CA (or Remote)"
                     />
                   </Field>
                 </div>
@@ -394,14 +490,17 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                   <textarea
                     rows={3}
                     value={candidate.summary}
-                    onChange={(e) => setCandidate((c) => ({ ...c, summary: e.target.value }))}
+                    onChange={(e) => {
+                      setCandidate((c) => ({ ...c, summary: e.target.value }))
+                      setIsDirty(true)
+                    }}
                     className="w-full rounded-md border border-line bg-n-900 px-3 py-2 text-xs leading-relaxed text-n-100 placeholder-n-500 focus:border-blue-500 focus:outline-none"
-                    placeholder="Write a concise executive summary..."
+                    placeholder="Summary of core competencies, quantifiable engineering impact, and tech stack..."
                   />
                 </Field>
               </div>
 
-              {/* Experience Card */}
+              {/* 2. Experience Card */}
               <div className="rounded-lg border border-line bg-surface p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between border-b border-line pb-3">
                   <div>
@@ -424,10 +523,13 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-semibold text-n-200">
-                          Role #{expIdx + 1}: {exp.role || 'Untitled'} @ {exp.company || 'Company'}
+                          Role #{expIdx + 1}: {exp.role || 'Untitled Role'} @ {exp.company || 'Company'}
                         </span>
                         <button
-                          onClick={() => setExperience((prev) => prev.filter((_, i) => i !== expIdx))}
+                          onClick={() => {
+                            setExperience((prev) => prev.filter((_, i) => i !== expIdx))
+                            setIsDirty(true)
+                          }}
                           className="press text-micro text-bad-400 hover:text-bad-300"
                         >
                           Remove
@@ -438,49 +540,57 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                         <Field label="Company">
                           <Input
                             value={exp.company || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setExperience((prev) =>
                                 prev.map((item, i) =>
                                   i === expIdx ? { ...item, company: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Stripe, Motive, or Acme Corp"
                           />
                         </Field>
                         <Field label="Role Title">
                           <Input
                             value={exp.role || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setExperience((prev) =>
                                 prev.map((item, i) =>
                                   i === expIdx ? { ...item, role: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Lead Software Engineer"
                           />
                         </Field>
                         <Field label="Period / Dates">
                           <Input
                             value={exp.period || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setExperience((prev) =>
                                 prev.map((item, i) =>
                                   i === expIdx ? { ...item, period: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. March 2024 to Present"
                           />
                         </Field>
                         <Field label="Location">
                           <Input
                             value={exp.location || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setExperience((prev) =>
                                 prev.map((item, i) =>
                                   i === expIdx ? { ...item, location: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Remote, United States"
                           />
                         </Field>
                       </div>
@@ -492,18 +602,19 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                             Bullet Points ({exp.bullets?.length || 0})
                           </p>
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               setExperience((prev) =>
                                 prev.map((item, i) =>
                                   i === expIdx
                                     ? {
                                         ...item,
-                                        bullets: [...(item.bullets || []), { text: 'New achievement bullet' }],
+                                        bullets: [...(item.bullets || []), { text: '' }],
                                       }
                                     : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
                             className="press text-micro text-blue-400 hover:text-blue-300"
                           >
                             + Add Bullet
@@ -516,7 +627,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                             <input
                               type="text"
                               value={b.text || ''}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setExperience((prev) =>
                                   prev.map((item, i) =>
                                     i === expIdx
@@ -529,11 +640,13 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                                       : item,
                                   ),
                                 )
-                              }
+                                setIsDirty(true)
+                              }}
+                              placeholder="e.g. Architected high-throughput REST APIs reducing query latency by 45%."
                               className="flex-1 rounded border border-line bg-n-950 px-2.5 py-1 text-xs text-n-100 focus:border-blue-500 focus:outline-none"
                             />
                             <button
-                              onClick={() =>
+                              onClick={() => {
                                 setExperience((prev) =>
                                   prev.map((item, i) =>
                                     i === expIdx
@@ -544,7 +657,8 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                                       : item,
                                   ),
                                 )
-                              }
+                                setIsDirty(true)
+                              }}
                               className="press p-1 text-n-500 hover:text-n-300"
                               title="Delete bullet"
                             >
@@ -558,7 +672,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                 </div>
               </div>
 
-              {/* Projects Card */}
+              {/* 3. Projects Card */}
               <div className="rounded-lg border border-line bg-surface p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between border-b border-line pb-3">
                   <div>
@@ -581,10 +695,13 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-semibold text-n-200">
-                          Project #{pIdx + 1}: {proj.name || 'Untitled'}
+                          Project #{pIdx + 1}: {proj.name || 'Untitled Project'}
                         </span>
                         <button
-                          onClick={() => setProjects((prev) => prev.filter((_, i) => i !== pIdx))}
+                          onClick={() => {
+                            setProjects((prev) => prev.filter((_, i) => i !== pIdx))
+                            setIsDirty(true)
+                          }}
                           className="press text-micro text-bad-400 hover:text-bad-300"
                         >
                           Remove
@@ -595,37 +712,43 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                         <Field label="Project Name">
                           <Input
                             value={proj.name || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setProjects((prev) =>
                                 prev.map((item, i) =>
                                   i === pIdx ? { ...item, name: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Real-Time Distributed Ledger"
                           />
                         </Field>
                         <Field label="Technologies / Tech Stack">
                           <Input
                             value={proj.tech || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setProjects((prev) =>
                                 prev.map((item, i) =>
                                   i === pIdx ? { ...item, tech: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. React, Node.js, WebSocket, PostgreSQL"
                           />
                         </Field>
                         <Field label="Period / Date">
                           <Input
                             value={proj.period || ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setProjects((prev) =>
                                 prev.map((item, i) =>
                                   i === pIdx ? { ...item, period: e.target.value } : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. 2025"
                           />
                         </Field>
                       </div>
@@ -637,18 +760,19 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                             Bullets ({proj.bullets?.length || 0})
                           </p>
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               setProjects((prev) =>
                                 prev.map((item, i) =>
                                   i === pIdx
                                     ? {
                                         ...item,
-                                        bullets: [...(item.bullets || []), { text: 'New project accomplishment' }],
+                                        bullets: [...(item.bullets || []), { text: '' }],
                                       }
                                     : item,
                                 ),
                               )
-                            }
+                              setIsDirty(true)
+                            }}
                             className="press text-micro text-blue-400 hover:text-blue-300"
                           >
                             + Add Bullet
@@ -661,7 +785,7 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                             <input
                               type="text"
                               value={b.text || ''}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setProjects((prev) =>
                                   prev.map((item, i) =>
                                     i === pIdx
@@ -674,11 +798,13 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                                       : item,
                                   ),
                                 )
-                              }
+                                setIsDirty(true)
+                              }}
+                              placeholder="e.g. Integrated live market data feeds powering real-time analytics."
                               className="flex-1 rounded border border-line bg-n-950 px-2.5 py-1 text-xs text-n-100 focus:border-blue-500 focus:outline-none"
                             />
                             <button
-                              onClick={() =>
+                              onClick={() => {
                                 setProjects((prev) =>
                                   prev.map((item, i) =>
                                     i === pIdx
@@ -689,7 +815,8 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                                       : item,
                                   ),
                                 )
-                              }
+                                setIsDirty(true)
+                              }}
                               className="press p-1 text-n-500 hover:text-n-300"
                             >
                               ✕
@@ -702,16 +829,17 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                 </div>
               </div>
 
-              {/* Technical Skills Card */}
+              {/* 4. Technical Skills Card */}
               <div className="rounded-lg border border-line bg-surface p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between border-b border-line pb-3">
                   <p className="text-xs font-semibold tracking-wide text-n-100 uppercase">
                     4. Technical Skills Categories
                   </p>
                   <button
-                    onClick={() =>
-                      setSkills((prev) => [...prev, { line: 'New Category: Skill1, Skill2, Skill3' }])
-                    }
+                    onClick={() => {
+                      setSkills((prev) => [...prev, { line: '' }])
+                      setIsDirty(true)
+                    }}
                     className="press text-micro text-blue-400 hover:text-blue-300"
                   >
                     + Add Category Line
@@ -723,15 +851,19 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                     <div key={sIdx} className="flex items-center gap-2">
                       <Input
                         value={s.line || ''}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setSkills((prev) =>
                             prev.map((item, i) => (i === sIdx ? { ...item, line: e.target.value } : item)),
                           )
-                        }
-                        placeholder="e.g. Languages: JavaScript, Python, C++, SQL"
+                          setIsDirty(true)
+                        }}
+                        placeholder="e.g. Languages: Python, TypeScript, Go, SQL, HTML/CSS"
                       />
                       <button
-                        onClick={() => setSkills((prev) => prev.filter((_, i) => i !== sIdx))}
+                        onClick={() => {
+                          setSkills((prev) => prev.filter((_, i) => i !== sIdx))
+                          setIsDirty(true)
+                        }}
                         className="press p-1 text-n-500 hover:text-n-300"
                       >
                         ✕
@@ -739,6 +871,116 @@ export default function ResumeProfilePage({ profileName, onBack }) {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* 5. Education Card */}
+              <div className="rounded-lg border border-line bg-surface p-5 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <p className="text-xs font-semibold tracking-wide text-n-100 uppercase">
+                    5. Education ({education.length})
+                  </p>
+                  <Button size="sm" onClick={handleAddEducation}>
+                    <Icon.Plus className="size-3" />
+                    <span>Add Degree</span>
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {education.map((edu, eIdx) => (
+                    <div
+                      key={eIdx}
+                      className="rounded-md border border-line bg-n-900/50 p-4 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-n-200">
+                          {edu.degree || 'Degree'} — {edu.institution || 'Institution'}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setEducation((prev) => prev.filter((_, i) => i !== eIdx))
+                            setIsDirty(true)
+                          }}
+                          className="press text-micro text-bad-400 hover:text-bad-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <Field label="Institution">
+                          <Input
+                            value={edu.institution || ''}
+                            onChange={(e) => {
+                              setEducation((prev) =>
+                                prev.map((item, i) =>
+                                  i === eIdx ? { ...item, institution: e.target.value } : item,
+                                ),
+                              )
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Stanford University"
+                          />
+                        </Field>
+                        <Field label="Degree">
+                          <Input
+                            value={edu.degree || ''}
+                            onChange={(e) => {
+                              setEducation((prev) =>
+                                prev.map((item, i) =>
+                                  i === eIdx ? { ...item, degree: e.target.value } : item,
+                                ),
+                              )
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Bachelor of Science in Computer Science"
+                          />
+                        </Field>
+                        <Field label="Period / Dates">
+                          <Input
+                            value={edu.period || ''}
+                            onChange={(e) => {
+                              setEducation((prev) =>
+                                prev.map((item, i) =>
+                                  i === eIdx ? { ...item, period: e.target.value } : item,
+                                ),
+                              )
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. August 2022 to July 2026"
+                          />
+                        </Field>
+                        <Field label="Location">
+                          <Input
+                            value={edu.location || ''}
+                            onChange={(e) => {
+                              setEducation((prev) =>
+                                prev.map((item, i) =>
+                                  i === eIdx ? { ...item, location: e.target.value } : item,
+                                ),
+                              )
+                              setIsDirty(true)
+                            }}
+                            placeholder="e.g. Stanford, CA"
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bottom Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="ghost"
+                  disabled={!isDirty || saving}
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </Button>
+                <Button variant="primary" busy={saving} onClick={handleSaveAll}>
+                  Update Profile
+                </Button>
               </div>
             </m.div>
           )}
