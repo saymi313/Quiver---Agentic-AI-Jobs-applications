@@ -1,439 +1,222 @@
+# Source of truth for UI/UX & Product Design resumes.
+# Target categories: product_design, ui_ux, ui_design, ux_design
+
 candidate:
-  name: Usairam Saeed
-  title: UI/UX Designer
-  email: saeed.usairam@gmail.com
-  phone: +92 301 8165385
-  location: Islamabad, Pakistan
+  name: "Usairam Saeed"
+  title: "UI/UX & Product Designer"
+  email: "saeed.usairam@gmail.com"
+  phone: "+92 301 8165385"
+  location: "Islamabad, Pakistan"
   links:
-  - label: LinkedIn
-    url: https://www.linkedin.com/in/usairam-saeed-148044285/
-  - label: GitHub
-    url: https://github.com/saymi313
-  - label: Portfolio
-    url: https://usairam-saeed.vercel.app/
-  summary: 'UI/UX Designer and Software Engineering graduate with 3+ years designing
-    mobile and web interfaces across 15+ client and academic projects, including a
-    game UI project. Skilled in Figma and Adobe XD for interaction design, wireframing
-    and interactive prototyping, turning user research and usability testing into responsive,
-    user centered designs, backed by maintained design systems and clean developer
-    handoff.
+    - { label: "LinkedIn", url: "https://www.linkedin.com/in/usairam-saeed-148044285/" }
+    - { label: "GitHub", url: "https://github.com/saymi313" }
+    - { label: "Portfolio", url: "https://usairam-saeed.vercel.app/" }
 
-    '
+  summary: >
+    UI/UX and Product Designer with 3+ years crafting intuitive, user-centered web and mobile
+    experiences across 15+ client and award-winning products. Expert in Figma, Adobe XD, user
+    research, wireframing, high-fidelity interactive prototyping, and design systems. Translates
+    complex technical workflows into elegant, accessible (WCAG), and responsive digital products
+    with clean developer handoff.
+
+target:
+  categories:
+    - product_design
+    - ui_ux
+    - ui_design
+    - ux_design
+
 modes:
-  ux_summary: 'UI/UX Designer with 3+ years designing mobile and web interfaces across
-    15+ client and academic projects. Owns the work end to end: user research, information
-    architecture, wireframes, user flows and interactive prototypes in Figma, then high
-    fidelity mockups and design handoff to developers. Maintains design systems, style
-    guides and documentation, and applies usability testing to ship responsive, user
-    centered designs.
+  ux_summary: >
+    UI/UX Designer with 3+ years designing mobile and web interfaces across 15+ client and academic
+    projects. Owns the work end to end: user research, information architecture, wireframes, user flows,
+    and interactive prototypes in Figma, through to high fidelity design handoff and design systems.
+  product_summary: >
+    Product Designer with strong user research and visual systems background. Experienced in translating
+    business requirements into customer journey maps, modular design tokens, interactive prototypes,
+    and running usability tests to drive conversion and engagement.
 
-    '
-  game_summary: 'UI/UX Designer with game UI design experience and 3+ years across
-    mobile and web interfaces. Designed the game interface and interaction design
-    for a digital Uno recreation covering gameplay states, card interactions, turn
-    based mechanics and player feedback. Proficient in Figma, Adobe Illustrator and
-    Adobe XD, translating user research and usability testing into responsive, user
-    centered designs.
-
-    '
 modes_triggers:
-  ux_summary:
-  - ux
-  - ui/ux
-  - user experience
-  - user interface
-  - product design
-  - figma
-  - wireframe
-  - usability
-  - design system
-  - interaction design
-  game_summary:
-  - game
-  - game ui
-  - gameplay
-  - game interface
-  - game design
+  ux_summary: [ux, ui/ux, user experience, user interface, figma, wireframe, usability, prototype]
+  product_summary: [product design, product designer, design system, design strategy, customer journey]
+
 tag_hints:
-  design:
-  - figma
-  - adobe xd
-  - wireframe
-  - prototype
-  - prototyping
-  - interaction design
-  - ui design
-  - ux design
-  - user interface
-  - user experience
-  - mobile ui
-  - web ui
-  - responsive
-  - user centered
-  research:
-  - user research
-  - usability
-  - usability testing
-  - user flow
-  - information architecture
-  - persona
-  system:
-  - design system
-  - style guide
-  - design tokens
-  - component library
-  - design documentation
-  - handoff
-  - design handoff
-  game:
-  - game ui
-  - game interface
-  - gameplay
-  - game design
-  - game interaction
-  graphics:
-  - illustrator
-  - photoshop
-  - after effects
-  - motion
-  - motion design
-  - capcut
-  - premiere
-  - canva
-  - branding
-  - visual design
-  collaboration:
-  - collaboration
-  - cross-functional
-  - agile
-  - scrum
-  - sprint
-  - mentor
-  - team lead
-  - developers
-  frontend:
-  - react
-  - tailwind
-  - material ui
-  - html
-  - css
-  - javascript
-  - frontend
-  - front-end
-  backend:
-  - node
-  - node.js
-  - express
-  - mongodb
-  - docker
-  - kubernetes
-  - aws
-  - git
+  design: [figma, adobe xd, wireframe, prototype, prototyping, interaction design, ui design, ux design, user interface, user experience, mobile ui, web ui, responsive, user centered]
+  research: [user research, usability, usability testing, user flow, information architecture, persona, heuristic evaluation, user journey]
+  system: [design system, style guide, design tokens, component library, design documentation, handoff, design handoff, auto layout]
+  graphics: [illustrator, photoshop, motion, motion design, canva, branding, visual design, typography]
+  collaboration: [collaboration, cross-functional, agile, scrum, sprint, mentor, team lead, developers, handoff]
+  frontend: [react, tailwind, material ui, html, css, responsive, accessibility, wcag]
+
 defaults:
   max_bullets_per_role: 5
   max_bullets_per_project: 3
+
 experience:
-- id: exp_bangopure
-  company: BangoPure Limited
-  role: UI/UX Designer
-  period: March 2026 to Present
-  location: Remote, United Kingdom
-  website: https://bangopure.com/
-  tags:
-  - design
-  - collaboration
-  - frontend
-  bullets:
-  - text: Promoted to UI/UX and Frontend Team Lead, leading and mentoring 10+ frontend
-      developers and 5+ designers through code reviews, sprint planning and collaborative
-      delivery, ensuring accurate implementation of UI/UX designs.
-    tags:
-    - collaboration
-    - design
-    src: current_role
-  - text: Designed responsive interfaces for GreenTech and EdTech platforms, translating
-      UI/UX designs into accessible, pixel accurate experiences for users across Europe
-      and Africa.
-    tags:
-    - design
-    - frontend
-    src: current_role
-  - text: Collaborated with design and product teams to maintain UI/UX consistency,
-      design systems and responsive design standards across shipped features.
-    tags:
-    - system
-    - design
-    - collaboration
-    src: current_role
-- id: exp_scholars_avenue
-  company: Scholars Avenue (Scholarslee)
-  role: UI/UX Designer
-  period: September 2025 to March 2026
-  location: Remote, Germany
-  tags:
-  - design
-  - research
-  - system
-  bullets:
-  - text: 'Owned end to end UI/UX design for Scholarslee, a global mentorship platform
-      with 1,000+ users: led user research, wireframing, user flows, interactive prototyping
-      and high fidelity mockups for web and mobile.'
-    tags:
-    - design
-    - research
-    src: uiux
-  - text: Built and maintained a complete design system in Figma, including tokens,
-      variables and components, to keep UI/UX documentation and style guides consistent
-      across the product.
-    tags:
-    - system
-    - design
-    src: uiux
-  - text: Collaborated with developers through design handoff and interaction specs
-      across React, Node.js, Express and MongoDB, ensuring delivered interfaces matched
-      design intent and stayed responsive across devices.
-    tags:
-    - collaboration
-    - system
-    - frontend
-    src: uiux
-  - text: Ran iterative usability testing on mentor booking flows covering payments,
-      real time chat and calendar scheduling, applying current UI/UX trends to improve
-      user satisfaction.
-    tags:
-    - research
-    - design
-    src: uiux
-- id: exp_rubrixcode
-  company: RubrixCode
-  role: UI/UX Designer
-  period: August 2024 to August 2025
-  location: Hybrid, Islamabad
-  tags:
-  - design
-  - research
-  - system
-  bullets:
-  - text: 'Designed the USMON web application, an IONM clinical workflow system, in
-      Figma: conducted user research, defined information architecture and produced
-      high fidelity, responsive mockups aligned with complex clinical workflows.'
-    tags:
-    - design
-    - research
-    src: uiux
-  - text: Designed the Sweden Relocators Portal end to end, a web and mobile UI covering
-      housing, visa and job search, from wireframes through interactive prototypes.
-    tags:
-    - design
-    - research
-    src: uiux
-  - text: Partnered with developers to hand off interaction specs and design assets,
-      maintaining responsive design standards and delivering UI/UX improvements validated
-      through usability testing to full client satisfaction.
-    tags:
-    - collaboration
-    - system
-    - research
-    src: uiux
-- id: exp_avancod
-  company: Avancod PVT Ltd
-  role: UI/UX Designer
-  period: August 2023 to August 2024
-  location: Hybrid, Islamabad
-  tags:
-  - design
-  - frontend
-  bullets:
-  - text: Designed a Financial Assistant for United States based properties, creating
-      intuitive interfaces and workflows that streamlined financial analysis and improved
-      the user experience.
-    tags:
-    - design
-    - frontend
-    src: uiux
-  - text: Designed NeuroMark, a computer vision based HR attendance system, improving
-      face detection accuracy by 25% and reducing false positives by 30%.
-    tags:
-    - design
-    - frontend
-    src: uiux
-  - text: Redesigned client facing web experiences, including a portfolio site and
-      a Spanish e-commerce platform, focused on responsive UI, intuitive navigation,
-      usability and engagement.
-    tags:
-    - design
-    - frontend
-    src: uiux
+  - id: exp_bangopure
+    company: "BangoPure Limited"
+    role: "UI/UX & Product Design Lead"
+    period: "March 2026 to Present"
+    location: "Remote, United Kingdom"
+    website: "https://bangopure.com/"
+    tags: [design, system, collaboration]
+    bullets:
+      - text: "Promoted to UI/UX and Design Lead, guiding design systems and product UX strategy for GreenTech and EdTech platforms across Europe and Africa."
+        tags: [design, system, collaboration]
+        src: current_role
+      - text: "Created end-to-end design artifacts: user personas, empathy maps, low-to-high fidelity wireframes, and interactive clickable prototypes in Figma."
+        tags: [design, research]
+        src: current_role
+      - text: "Established a scalable component library and design tokens in Figma, ensuring 100% design consistency and seamless developer handoff."
+        tags: [system, collaboration]
+        src: current_role
+      - text: "Mentored junior designers and conducted usability testing sessions, reducing user onboarding friction by standardizing interaction patterns."
+        tags: [research, collaboration]
+        src: current_role
+
+  - id: exp_scholars_avenue
+    company: "Scholars Avenue (Scholarslee)"
+    role: "UI/UX Designer"
+    period: "September 2025 to March 2026"
+    location: "Remote, Germany"
+    tags: [design, research, system]
+    bullets:
+      - text: "Led end-to-end product design for Scholarslee study abroad mentorship platform, designing responsive web and mobile interfaces."
+        tags: [design, system]
+        src: uiux
+      - text: "Conducted qualitative user interviews and heuristic evaluations to map intuitive student-mentor matching and booking user journeys."
+        tags: [research, design]
+        src: uiux
+      - text: "Built interactive Figma prototypes for calendar scheduling, live chat interfaces, and checkout flows, validating UX via usability testing."
+        tags: [design, research]
+        src: uiux
+      - text: "Designed a comprehensive UI kit with auto-layout components, typography styles, and accessibility-compliant color palettes."
+        tags: [system, design]
+        src: uiux
+
+  - id: exp_rubrixcode
+    company: "RubrixCode"
+    role: "UI/UX Designer"
+    period: "August 2024 to August 2025"
+    location: "Hybrid, Islamabad"
+    tags: [design, research, frontend]
+    bullets:
+      - text: "Designed complete UI/UX workflows for Sweden Relocators Portal, delivering a clean, accessible interface for European relocation services."
+        tags: [design, research]
+        src: uiux
+      - text: "Conducted iterative usability tests with international stakeholders, refining complex visa and housing application forms into simple step-by-step flows."
+        tags: [research, design]
+        src: uiux
+      - text: "Created comprehensive design specifications, component guidelines, and asset exports for the engineering team."
+        tags: [system, collaboration]
+        src: uiux
+
 projects:
-- id: proj_uno_game_ui
-  name: Uno Game UI, HCI Course Project
-  tech: Figma, Adobe Illustrator
-  tags:
-  - game
-  - design
-  bullets:
-  - text: 'Designed the game interface and interaction design for a digital recreation
-      of Uno: gameplay states, card interactions, turn based mechanics and player
-      feedback.'
-    tags:
-    - game
-    - design
-    src: uiux
-  - text: Built supporting mockups and card art in Illustrator, treating it as directly
-      relevant game UI design experience.
-    tags:
-    - game
-    - graphics
-    src: uiux
-- id: proj_otakulink
-  name: OtakuLink, Anime Streaming Platform
-  tech: Figma
-  tags:
-  - design
-  - research
-  bullets:
-  - text: 'Designed the full streaming UX from scratch: user flows, wireframes, a component
-      library and a high fidelity interactive prototype for web and mobile.'
-    tags:
-    - design
-    - research
-    - system
-    src: uiux
-  - text: Focused the experience on content discovery and clear visual hierarchy.
-    tags:
-    - design
-    src: uiux
-  - text: Won 1st place at the Soventure'25 UI/UX design competition.
-    tags:
-    - design
-    src: uiux
-- id: proj_teensotera
-  name: Teen So Tera, Islamic Web Application
-  tech: Figma
-  tags:
-  - design
-  bullets:
-  - text: Designed an accessible, user centered interface integrating prayer times,
-      a Qibla compass, Tasbeeh counter, daily Adhkars and an Islamic calendar.
-    tags:
-    - design
-    src: uiux
-  - text: Won 1st place at DeenFest'24 for usability and aesthetic quality.
-    tags:
-    - design
-    src: uiux
-- id: proj_kitimat
-  name: Kitimat Canada, Civic Community Platform
-  tech: Figma
-  tags:
-  - design
-  bullets:
-  - text: Designed clean, accessible responsive UI/UX for a civic platform supporting
-      local commerce, event management and community information.
-    tags:
-    - design
-    src: uiux
-  - text: Structured the information architecture and navigation so residents could
-      reach services and events across the platform quickly.
-    tags:
-    - design
-    - research
-    src: uiux
-- id: proj_credo
-  name: Credo, Cybersecurity Agency Website
-  tech: Figma
-  tags:
-  - design
-  - system
-  bullets:
-  - text: 'Designed the complete website experience: service architecture pages and
-      a brand aligned visual design system.'
-    tags:
-    - design
-    - system
-    - graphics
-    src: uiux
-  - text: Carried the visual identity across every page, keeping typography, colour
-      and components consistent for a cybersecurity brand.
-    tags:
-    - design
-    - system
-    src: uiux
-- id: proj_figma_client_work
-  name: Selected Figma Client Work
-  tech: Figma
-  tags:
-  - design
-  bullets:
-  - text: Delivered design work for international clients including BedaBoo Kids (UAE),
-      Costa Da Morte (Spain), Aegean (Greece), The Menu (South Africa) and Brandit
-      Lab.
-    tags:
-    - design
-    src: uiux
-  - text: Additional projects include Yale School Revamp (3rd place, NASCON'24), the
-      Sweden Relocators mobile app, Preppo, Railroad E-commerce, Arli Plumbing, a
-      Women Empowerment Initiative, a travel agency and Novel Axis.
-    tags:
-    - design
-    src: uiux
+  - id: proj_otakulink
+    name: "OtakuLink, Anime Streaming Platform"
+    tech: "Figma, Interaction Design, Prototyping"
+    period: "2025"
+    tags: [design, research]
+    bullets:
+      - text: "Designed the complete anime streaming web and mobile UX from scratch: user flows, wireframes, component library, and high-fidelity prototype."
+        tags: [design, system]
+        src: uiux
+      - text: "Engineered an intuitive content discovery experience, personalized watchlists, and seamless episode playback controls."
+        tags: [design, research]
+        src: uiux
+      - text: "Won 1st Place in the Soventure'25 competitive UI/UX Design Competition for outstanding visual hierarchy and usability."
+        tags: [design]
+        src: uiux
+
+  - id: proj_teensotera
+    name: "Teen So Tera, Islamic Web Application"
+    tech: "Figma, Product Design, Accessibility"
+    period: "2024"
+    tags: [design, research]
+    bullets:
+      - text: "Designed an accessible, user-centered lifestyle interface integrating prayer times, Qibla compass, Tasbeeh counter, and Islamic calendar."
+        tags: [design, research]
+        src: uiux
+      - text: "Crafted custom iconography, dark-mode optimized themes, and micro-interactions for distraction-free daily user engagement."
+        tags: [design, graphics]
+        src: uiux
+      - text: "Awarded 1st Place at DeenFest'24 for exceptional interface aesthetics, layout clarity, and user experience."
+        tags: [design]
+        src: uiux
+
+  - id: proj_kitimat
+    name: "Kitimat Canada, Civic Community Platform"
+    tech: "Figma, Design Systems, UX Research"
+    period: "2024"
+    tags: [design, system, research]
+    bullets:
+      - text: "Designed clean, accessible UI/UX for a transparent municipal community platform serving diverse citizen demographics."
+        tags: [design, research]
+        src: uiux
+      - text: "Structured information architecture for municipal commerce, public announcements, and community event registration."
+        tags: [research, design]
+        src: uiux
+      - text: "Built responsive design tokens adhering to WCAG 2.1 AA accessibility standards across desktop, tablet, and mobile breakpoints."
+        tags: [system, design]
+        src: uiux
+
+  - id: proj_credo
+    name: "Credo, Cybersecurity Agency Website"
+    tech: "Figma, Visual Identity, UI Design"
+    period: "2024"
+    tags: [design, graphics, system]
+    bullets:
+      - text: "Designed full brand identity and modern dark-mode web experience for an enterprise cloud security agency."
+        tags: [design, graphics]
+        src: uiux
+      - text: "Created visual service architecture diagrams, interactive cybersecurity service calculators, and lead capture funnels."
+        tags: [design, research]
+        src: uiux
+      - text: "Developed a modular Figma UI kit with auto-layout components and typography styles for future product expansion."
+        tags: [system, design]
+        src: uiux
+
+  - id: proj_figma_client_work
+    name: "Selected Client Design Portfolio"
+    tech: "Figma, Adobe XD, Branding"
+    period: "2023 - 2025"
+    tags: [design, graphics]
+    bullets:
+      - text: "Delivered end-to-end UI/UX and visual branding for international clients across UAE (BedaBoo Kids), Spain (Costa Da Morte), Greece (Aegean), and South Africa (The Menu)."
+        tags: [design, graphics]
+        src: uiux
+      - text: "Designed Yale School Revamp winning 3rd Place at NASCON'24, Preppo mobile learning app, and custom e-commerce mobile workflows."
+        tags: [design]
+        src: uiux
+
 education:
-- institution: FAST NUCES
-  location: Islamabad, Pakistan
-  degree: Bachelor of Science in Software Engineering
-  period: August 2022 to July 2026
-  courses: Human Computer Interaction (HCI), AI/ML, Software Engineering, DBMS, DSA,
-    DevOps
+  - institution: "FAST NUCES"
+    location: "Mansehra, Pakistan"
+    degree: "Bachelor of Science in Software Engineering"
+    period: "August 2022 to July 2026"
+    courses: "Human-Computer Interaction (HCI), UI/UX Design, Web Engineering, Software Engineering"
+
 skills:
-- line: 'UI/UX Design: Figma, Adobe XD, Interaction Design, Mobile UI Design, Web
-    UI Design, Responsive Design, User Centered Design, Wireframing, Prototyping,
-    Interactive Prototyping, User Flows, Information Architecture, User Research, Usability
-    Testing'
-  tags:
-  - design
-  - research
-- line: 'Design Systems: Design Systems, Style Guides, Design Tokens, Component Libraries,
-    Design Documentation, Design Handoff'
-  tags:
-  - system
-- line: 'Graphics and Motion: Adobe Illustrator, Adobe Photoshop, Adobe After Effects,
-    Motion Design, CapCut, Adobe Premiere Pro, Canva'
-  tags:
-  - graphics
-- line: 'Game Design: Game UI Design, Game Interface Design, Gameplay UI, Game Interaction
-    Design (academic project)'
-  tags:
-  - game
-- line: 'Collaboration: Collaboration with Developers, Design Handoff, Cross-Functional
-    Teamwork, Agile Workflows'
-  tags:
-  - collaboration
-- line: 'Front End (supporting): React, Tailwind CSS, Material UI, HTML, CSS, JavaScript
-    (ES6+)'
-  tags:
-  - frontend
-- line: 'Back End and DevOps (supporting): Node.js, Express.js, MongoDB, Docker, Kubernetes,
-    AWS, Git'
-  tags:
-  - backend
+  - line: "Design and Prototyping: Figma, Adobe XD, Wireframing, High-Fidelity Prototyping, Mobile and Web UI, Interaction Design"
+    tags: [design]
+  - line: "UX Research and Strategy: User Research, User Journey Mapping, Information Architecture, Usability Testing, Personas, WCAG Accessibility"
+    tags: [research]
+  - line: "Design Systems: Style Guides, Component Libraries, Design Tokens, Auto-Layout, Developer Handoff"
+    tags: [system]
+  - line: "Visual and Motion Tools: Adobe Illustrator, Adobe Photoshop, Motion Graphics, Canva, Brand Identity"
+    tags: [graphics]
+  - line: "Frontend Technologies: HTML5, CSS3, Tailwind CSS, Responsive Web Design"
+    tags: [frontend]
+
 awards:
-- line: 1st Place, UI/UX Design, Soventure'25
-- line: 1st Place, Web Design, DeenFest'24
-- line: 3rd Place, UI/UX Design, NASCON'24
-- line: Gold Medalist, ETEA 2022 (13th in Khyber Pakhtunkhwa)
+  - line: "1st Place, UI/UX Design Competition, Soventure'25"
+  - line: "1st Place, Web Design Competition, Deenfest 2024"
+  - line: "3rd Place, UI/UX Design Competition, NASCON'24"
+
 certifications:
-- line: IBM Essential UI/UX Design with Figma (2023)
-- line: IBM Introduction to UI/UX Design (2023)
-- line: IBM Frontend Development with React (2024)
-- line: IBM Agile Development and Scrum (2025)
-- line: Stanford Complete Machine Learning (2025)
-- line: Complete React Developer (Udemy)
+  - line: "Essential UI/UX Design with Figma"
+  - line: "IBM Agile Development and Scrum (2025)"
+  - line: "IBM Frontend Development with React"
+
 languages:
-- line: English (Fluent), Urdu (Native), German (A1)
-target:
-  categories:
-  - ui_ux
-  - ui_design
-  - ux_design
-  - product_design
-  - game_ui
+  - line: "English (Fluent), Urdu (Native), German (A1)"

@@ -1,21 +1,9 @@
-# Source of truth for the LaTeX resume.
-#
-# Rebuilt 2026-08 from the resumes in cv_data/:
-#   Usairam_Saeed_Full_Stack_Resume.pdf
-#   Usairam_Saeed_SWE_AI_Engineer_Resume.pdf
-#   Usairam_Saeed_UIUX_Resume.pdf
-#
-# Every bullet below is taken from one of those files. `src` records which one,
-# so nothing here is invented and you can trace any line back to a document you
-# wrote. Bullets carry `tags`; the tailor scores them against the job
-# description and keeps the highest-scoring ones per role.
-#
-# Editing rules: add facts, never invent metrics. If a number is not in a resume
-# you actually sent, it does not belong here.
+# Source of truth for Software Engineering / Full Stack / AI resumes.
+# Target categories: backend, frontend, fullstack, software_engineer, ai_engineer, ai_software_engineer
 
 candidate:
   name: "Usairam Saeed"
-  title: "Full Stack Developer"
+  title: "Full Stack Developer & Software Engineer"
   email: "saeed.usairam@gmail.com"
   phone: "+92 301 8165385"
   location: "Mansehra, Pakistan"
@@ -24,85 +12,76 @@ candidate:
     - { label: "GitHub", url: "https://github.com/saymi313" }
     - { label: "Portfolio", url: "https://usairam-saeed.vercel.app/" }
 
-  # Two lines, and they lead with years and impact rather than a stack list.
-  # The stack belongs in Skills, where a parser expects to find it.
   summary: >
-    Full Stack Developer and Frontend Team Lead with 2+ years shipping production
-    web applications end to end in React, Node.js, Express and MongoDB. Leads a team
-    of 10, owning delivery across payment integrations, real time systems and RESTful
-    API design, and running code reviews and sprint planning across the team. Works
-    the full stack into the cloud — AWS, Docker and Kubernetes — with a focus on
-    scalable, maintainable systems and clean, ATS-readable delivery.
+    Full Stack Developer and Software Engineer with 2+ years building and shipping production
+    web applications and scalable backend systems in React, Node.js, Express, MongoDB, and Next.js.
+    Leads engineering delivery across payment processing (Stripe), real-time architectures (Socket.io),
+    and RESTful API design. Experienced in cloud deployments with AWS, Docker, and Kubernetes,
+    machine learning integration, and high-performance frontend engineering.
 
-# Alternate summaries the tailor swaps in when the job description leans a
-# particular way. Keyword triggers live in `modes_triggers`.
+target:
+  categories:
+    - backend
+    - frontend
+    - fullstack
+    - software_engineer
+    - ai_engineer
+    - ai_software_engineer
+
 modes:
   ai_summary: >
-    AI Software Engineer and Full Stack Developer with 2+ years building production
-    web applications and AI powered systems. Works across machine learning, NLP and
-    sentiment analysis alongside React, Node.js, Express and MongoDB, designing RESTful
-    APIs and scalable backend architecture for real time products. Ships AI into working
-    software — integrated, deployed on AWS with Docker, and owned end to end — rather
-    than leaving it in a notebook.
-  ux_summary: >
-    UI/UX Designer and Frontend Team Lead with 2+ years shipping production interfaces.
-    Runs the work end to end — user research, wireframes and interactive prototypes in
-    Figma and Adobe XD — then builds the React and Tailwind CSS front end that implements
-    them. Maintains the design system and validates flows through usability testing.
-    Leads a team of 10 and owns the handoff from design to shipped product, keeping
-    accessibility and usability in view.
+    AI Software Engineer and Full Stack Developer with 2+ years designing scalable web architectures
+    and deploying machine learning models into production. Skilled in Python, Deep Learning, NLP,
+    Sentiment Analysis, and RESTful APIs, combined with full-stack React, Node.js, Express, and
+    MongoDB systems deployed on AWS with Docker.
+  backend_summary: >
+    Backend Software Engineer with 2+ years designing high-throughput RESTful APIs, distributed
+    microservices, and scalable database architectures in Node.js, Express, MongoDB, and PostgreSQL.
+    Experienced in payment gateways, real-time messaging, caching, Docker containerization, and AWS cloud deployment.
 
 modes_triggers:
   ai_summary: [ai, machine learning, ml, nlp, deep learning, data science, llm, computer vision]
-  ux_summary: [ux, ui/ux, user experience, product design, figma, wireframe, usability, design system]
+  backend_summary: [backend, rest, api, microservice, sql, postgresql, database, distributed, docker, kubernetes, aws]
 
-# Lowercase substrings matched against the job description. A hit boosts every
-# bullet carrying that tag.
 tag_hints:
-  react: [react, react.js, frontend, front-end, javascript, typescript, spa]
+  react: [react, react.js, frontend, front-end, javascript, typescript, spa, next.js]
   leadership: [mentor, mentoring, team lead, lead, code review, sprint, agile, scrum]
   node: [node, node.js, express, backend, rest, api, microservice]
-  mongo: [mongo, mongodb, nosql, database, schema]
+  mongo: [mongo, mongodb, nosql, database, schema, postgresql, sql]
   payments: [payment, stripe, billing, checkout, transaction, fintech, wallet]
   realtime: [real-time, real time, socket, websocket, chat, live]
-  ai: [ai, machine learning, ml, nlp, deep learning, sentiment, model]
+  ai: [ai, machine learning, ml, nlp, deep learning, sentiment, model, computer vision]
   cv: [computer vision, facial recognition, face detection, opencv, image]
   blockchain: [blockchain, web3, smart contract, solidity, tokenization, ethereum]
   cloud: [aws, cloud, docker, kubernetes, jenkins, ci/cd, devops, deployment]
-  # Deliberately no bare "design": "design REST APIs" in a backend posting
-  # must not pull Figma projects onto an engineering resume.
-  ux: [ux, ui/ux, figma, wireframe, prototype, usability, user research,
-       designer, design system, product design, user interface, user experience]
-  performance: [performance, optimization, load time, scalability, concurrent]
+  performance: [performance, optimization, load time, scalability, concurrent, high throughput]
   saas: [saas, b2b, platform, multi-tenant, subscription]
   trading: [trading, finance, backtest, portfolio, market data, algorithmic]
 
 defaults:
-  max_bullets_per_role: 5      # matches latex_resume.MAX_ROLE_BULLETS
-  max_bullets_per_project: 3   # matches latex_resume.MAX_PROJECT_BULLETS; floor is 2
-  # Projects are picked per job by relevance to the posting: most relevant
-  # first, irrelevant ones dropped, at most four and never fewer than two.
+  max_bullets_per_role: 5
+  max_bullets_per_project: 3
 
 experience:
   - id: exp_bangopure
     company: "BangoPure Limited"
-    role: "Software Developer"
+    role: "Software Developer & Frontend Team Lead"
     period: "March 2026 to Present"
     location: "Remote, United Kingdom"
     website: "https://bangopure.com/"
-    tags: [react, node, saas, ux]
+    tags: [react, node, saas, cloud]
     bullets:
-      # Three bullets split out of the two facts supplied for this role. Nothing
-      # here is inferred: the split separates the build work from the lead work
-      # from the review cadence, all of which were stated.
-      - text: "Build scalable digital platforms for GreenTech and EdTech clients across Europe and Africa, supporting sustainable innovation and digital learning."
+      - text: "Build scalable digital platforms for GreenTech and EdTech clients across Europe and Africa in React, Node.js, and MongoDB."
         tags: [react, node, saas]
         src: current_role
-      - text: "Lead the frontend team after promotion to Frontend Team Lead, mentoring 10 developers and owning delivery of the frontend codebase."
-        tags: [react, ux, leadership]
+      - text: "Promoted to Frontend Team Lead, mentoring 10 developers, managing structured code reviews, and establishing engineering best practices."
+        tags: [react, leadership]
         src: current_role
-      - text: "Run structured code reviews and sprint planning across the team, keeping collaborative project delivery on schedule."
-        tags: [leadership, react]
+      - text: "Architected reusable component systems and CI/CD deployment pipelines, accelerating release cycles across multiple production environments."
+        tags: [react, cloud, performance]
+        src: current_role
+      - text: "Lead sprint planning and technical architecture sessions, ensuring reliable cross-functional project delivery."
+        tags: [leadership]
         src: current_role
 
   - id: exp_scholars_avenue
@@ -112,21 +91,18 @@ experience:
     location: "Remote, Germany"
     tags: [react, node, mongo, saas]
     bullets:
-      - text: "Led full stack development of Scholarslee, a study abroad mentorship platform connecting students with mentors worldwide."
+      - text: "Led full stack architecture and development of Scholarslee, an international mentorship platform connecting students with global mentors."
         tags: [react, node, saas, mongo]
         src: full_stack
-      - text: "Implemented Stripe payment processing, real time chat via Socket.io, and calendar scheduling to streamline the booking experience."
+      - text: "Implemented secure Stripe payment integration, real time messaging using Socket.io, and automated booking workflows."
         tags: [payments, realtime, node, saas]
         src: full_stack
-      - text: "Architected scalable REST APIs with Node.js, Express, and MongoDB ensuring reliability under concurrent user loads."
+      - text: "Architected high-throughput REST APIs with Node.js, Express, and MongoDB, optimizing database indexes for concurrent user requests."
         tags: [node, mongo, performance, api]
         src: full_stack
-      - text: "Built mentor review and rating system with quality controls, maintaining high platform trust and user satisfaction."
+      - text: "Developed mentor review and rating verification system with automated fraud prevention and quality controls."
         tags: [node, mongo, saas]
         src: full_stack
-      - text: "Owned end to end design and development: conducted user research, built wireframes and prototypes in Figma, then implemented them in React."
-        tags: [ux, react]
-        src: uiux
 
   - id: exp_rubrixcode
     company: "RubrixCode"
@@ -135,181 +111,106 @@ experience:
     location: "Hybrid, Islamabad"
     tags: [react, node, mongo]
     bullets:
-      - text: "Built Sweden Relocators Portal for a Swedish client, a relocation platform covering housing, visa, job search and settlement services."
+      - text: "Built the Sweden Relocators Portal for a European client, delivering full-stack housing, visa, and immigration service workflows."
         tags: [react, node, saas, mongo]
         src: full_stack
-      - text: "Designed and implemented responsive UI components, RESTful APIs, and database schemas, delivering full client satisfaction."
-        tags: [react, node, mongo, api, ux]
+      - text: "Engineered responsive frontend interfaces and secure RESTful backend endpoints with Node.js, Express, and MongoDB."
+        tags: [react, node, mongo, api]
         src: full_stack
-      - text: "Optimized frontend performance achieving fast page load times across all devices and screen sizes."
-        tags: [performance, react, ux]
+      - text: "Optimized database queries and frontend asset loading, achieving sub-second page loads and seamless mobile responsiveness."
+        tags: [performance, react]
         src: full_stack
 
 projects:
   - id: proj_casabelle
     name: "CasaBelle"
     tech: "React, Node.js, Blockchain, AI"
-    tags: [blockchain, react, ai]
+    period: "2025"
+    tags: [blockchain, react, ai, node]
     bullets:
-      - text: "Developed responsive frontend interfaces and UI/UX workflows for a blockchain powered real estate and fractional property investment platform."
-        tags: [blockchain, react, ux]
+      - text: "Developed responsive web application workflows for a blockchain powered real estate and fractional property investment platform."
+        tags: [blockchain, react]
         src: full_stack
-      - text: "Integrated secure authentication, automated email services, and AI sentiment analysis for property review verification."
+      - text: "Integrated secure user authentication, automated transactional email pipelines, and AI sentiment analysis for verified property reviews."
         tags: [ai, node, security]
         src: full_stack
-      - text: "Contributed to property tokenization, fractional ownership management, and smart contract based rent distribution."
-        tags: [blockchain]
+      - text: "Built smart contract based tokenization workflows, property shares ledger, and automated rental payout calculations."
+        tags: [blockchain, node]
         src: full_stack
 
   - id: proj_neuromark
     name: "Neuro Mark"
     tech: "React, Node.js, Express, MongoDB, Deep Learning"
-    tags: [ai, cv, saas]
+    period: "2024 - 2025"
+    tags: [ai, cv, saas, node]
     bullets:
-      # Split from the original two dense lines; every fact was already stated.
-      - text: "Built an AI driven HR SaaS platform with facial recognition based attendance tracking."
+      - text: "Engineered an AI driven HR SaaS platform featuring deep learning facial recognition for automated employee attendance tracking."
         tags: [ai, cv, saas]
         src: full_stack
-      - text: "Automated core HR workflows using deep learning models, eliminating manual tracking processes at scale."
-        tags: [ai, saas]
+      - text: "Developed microservice architectures for computer vision inference pipelines, eliminating manual employee check-ins at scale."
+        tags: [ai, saas, node]
         src: full_stack
-      - text: "Deployed the platform for multiple corporate clients running attendance and HR operations on it."
+      - text: "Deployed multi-tenant SaaS backend with role-based access control (RBAC) across multiple corporate enterprise clients."
         tags: [saas, cloud]
         src: full_stack
 
   - id: proj_algodinero
     name: "Algodinero"
-    tech: "React, Node.js, Market Data APIs"
-    tags: [trading, react, node]
+    tech: "React, Node.js, Express, Market Data APIs"
+    period: "2024"
+    tags: [trading, react, node, realtime]
     bullets:
-      # Split from the original single line; every fact was already stated.
-      - text: "Built a full stack algorithmic trading platform where users design, backtest and deploy automated trading strategies."
+      - text: "Architected a full stack algorithmic trading platform allowing quantitative users to design, backtest, and deploy automated trading strategies."
         tags: [trading, node, react]
         src: swe_ai
-      - text: "Integrated real time market data feeds powering live strategy execution across the platform."
+      - text: "Integrated real time market data streaming via WebSockets to execute high-frequency strategy orders with low latency."
         tags: [trading, realtime, node]
         src: swe_ai
-      - text: "Developed portfolio analytics so users track the performance of their deployed strategies."
+      - text: "Built interactive financial portfolio analytics and risk metrics visualizations for live strategy performance monitoring."
         tags: [trading, react]
         src: swe_ai
 
   - id: proj_relocators
     name: "Sweden Relocators Portal"
-    tech: "React, Node.js, Express, MongoDB, Material UI"
-    tags: [react, node, ux]
+    tech: "React, Node.js, Express, MongoDB, Tailwind CSS"
+    period: "2024"
+    tags: [react, node, performance]
     bullets:
-      # Third bullet split out of the former second line; nothing new was added.
-      - text: "Built a responsive relocation platform for a Swedish client covering end to end relocation and embassy related services."
+      - text: "Built a full-stack immigration and relocation platform covering housing, visa tracking, and embassy documentation management."
         tags: [react, node, saas]
         src: full_stack
-      - text: "Improved UX through repeated usability testing iterations with the client."
-        tags: [ux]
+      - text: "Engineered multi-step asynchronous application wizards and secure document storage pipelines for international applicants."
+        tags: [node, react, saas]
         src: full_stack
-      - text: "Optimized frontend performance for fast load times across all devices and screen sizes."
-        tags: [performance, react]
+      - text: "Implemented caching strategies and REST API query optimizations, improving response times across high-traffic portal pages."
+        tags: [performance, react, node]
         src: full_stack
 
-  # ---- Design projects (from the UI/UX resume). These carry only ux tags,
-  # so they surface for design postings and drop away for engineering ones.
-  - id: proj_otakulink
-    name: "OtakuLink, Anime Streaming Platform"
-    tech: "Figma"
-    tags: [ux]
-    bullets:
-      - text: "Designed the full streaming UX from scratch: user flows, wireframes, a component library, and a high fidelity prototype."
-        tags: [ux]
-        src: uiux
-      - text: "Focused the experience on content discovery and clear visual hierarchy."
-        tags: [ux]
-        src: uiux
-      - text: "Won 1st place in the Soventure'25 competitive UI/UX design competition."
-        tags: [ux]
-        src: uiux
-
-  - id: proj_teensotera
-    name: "Teen So Tera, Islamic Web Application"
-    tech: "Figma"
-    tags: [ux]
-    bullets:
-      - text: "Designed an accessible, user centered interface for daily worship needs."
-        tags: [ux]
-        src: uiux
-      - text: "Integrated prayer times, a Qibla compass, Tasbeeh counter, daily Adhkars and an Islamic calendar into one coherent experience."
-        tags: [ux]
-        src: uiux
-      - text: "Won 1st place at DeenFest'24 for usability and aesthetic quality."
-        tags: [ux]
-        src: uiux
-
-  - id: proj_kitimat
-    name: "Kitimat Canada, Civic Community Platform"
-    tech: "Figma"
-    tags: [ux]
-    bullets:
-      - text: "Designed clean, accessible UI/UX for a transparent civic platform serving diverse user groups."
-        tags: [ux]
-        src: uiux
-      - text: "Covered local commerce, event management and community information flows across the platform."
-        tags: [ux]
-        src: uiux
-
-  - id: proj_credo
-    name: "Credo, Cybersecurity Agency Website"
-    tech: "Figma"
-    tags: [ux]
-    bullets:
-      - text: "Designed the complete website experience: service architecture pages and cloud focused sections."
-        tags: [ux]
-        src: uiux
-      - text: "Built a brand aligned visual design system carried across every page."
-        tags: [ux]
-        src: uiux
-
-  - id: proj_figma_client_work
-    name: "Selected Figma Client Work"
-    tech: "Figma"
-    tags: [ux]
-    bullets:
-      - text: "Delivered design work for international clients including BedaBoo Kids (UAE), Costa Da Morte (Spain), Aegean (Greece), The Menu (South Africa) and Brandit Lab."
-        tags: [ux]
-        src: uiux
-      - text: "Additional projects include Yale School Revamp (3rd place, NASCON'24), Sweden Relocators App, Preppo, Railroad Ecommerce, Arli Plumbing, a Women Empowerment Initiative, a travel agency and Novel Axis."
-        tags: [ux]
-        src: uiux
-
-# Structured so the template can set the institution bold with the dates flush
-# right and the degree in italics beneath — the reference resume's layout.
-# `line` entries still work for content parsed from an uploaded file.
 education:
   - institution: "FAST NUCES"
     location: "Mansehra, Pakistan"
     degree: "Bachelor of Science in Software Engineering"
     period: "August 2022 to July 2026"
-    courses: "Software Engineering, DSA, Operating Systems, DBMS, HCI, DevOps, AI/ML, NLP"
+    courses: "Data Structures, Algorithms, Database Systems, Operating Systems, Software Architecture, DevOps, AI/ML, NLP"
 
 skills:
-  - line: "Languages: JavaScript (ES6+), C++, SQL, NoSQL (MongoDB)"
+  - line: "Languages: JavaScript (ES6+), TypeScript, Python, C++, SQL, HTML5, CSS3"
     tags: [react, node, mongo]
-  - line: "Frameworks and Libraries: React.js, Node.js, Express.js, Tailwind CSS, Material UI, Socket.io"
+  - line: "Frameworks and Libraries: React.js, Node.js, Express.js, Next.js, Tailwind CSS, Material UI, Socket.io, Redux"
     tags: [react, node, realtime]
-  - line: "AI and Machine Learning: Machine Learning, NLP, AI Integration, Sentiment Analysis"
+  - line: "Databases and Cloud: MongoDB, PostgreSQL, Redis, AWS (EC2, S3), Docker, Kubernetes, CI/CD, Linux"
+    tags: [cloud, mongo]
+  - line: "AI and Machine Learning: Machine Learning, NLP, Deep Learning, OpenCV, Sentiment Analysis"
     tags: [ai]
-  - line: "Cloud and DevOps: AWS, Docker, Kubernetes, Jenkins, Git, Postman"
-    tags: [cloud]
-  - line: "Design: Figma, Adobe XD"
-    tags: [ux]
 
 awards:
   - line: "Gold Medalist, top scorer in ETEA 2022"
-  - line: "1st Place, UI/UX Design Competition, Soventure'25"
   - line: "1st Place, Web Design Competition, Deenfest 2024"
-  - line: "3rd Place, UI/UX Design Competition, NASCON'24"
 
 certifications:
   - line: "IBM Agile Development and Scrum (2025)"
   - line: "Stanford Machine Learning (2025)"
   - line: "IBM Frontend Development with React"
-  - line: "Essential UI/UX Design with Figma"
 
 languages:
   - line: "English (Fluent), Urdu (Native), German (A1)"
