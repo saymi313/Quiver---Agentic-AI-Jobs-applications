@@ -62,6 +62,45 @@ export default function OutreachTab() {
   const [openTasks, setOpenTasks] = useState(false)
   const [openContacts, setOpenContacts] = useState(false)
 
+  // Warm Referral & Alumni outreach
+  const [alumniCompany, setAlumniCompany] = useState('')
+  const [alumniRole, setAlumniRole] = useState('')
+  const [alumniContact, setAlumniContact] = useState('')
+  const [alumniSchool, setAlumniSchool] = useState('FAST-NUCES')
+  const [alumniSkills, setAlumniSkills] = useState('Full Stack & AI Development')
+  const [alumniResults, setAlumniResults] = useState(null)
+  const [alumniLoading, setAlumniLoading] = useState(false)
+  const [alumniVariant, setAlumniVariant] = useState('alumni')
+  const [copiedKey, setCopiedKey] = useState('')
+
+  const handleGenerateAlumni = async () => {
+    if (!alumniCompany || !alumniRole) return
+    setAlumniLoading(true)
+    setError('')
+    try {
+      const res = await api.getAlumniReferrals({
+        companyName: alumniCompany,
+        roleTitle: alumniRole,
+        contactName: alumniContact || 'there',
+        almaMater: alumniSchool || 'FAST-NUCES',
+        skillsHighlight: alumniSkills || 'Full Stack & AI Development',
+      })
+      if (res?.ok) {
+        setAlumniResults(res.data)
+      }
+    } catch (e) {
+      setError(e.message || 'Could not generate referral templates.')
+    } finally {
+      setAlumniLoading(false)
+    }
+  }
+
+  const handleCopy = (text, key) => {
+    navigator.clipboard.writeText(text)
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(''), 2000)
+  }
+
   const refresh = useCallback(async () => {
     try {
       const [o, a, ag] = await Promise.all([
@@ -127,6 +166,101 @@ export default function OutreachTab() {
           <code className="text-n-200">.env</code>. Dry runs work; real sends fail at SMTP login.
         </Note>
       ) : null}
+
+      {/* ------------------------------------------- warm referral & alumni */}
+      <Section
+        title="Alumni & warm referrals"
+        description="Generate high-converting personalized pitches anchored on your university (FAST-NUCES) and tech stack synergy."
+        actions={<Status tone="ok">5x-10x callback</Status>}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="Company" hint="e.g. Linear, Motive, Stripe">
+            <Input
+              placeholder="Target Company"
+              value={alumniCompany}
+              onChange={(e) => setAlumniCompany(e.target.value)}
+            />
+          </Field>
+          <Field label="Target role" hint="e.g. Full Stack Engineer">
+            <Input
+              placeholder="Role Title"
+              value={alumniRole}
+              onChange={(e) => setAlumniRole(e.target.value)}
+            />
+          </Field>
+          <Field label="Contact name (optional)" hint="e.g. Sarah / Ali">
+            <Input
+              placeholder="Contact Name"
+              value={alumniContact}
+              onChange={(e) => setAlumniContact(e.target.value)}
+            />
+          </Field>
+          <Field label="Alma mater" hint="Alumni anchor">
+            <Input
+              placeholder="FAST-NUCES"
+              value={alumniSchool}
+              onChange={(e) => setAlumniSchool(e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Button
+            variant="primary"
+            disabled={!alumniCompany || !alumniRole || alumniLoading}
+            busy={alumniLoading}
+            onClick={handleGenerateAlumni}
+          >
+            Generate 3 warm pitches
+          </Button>
+          <span className="text-tiny text-n-500">
+            Generates Alumni Anchor, Engineering Peer, and Direct Lead variations.
+          </span>
+        </div>
+
+        {alumniResults ? (
+          <div className="mt-4 space-y-3 rounded-md border border-line bg-surface p-4">
+            <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3">
+              {Object.entries(alumniResults.variants).map(([key, item]) => (
+                <button
+                  key={key}
+                  onClick={() => setAlumniVariant(key)}
+                  className={`press rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    alumniVariant === key ? 'bg-n-800 text-n-100' : 'text-n-400 hover:text-n-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {alumniResults.variants[alumniVariant] ? (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-n-300">
+                    Subject: {alumniResults.variants[alumniVariant].subject}
+                  </span>
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    onClick={() =>
+                      handleCopy(
+                        `${alumniResults.variants[alumniVariant].subject}\n\n${alumniResults.variants[alumniVariant].body}`,
+                        alumniVariant,
+                      )
+                    }
+                  >
+                    {copiedKey === alumniVariant ? '✓ Copied' : 'Copy Pitch'}
+                  </Button>
+                </div>
+                <pre className="whitespace-pre-wrap rounded-md bg-n-900 p-3 font-sans text-xs leading-relaxed text-n-300">
+                  {alumniResults.variants[alumniVariant].body}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Section>
 
       {/* ------------------------------------------------- founder outreach */}
       <Section

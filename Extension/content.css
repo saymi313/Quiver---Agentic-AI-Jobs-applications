@@ -1,0 +1,91 @@
+/* Jobenzy In-Page Floating Track Badge */
+#jobenzy-floating-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #111318;
+  color: #eceef1;
+  border: 1px solid #26a37f;
+  border-radius: 30px;
+  font-family: "Century Gothic", "CenturyGothic", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 12px rgba(38, 163, 127, 0.25);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+#jobenzy-floating-btn:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: #181b22;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55), 0 0 16px rgba(38, 163, 127, 0.4);
+}
+
+#jobenzy-floating-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+#jobenzy-floating-btn .jobenzy-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #26a37f;
+  color: #0c0d10;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#jobenzy-floating-btn.loading {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+#jobenzy-floating-btn.success {
+  border-color: #26a37f;
+  background: #12231c;
+  color: #4ade80;
+}
+
+#jobenzy-floating-btn.already {
+  border-color: #d9a441;
+  background: #231f12;
+  color: #fbbf24;
+}
+
+#jobenzy-floating-btn.error {
+  border-color: #e0655f;
+  background: #261413;
+  color: #f87171;
+}
+
+.jobenzy-toast {
+  position: fixed;
+  bottom: 76px;
+  right: 24px;
+  z-index: 999999;
+  padding: 10px 14px;
+  background: #16181d;
+  color: #eceef1;
+  border: 1px solid #282c35;
+  border-radius: 8px;
+  font-family: "Century Gothic", "CenturyGothic", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  animation: jobenzyFadeIn 0.25s ease-out;
+}
+
+@keyframes jobenzyFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

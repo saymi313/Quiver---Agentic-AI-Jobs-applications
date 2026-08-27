@@ -21,19 +21,20 @@ LLM calls you enable.
 | Layer | What it uses | Cost |
 | --- | --- | --- |
 | Agent brain | Google Gemini (~1,500 req/day), Groq, OpenRouter, or Ollama locally | Free |
-| LaTeX engine | Tectonic via `python tools/install_tex.py`, or MiKTeX / TeX Live | Free |
+| Résumé engine | **Typst (Sub-50ms / zero-dependency)** + Tectonic / LaTeX | Free |
+| Local Vector RAG | Cosine similarity semantic bullet ranker (`rag_matcher.py`) | Free |
+| Vision Form Filler | Multimodal Playwright automation + self-healing selector cache | Free |
+| Warm Outreach | Autonomous university alumni (FAST-NUCES) & peer outreach generator | Free |
 | Startup discovery | Y Combinator directory (6,100+ companies), HN "Who is hiring" | Free |
 | Job ingestion | Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee public APIs | Free |
 | Remote/EU boards | Arbeitnow, Remotive, RemoteOK, Himalayas | Free |
-| Hidden job market | The Muse, Jobicy, Working Nomads, WeWorkRemotely, Jobspresso, Landing.jobs | Free |
+| Hidden job market | StillHiring.today, HiringCafe, Contra, The Muse, Jobicy, Working Nomads, WeWorkRemotely | Free |
+| Chrome Extension | Manifest V3 in-page DOM extractor + 1-click floating tracker | Free |
 | Email discovery | Site crawl + published HN addresses + pattern generation | Free |
 | Email verification | DNS MX lookup + SMTP `RCPT TO` probe | Free |
 | Browser automation | Playwright + Chromium | Free |
 | Sending | Your existing Gmail SMTP | Free |
 | Database | MongoDB Atlas free tier (512 MB), or local SQLite | Free |
-
-LinkedIn and Indeed are deliberately absent — they block automation, so relying on them would make
-the agent fragile and get accounts limited.
 
 ---
 
@@ -56,12 +57,15 @@ jobenzy/
 │   │   ├── runner.py              discover / resumes / apply / outreach / full
 │   │   ├── categories.py          the ten role categories + title classifier
 │   │   ├── jobdesc.py             full description from the listing page
-│   │   ├── tailor.py              per-job resume, via the Tab 2 engine
+│   │   ├── tailor.py              per-job resume, via Typst & LaTeX engines
+│   │   ├── rag_matcher.py         Local Vector RAG semantic bullet ranker
+│   │   ├── vision_applier.py      Multimodal vision-assisted self-healing form filler
+│   │   ├── alumni_outreach.py     Autonomous university alumni & warm referral generator
 │   │   ├── experience.py          1-3 year gate: level, title, parsed years
-│   │   ├── sources.py             YC, HN, ATS boards, remote & EU job APIs
+│   │   ├── sources.py             StillHiring, HiringCafe, Contra, YC, HN, ATS boards
 │   │   ├── people.py              founder/recruiter discovery + email verification
 │   │   ├── matcher.py             scores each role against your résumé
-│   │   ├── applier.py             Playwright form filling and submission
+│   │   ├── applier.py             Playwright form filling & multi-step wizard handler
 │   │   ├── outreach.py            research → personalised email → send
 │   │   ├── llm.py                 Gemini / Groq / OpenRouter / Ollama provider layer
 │   │   ├── store.py               backend-selecting facade (Mongo, else SQLite)
@@ -70,8 +74,9 @@ jobenzy/
 │   │   └── schema.py              field lists and defaults shared by both
 │   │
 │   ├── api/                       FastAPI dashboard backend
-│   │   ├── main.py                routes: /api/ats/*, /api/auto/*
+│   │   ├── main.py                routes: /api/ats/*, /api/auto/*, /api/agent/*
 │   │   ├── config.py              paths + the whitelist of runnable scripts
+│   │   ├── typst_resume.py        Sub-50ms Typst resume generator & compiler
 │   │   ├── resume_parse.py        PDF/DOCX/TXT → text, sections, roles, layout warnings
 │   │   ├── ats.py                 JD keyword extraction, matching, scoring
 │   │   ├── resume_build.py        ATS-safe document assembly + PDF/DOCX/TXT rendering
@@ -95,26 +100,34 @@ jobenzy/
 │   │
 │   ├── companies_dataset.csv      the pipeline's working dataset
 │   ├── send_log.jsonl             append-only audit of every send attempt
-│   └── outputs/                   generated resumes (git-ignored)
-│       └── agent_resumes/         one tailored resume per tracked job
+│   └── outputs/                   generated resumes & selector cache
+│       ├── agent_resumes/         one tailored resume per tracked job
+│       └── selector_cache.json    self-healed vision selector registry
+│
+├── Extension/                     Chrome Extension (Manifest v3)
+│   ├── manifest.json              permissions, background service worker, content scripts
+│   ├── content.js                 live DOM job extractor & floating badge injector
+│   ├── content.css                Century Gothic floating badge styles
+│   ├── popup.html                 extension quick view popup
+│   └── popup.js                   DOM bridge to Jobenzy backend
 │
 └── Frontend/                      React 19 + Vite 7 + Tailwind 4
     ├── package.json
     ├── vite.config.js             dev server + /api proxy to :8000
-    ├── index.html
+    ├── index.html                 Apple-designed landing page with dynamic billing
     └── src/
-        ├── index.css              design tokens: primitive → semantic → component
-        ├── App.jsx                shell, nav, health
-        ├── lib/api.js             typed fetch wrappers
+        ├── index.css              Century Gothic font & design tokens
+        ├── App.jsx                shell, nav, health, Century Gothic typography
+        ├── lib/api.js             typed fetch wrappers for RAG, Typst, Alumni
         ├── components/
-        │   ├── ui.jsx             the design kit — every visual decision lives here
+        │   ├── ui.jsx             the design kit — UI primitives
         │   ├── Settings.jsx       model, application answers, targeting
         │   ├── TrackedJobs.jsx    the jobs table: filters, selection, apply
         │   └── Console.jsx        live run log
         └── tabs/
             ├── JobsTab.jsx        find, review, apply
-            ├── ResumeTab.jsx      score and generate
-            └── OutreachTab.jsx    both email lists
+            ├── ResumeTab.jsx      score, generate (Typst & LaTeX engines)
+            └── OutreachTab.jsx    alumni warm referrals & verified contacts
 ```
 
 ---

@@ -129,3 +129,37 @@ def test_facets_count_every_row_not_just_the_filtered_ones(fresh_store):
 
     fresh_store.list_jobs(50, category="backend")
     assert fresh_store.job_facets()["total"] == 4
+
+
+def test_tracker_early_exclusions(fresh_store):
+    from agent.runner import Tracker
+
+    targeting = {
+        "categories": ["backend", "frontend"],
+        "exclude_titles": ["Senior Staff", "Director", "VP", "Intern"],
+        "exclude_locations": ["India", "United States"],
+        "titles": ["React Developer", "Node.js Developer"],
+        "strict_title_matching": True,
+    }
+    tracker = Tracker(targeting, log=lambda _: None)
+
+    # Excluded title should be dropped
+    cid = fresh_store.upsert_company({"name": "Acme", "source": "yc"})
+    assert tracker.add({"title": "Director of Engineering", "url": "https://a.dev/10", "source": "yc"},
+                       cid, "Acme") is None
+    assert tracker.counts["excluded"] == 1
+
+    # Excluded location should be dropped
+    assert tracker.add({"title": "React Developer", "url": "https://a.dev/11", "source": "yc",
+                        "location": "Bangalore, India"}, cid, "Acme") is None
+    assert tracker.counts["excluded"] == 2
+
+    # Off-preference title under strict matching should be dropped
+    assert tracker.add({"title": "Python Developer", "url": "https://a.dev/12", "source": "yc",
+                        "location": "Berlin"}, cid, "Acme") is None
+
+    # Matching preferred title should be tracked
+    jid = tracker.add({"title": "React Developer", "url": "https://a.dev/13", "source": "yc",
+                       "location": "Berlin"}, cid, "Acme")
+    assert jid is not None
+    assert tracker.counts["new"] == 1

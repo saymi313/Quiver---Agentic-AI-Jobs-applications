@@ -74,6 +74,12 @@ def resume_text() -> str:
     return _resume_text(str(path)) if path else ""
 
 
+GENERIC_TITLE_WORDS = {
+    "engineer", "developer", "specialist", "designer", "architect",
+    "lead", "senior", "junior", "mid", "staff", "programmer",
+}
+
+
 def _title_score(title: str, targeting: dict[str, Any]) -> tuple[float, str]:
     low = (title or "").lower()
     if not low:
@@ -91,18 +97,22 @@ def _title_score(title: str, targeting: dict[str, Any]) -> tuple[float, str]:
         if want in low:
             return 30.0, f"title matches '{want}'"
 
-    # partial: share of the wanted title's words present
+    # partial: share of the wanted title's words present, requiring specific keywords
     best, best_want = 0.0, ""
     for want in wanted:
         words = [w for w in re.findall(r"[a-z]+", want) if len(w) > 2]
         if not words:
+            continue
+        specific_words = [w for w in words if w not in GENERIC_TITLE_WORDS]
+        # If specific keywords exist (e.g. 'react', 'node', 'fullstack'), at least one must be in title
+        if specific_words and not any(w in low for w in specific_words):
             continue
         hit = sum(1 for w in words if w in low) / len(words)
         if hit > best:
             best, best_want = hit, want
     if best >= 0.5:
         return round(30 * best, 1), f"partial match on '{best_want}'"
-    return round(30 * best, 1), "title only loosely related"
+    return 0.0, "title only loosely related"
 
 
 def _location_score(job: dict[str, Any], targeting: dict[str, Any]) -> tuple[float, str]:

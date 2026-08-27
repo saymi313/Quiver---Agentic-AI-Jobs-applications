@@ -36,6 +36,11 @@ def test_out_of_scope_beats_everything():
     assert classify("Data Engineer (Python, React)") is None
     assert classify("DevOps Engineer - Node.js") is None
     assert classify("QA Engineer, Frontend") is None
+    assert classify("Firmware Engineer (C++)") is None
+    assert classify("Embedded Software Engineer") is None
+    assert classify("Hardware Engineer") is None
+    assert classify("Salesforce Developer") is None
+    assert classify("SAP Consultant") is None
 
 
 def test_empty_and_junk():

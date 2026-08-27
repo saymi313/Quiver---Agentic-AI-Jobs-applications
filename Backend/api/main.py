@@ -1185,6 +1185,82 @@ def agent_job_from_url(req: AddJobRequest) -> dict[str, Any]:
             "status": fresh.get("status"), "scored": scored.get("matched", 0)}
 
 
+class ExtensionImportRequest(BaseModel):
+    url: str
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    description: str = ""
+    apply_url: str = ""
+    source: str = ""
+
+
+@app.post("/api/agent/extension/import")
+def agent_extension_import(req: ExtensionImportRequest) -> dict[str, Any]:
+    """
+    Import a job parsed directly from the browser extension's DOM content script.
+    Bypasses anti-bot / login walls on LinkedIn, Indeed, Glassdoor, and Wellfound
+    because the user's active browser session supplies the rendered job metadata.
+    """
+    from agent import categories, matcher, sources, store as agent_store
+
+    agent_store.init()
+    url = (req.url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(400, "Invalid job URL.")
+
+    existing = agent_store.job_by_url(url)
+    if existing:
+        return {"ok": True, "id": existing["id"], "created": False,
+                "title": existing.get("title"), "company": req.company or "Unknown",
+                "category": existing.get("role_category"),
+                "fitScore": existing.get("fit_score"), "fitReason": existing.get("fit_reason"),
+                "status": existing.get("status"), "message": "Already tracked."}
+
+    company_name = (req.company or "").strip() or sources.company_from_url(url) or "Unknown"
+    title = (req.title or "").strip() or "Untitled role"
+    description = (req.description or "").strip()
+    location = (req.location or "").strip()
+    source = (req.source or "").strip() or sources.portal_from_url(url)[0] or "extension"
+
+    company_id = agent_store.upsert_company({
+        "name": company_name, "source": source,
+        "domain": sources.domain_of(url), "location": location,
+    })
+
+    category = categories.classify(title, description)
+    dedupe_hash = sources.dedupe_hash(company_name, title, location, url=url)
+
+    row: dict[str, Any] = {
+        "company_id": company_id,
+        "title": title,
+        "location": location,
+        "remote": "remote" in location.lower(),
+        "url": url,
+        "apply_url": req.apply_url or url,
+        "description": description[:30000],
+        "description_source": "extension",
+        "source": source,
+        "role_category": category,
+        "dedupe_hash": dedupe_hash,
+    }
+
+    job_id = agent_store.upsert_job(row, company_name=company_name)
+    if not job_id:
+        raise HTTPException(500, "Could not store that job.")
+
+    scored = matcher.score_pending(limit=5, log=lambda _: None)
+    fresh = agent_store.job(int(job_id)) or {}
+
+    return {
+        "ok": True, "id": int(job_id), "created": True,
+        "title": fresh.get("title"), "company": company_name,
+        "category": fresh.get("role_category"),
+        "fitScore": fresh.get("fit_score"), "fitReason": fresh.get("fit_reason"),
+        "status": fresh.get("status"), "scored": scored.get("matched", 0),
+    }
+
+
 @app.post("/api/agent/job/{job_id}/save")
 def agent_save_job(job_id: int, saved: bool = True) -> dict[str, Any]:
     """Bookmark a job, or clear the bookmark. A saved job survives the purge."""
@@ -1702,6 +1778,89 @@ def agent_receipt(app_id: int) -> dict[str, Any]:
             "filled": len(filled) if isinstance(filled, dict) else 0,
             "skipped": len(unanswered) if isinstance(unanswered, list) else 0,
         },
+    }
+
+
+# --------------------------------------------------------------------------
+# Core AI Features (RAG, Typst, Alumni Referrals)
+# --------------------------------------------------------------------------
+
+class RagRankRequest(BaseModel):
+    job_description: str
+    bullets: list[Any] = []
+    top_k: int = 4
+
+
+@app.post("/api/agent/rag/rank_bullets")
+def agent_rag_rank_bullets(req: RagRankRequest) -> dict[str, Any]:
+    """Semantic vector cosine similarity ranking of profile bullets against JD."""
+    from agent import rag_matcher
+
+    ranked = rag_matcher.rank_bullets_by_relevance(
+        job_description=req.job_description,
+        bullets=req.bullets,
+        top_k=req.top_k,
+    )
+    return {"ok": True, "count": len(ranked), "bullets": ranked}
+
+
+class AlumniReferralRequest(BaseModel):
+    company_name: str
+    role_title: str
+    contact_name: str = "there"
+    alma_mater: str = "FAST-NUCES"
+    skills_highlight: str = "Full Stack & AI Development"
+
+
+@app.post("/api/agent/outreach/alumni_referral")
+def agent_alumni_referral(req: AlumniReferralRequest) -> dict[str, Any]:
+    """Generates warm alumni, technical peer, and hiring manager referral pitches."""
+    from agent import alumni_outreach, store as agent_store
+
+    agent_store.init()
+    profile = agent_store.get_setting("profile", {}) or {}
+    candidate_name = profile.get("full_name") or "Usairam Saeed"
+
+    result = alumni_outreach.generate_warm_referral_messages(
+        candidate_name=candidate_name,
+        target_company=req.company_name,
+        role_title=req.role_title,
+        contact_name=req.contact_name,
+        alma_mater=req.alma_mater,
+        skills_highlight=req.skills_highlight,
+    )
+    return {"ok": True, "data": result}
+
+
+class TypstCompileRequest(BaseModel):
+    profile: dict[str, Any] = {}
+    font: str = "times"
+    font_size: float = 10.0
+    margins: str = "0.65in"
+
+
+@app.post("/api/agent/resume/typst_compile")
+def agent_typst_compile(req: TypstCompileRequest) -> dict[str, Any]:
+    """Sub-50ms ATS-parsable Typst resume compilation."""
+    from api import typst_resume
+    from api.config import OUTPUTS_DIR
+
+    opts = typst_resume.TypstRenderOptions.coerce({
+        "font": req.font,
+        "font_size": req.font_size,
+        "margins": req.margins,
+    })
+
+    source = typst_resume.generate_typst_source(req.profile, opts)
+    out_pdf = OUTPUTS_DIR / "typst_preview.pdf"
+    out_typ = OUTPUTS_DIR / "typst_preview.typ"
+
+    res = typst_resume.compile_typst(source, output_pdf=out_pdf, output_typ=out_typ)
+    return {
+        "ok": res.get("ok", False),
+        "engine": res.get("engine", "typst"),
+        "typSource": source,
+        "pdfName": out_pdf.name if out_pdf.is_file() else None,
     }
 
 

@@ -224,11 +224,26 @@ class JobManager:
             return False
         job.status = "stopping"
         try:
-            job.proc.terminate()
+            if os.name == "nt":
+                self._kill_proc_tree(job.proc.pid)
+            else:
+                job.proc.terminate()
         except Exception:
             return False
         threading.Thread(target=self._force_kill, args=(job,), daemon=True).start()
         return True
+
+    def _kill_proc_tree(self, pid: int) -> None:
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            except Exception:
+                pass
 
     def _force_kill(self, job: Job) -> None:
         deadline = time.time() + 8
@@ -237,7 +252,9 @@ class JobManager:
                 return
             time.sleep(0.25)
         try:
-            if job.proc is not None:
+            if job.proc is not None and job.proc.poll() is None:
+                if os.name == "nt":
+                    self._kill_proc_tree(job.proc.pid)
                 job.proc.kill()
         except Exception:
             pass

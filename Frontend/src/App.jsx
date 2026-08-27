@@ -168,12 +168,10 @@ export default function App() {
       {/* ------------------------------------------------------------ rail */}
       <aside className="material sticky top-0 hidden h-screen w-56 shrink-0 flex-col
         border-r border-line px-3 py-4 md:flex">
-        <div className="flex items-center gap-2 px-2.5 pb-5">
-          <Icon.Logo className="size-5 text-n-100" />
-          <span className="text-base font-semibold tracking-tight text-n-100">Jobenzy</span>
+        <div className="flex items-center px-2.5 pb-5">
+          <img src="/logo.png" alt="Jobenzy logo" className="h-8 w-auto object-contain" />
         </div>
-
-        <nav className="flex flex-col gap-4" aria-label="Main">
+        <nav className="flex-1 space-y-4">
           {GROUPS.map((group) => (
             <div key={group.label}>
               <p className="px-2.5 pb-1.5 text-micro font-medium tracking-wide text-n-500 uppercase">
@@ -216,7 +214,7 @@ export default function App() {
             destinations, still one tap away. */}
         <header className="material sticky top-0 z-30 flex items-center gap-1 border-b
           border-line px-4 py-2 md:hidden">
-          <Icon.Logo className="size-5 shrink-0 text-n-100" />
+          <img src="/logo.png" alt="Jobenzy logo" className="size-5 shrink-0 object-contain" />
           {TABS.map((t) => (
             <button
               key={t.key}

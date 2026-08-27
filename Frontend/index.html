@@ -6,7 +6,7 @@
   <title>Jobenzy · one résumé per target</title>
   <meta name="description" content="Jobenzy finds the roles worth applying to, writes a résumé tuned to each one, submits it through the real application form, and tracks every reply, on your machine, on your terms." />
 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="preconnect" href="https://api.fontshare.com" />
   <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet" />
@@ -41,7 +41,7 @@
 
     body {
       margin: 0; background: var(--bg); color: var(--ink);
-      font-family: "Satoshi", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Century Gothic", "CenturyGothic", "AppleGothic", "Trebuchet MS", ui-sans-serif, sans-serif;
       font-size: 17px; line-height: 1.5; letter-spacing: 0;
       -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       text-rendering: optimizeLegibility; overflow-x: hidden;
@@ -219,6 +219,97 @@
     .control-grid .cell h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: #fff; }
     .control-grid .cell p { margin: 9px 0 0; font-size: 14.5px; line-height: 1.5; color: #a1a1a6; }
 
+    /* ------------------------------------------------------------- pricing */
+    .pricing-wrap { margin-top: 40px; }
+    
+    /* Segmented switch (Apple iOS style) */
+    .billing-toggle-wrap { display: flex; justify-content: center; margin-top: 32px; }
+    .billing-toggle {
+      display: inline-flex; align-items: center; padding: 4px; border-radius: 980px;
+      background: rgba(0, 0, 0, 0.05); border: 1px solid var(--line-soft);
+      position: relative; user-select: none;
+    }
+    .toggle-opt {
+      font-family: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
+      padding: 7px 20px; border-radius: 980px; border: none; background: transparent;
+      color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+      transition: color 180ms var(--ease-out), background 200ms var(--ease-out), box-shadow 200ms var(--ease-out), transform 120ms var(--ease-out);
+    }
+    .toggle-opt:active { transform: scale(0.97); }
+    .toggle-opt.active {
+      background: #ffffff; color: var(--ink);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+    .discount-badge {
+      font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 980px;
+      background: rgba(0, 113, 227, 0.12); color: var(--accent); letter-spacing: -0.005em;
+    }
+
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: stretch; text-align: left; }
+    @media (max-width: 920px) { .pricing-grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; } }
+
+    .plan-card {
+      padding: 32px 28px; border-radius: 22px; display: flex; flex-direction: column;
+      background: rgba(255, 255, 255, 0.75);
+      -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--glass-brd);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 12px 32px -16px rgba(0,0,0,0.08);
+      transition: transform 240ms var(--ease-out), box-shadow 240ms var(--ease-out), border-color 240ms var(--ease-out);
+      position: relative; overflow: hidden;
+    }
+    .plan-card:hover { transform: translateY(-3px); box-shadow: 0 20px 40px -18px rgba(0,0,0,0.14); }
+    
+    .plan-card.featured {
+      background: #ffffff;
+      border: 1.5px solid rgba(0, 113, 227, 0.4);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 18px 44px -16px rgba(0, 113, 227, 0.16);
+    }
+    .plan-card.student {
+      background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(245,247,255,0.88) 100%);
+      border: 1.5px solid rgba(0, 113, 227, 0.25);
+    }
+
+    .plan-badge {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+      letter-spacing: -0.01em; padding: 3px 9px; border-radius: 980px; width: fit-content;
+      margin-bottom: 14px; text-transform: uppercase;
+    }
+    .plan-badge.normal { background: rgba(0,0,0,0.05); color: var(--ink-soft); }
+    .plan-badge.popular { background: rgba(0, 113, 227, 0.12); color: var(--accent); }
+    .plan-badge.student { background: rgba(0, 113, 227, 0.14); color: #0062c4; }
+
+    .plan-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--ink); }
+    .plan-desc { font-size: 14px; color: var(--ink-soft); line-height: 1.45; margin: 8px 0 20px; min-height: 42px; }
+
+    .plan-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 8px; }
+    .plan-price .amount { font-size: 40px; font-weight: 900; letter-spacing: -0.04em; color: var(--ink); line-height: 1; transition: opacity 160ms ease; }
+    .plan-price .period { font-size: 14px; font-weight: 500; color: var(--ink-mute); }
+
+    .billed-note {
+      font-size: 12px; color: var(--ink-mute); margin-bottom: 20px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--line-soft); min-height: 20px; font-weight: 500;
+    }
+
+    .plan-features { list-style: none; padding: 0; margin: 0 0 28px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+    .plan-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink-soft); line-height: 1.4; }
+    .plan-features li .tick { flex: none; width: 18px; height: 18px; border-radius: 50%; color: var(--accent); background: rgba(0,113,227,0.1); display: grid; place-items: center; font-size: 10.5px; font-weight: 700; margin-top: 1px; }
+
+    .student-box {
+      margin-top: 14px; padding: 12px; border-radius: 12px; background: rgba(0, 113, 227, 0.04);
+      border: 1px dashed rgba(0, 113, 227, 0.25); text-align: left;
+    }
+    .student-box label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; }
+    .student-input-wrap { display: flex; gap: 6px; }
+    .student-input {
+      flex: 1; padding: 6px 10px; font-size: 12.5px; border-radius: 6px; border: 1px solid var(--line);
+      background: #fff; color: var(--ink); outline: none; font-family: inherit;
+      transition: border-color 160ms ease;
+    }
+    .student-input:focus { border-color: var(--accent); }
+    .student-status { font-size: 11px; margin-top: 5px; min-height: 16px; font-weight: 500; }
+    .student-status.valid { color: #107c41; }
+    .student-status.invalid { color: #d83b01; }
+
     .specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; text-align: center; }
     @media (max-width: 720px) { .specs { grid-template-columns: 1fr; gap: 40px; } }
     .specs .spec b { display: block; font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -0.03em; font-weight: 900; color: var(--ink); }
@@ -268,10 +359,11 @@
   <!-- ============================================================= nav -->
   <header class="nav" id="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="#top"><span class="dot">◆</span> Jobenzy</a>
+      <a class="brand" href="#top"><img src="/logo.png" alt="Jobenzy logo" style="height:40px;width:auto;object-fit:contain;display:block;" /></a>
       <nav class="nav-links">
         <a class="hide-sm" href="#how">How it works</a>
         <a class="hide-sm" href="#features">Features</a>
+        <a class="hide-sm" href="#pricing">Pricing</a>
         <a class="hide-sm" href="#control">Control</a>
         <a class="btn btn-primary btn-sm" href="/dashboard/">Open the dashboard</a>
       </nav>
@@ -456,8 +548,108 @@
       </div>
     </section>
 
+    <!-- ========================================================= subscription & pricing -->
+    <section id="pricing" class="tint">
+      <div class="wrap center">
+        <div class="sec-head reveal">
+          <div class="eyebrow">Access &amp; Pricing</div>
+          <h2 class="headline" style="margin-top:14px;">Simple, subtle plans.<br>Built on your terms.</h2>
+          <p class="lead">Run it 100% free locally on your computer, or unlock autonomous pipeline automation.</p>
+        </div>
+
+        <!-- Segmented Billing Switcher (Apple Style) -->
+        <div class="billing-toggle-wrap reveal" style="--d:30ms">
+          <div class="billing-toggle" role="group" aria-label="Billing frequency">
+            <button type="button" class="toggle-opt active" data-period="monthly" id="btnMonthly">
+              Monthly
+            </button>
+            <button type="button" class="toggle-opt" data-period="yearly" id="btnYearly">
+              Yearly <span class="discount-badge">Save ~20%</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="pricing-wrap">
+          <div class="pricing-grid">
+            
+            <!-- Plan 1: Local Open Core (Free) -->
+            <div class="plan-card reveal" style="--d:0ms">
+              <span class="plan-badge normal">Local Open Core</span>
+              <h3 class="plan-name">Community</h3>
+              <p class="plan-desc">For developers who want to run everything 100% locally on their own computer.</p>
+              <div class="plan-price">
+                <span class="amount" id="priceCommunity" data-month="$0" data-year="$0">$0</span>
+                <span class="period" id="periodCommunity">forever / local</span>
+              </div>
+              <div class="billed-note" id="noteCommunity">Free &amp; open source forever</div>
+              <ul class="plan-features">
+                <li><span class="tick">✓</span> 100% local-first desktop engine</li>
+                <li><span class="tick">✓</span> Unlimited manual job tracking &amp; scoring</li>
+                <li><span class="tick">✓</span> LaTeX résumé typesetting &amp; export</li>
+                <li><span class="tick">✓</span> Bring your own free API keys (Gemini, Groq, Ollama)</li>
+                <li><span class="tick">✓</span> Standard 1-click ATS auto-filler</li>
+              </ul>
+              <a class="btn btn-primary" href="/dashboard/" style="background:var(--ink);width:100%;justify-content:center;">Get Started Free</a>
+            </div>
+
+            <!-- Plan 2: Pro (Full Power) -->
+            <div class="plan-card featured reveal" style="--d:80ms">
+              <span class="plan-badge popular">Most Popular</span>
+              <h3 class="plan-name">Pro Autonomous</h3>
+              <p class="plan-desc">For serious job seekers looking to scale applications across all enterprise portals.</p>
+              <div class="plan-price">
+                <span class="amount" id="pricePro" data-month="$19" data-year="$15">$19</span>
+                <span class="period" id="periodPro">/ month</span>
+              </div>
+              <div class="billed-note" id="notePro">Billed monthly · Cancel anytime</div>
+              <ul class="plan-features">
+                <li><span class="tick">✓</span> <b>Everything in Community, plus:</b></li>
+                <li><span class="tick">✓</span> Multi-step wizard automation (Workday, iCIMS, SmartRecruiters)</li>
+                <li><span class="tick">✓</span> Continuous autonomous hidden-board discovery sweeps</li>
+                <li><span class="tick">✓</span> Intelligent IMAP inbox watcher &amp; pipeline stage progression</li>
+                <li><span class="tick">✓</span> 3-Tier AI Résumé tailoring (Off, Honest, Aggressive modes)</li>
+                <li><span class="tick">✓</span> Chrome Extension v2 with live in-page DOM extraction</li>
+              </ul>
+              <a class="btn btn-primary" href="/dashboard/" style="width:100%;justify-content:center;">Start Pro Access <span class="btn-arrow">→</span></a>
+            </div>
+
+            <!-- Plan 3: FAST-NUCES Special Student Plan ($5) -->
+            <div class="plan-card student reveal" style="--d:160ms">
+              <span class="plan-badge student">FAST-NUCES Student Grant</span>
+              <h3 class="plan-name">FAST Student</h3>
+              <p class="plan-desc">Special subsidized plan exclusively for FAST-NUCES students &amp; graduating seniors.</p>
+              <div class="plan-price">
+                <span class="amount" id="priceStudent" data-month="$5" data-year="$4">$5</span>
+                <span class="period" id="periodStudent">/ month</span>
+              </div>
+              <div class="billed-note" id="noteStudent">Billed monthly · FAST-NUCES subsidized</div>
+              <ul class="plan-features">
+                <li><span class="tick">✓</span> <b>Full Pro Autonomous capabilities unlocked</b></li>
+                <li><span class="tick">✓</span> Tailored targeting for Entry-Level &amp; Graduate SWE/AI roles</li>
+                <li><span class="tick">✓</span> Multi-step Workday &amp; enterprise form submitter</li>
+                <li><span class="tick">✓</span> Automated tailored cover letters &amp; outreach notes</li>
+                <li><span class="tick">✓</span> Priority FAST alumni &amp; student community support</li>
+              </ul>
+
+              <div class="student-box">
+                <label for="studentEmail">Verify @nu.edu.pk email:</label>
+                <div class="student-input-wrap">
+                  <input type="email" id="studentEmail" class="student-input" placeholder="i221234@nu.edu.pk" />
+                  <button type="button" id="verifyStudentBtn" class="btn btn-primary btn-sm" style="padding:4px 12px;font-size:12px;">Verify</button>
+                </div>
+                <div id="studentStatus" class="student-status"></div>
+              </div>
+
+              <a id="studentCta" class="btn btn-primary" href="/dashboard/" style="margin-top:14px;width:100%;justify-content:center;background:#0062c4;">Claim $5 Student Access <span class="btn-arrow">→</span></a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- =========================================================== specs -->
-    <section class="tint">
+    <section>
       <div class="wrap">
         <div class="specs">
           <div class="spec reveal"><b>Local-first</b><span>Runs on your machine. Your history, résumés and inbox stay with you.</span></div>
@@ -565,6 +757,90 @@
         addEventListener('scroll', () => { setNav(); if (!ticking) { requestAnimationFrame(() => { applyParallax(window.scrollY); ticking = false; }); ticking = true; } }, { passive: true });
         applyParallax(window.scrollY);
       }
+    }
+
+    // Segmented Billing Switcher (Monthly / Yearly) (§1, §4, §16)
+    const btnMonthly = document.getElementById('btnMonthly');
+    const btnYearly = document.getElementById('btnYearly');
+    const pricePro = document.getElementById('pricePro');
+    const priceStudent = document.getElementById('priceStudent');
+    const periodPro = document.getElementById('periodPro');
+    const periodStudent = document.getElementById('periodStudent');
+    const notePro = document.getElementById('notePro');
+    const noteStudent = document.getElementById('noteStudent');
+
+    let currentPeriod = 'monthly';
+
+    function setBillingPeriod(period) {
+      currentPeriod = period;
+      if (period === 'yearly') {
+        btnYearly.classList.add('active');
+        btnMonthly.classList.remove('active');
+
+        if (pricePro) pricePro.textContent = pricePro.dataset.year || '$15';
+        if (priceStudent) priceStudent.textContent = priceStudent.dataset.year || '$4';
+        if (periodPro) periodPro.textContent = '/ month';
+        if (periodStudent) periodStudent.textContent = '/ month';
+        if (notePro) notePro.textContent = 'Billed annually at $180/yr (Save $48 / 2.5 months free)';
+        if (noteStudent) noteStudent.textContent = 'Billed annually at $48/yr (Save 20% · Special Student Grant)';
+      } else {
+        btnMonthly.classList.add('active');
+        btnYearly.classList.remove('active');
+
+        if (pricePro) pricePro.textContent = pricePro.dataset.month || '$19';
+        if (priceStudent) priceStudent.textContent = priceStudent.dataset.month || '$5';
+        if (periodPro) periodPro.textContent = '/ month';
+        if (periodStudent) periodStudent.textContent = '/ month';
+        if (notePro) notePro.textContent = 'Billed monthly · Cancel anytime';
+        if (noteStudent) noteStudent.textContent = 'Billed monthly · FAST-NUCES subsidized';
+      }
+      checkStudentEmail();
+    }
+
+    if (btnMonthly && btnYearly) {
+      btnMonthly.addEventListener('click', () => setBillingPeriod('monthly'));
+      btnYearly.addEventListener('click', () => setBillingPeriod('yearly'));
+    }
+
+    // FAST-NUCES Student email verification preview (§1, §10, §16)
+    const studentInput = document.getElementById('studentEmail');
+    const verifyBtn = document.getElementById('verifyStudentBtn');
+    const studentStatus = document.getElementById('studentStatus');
+    const studentCta = document.getElementById('studentCta');
+
+    function checkStudentEmail() {
+      if (!studentInput || !studentStatus) return;
+      const rate = currentPeriod === 'yearly' ? '$4/mo' : '$5/mo';
+      const val = (studentInput.value || '').trim().toLowerCase();
+      if (!val) {
+        studentStatus.textContent = '';
+        studentStatus.className = 'student-status';
+        if (studentCta) {
+          studentCta.innerHTML = `Claim ${rate} Student Access <span class="btn-arrow">→</span>`;
+          studentCta.style.background = '#0062c4';
+        }
+        return;
+      }
+      if (val.endsWith('@nu.edu.pk')) {
+        studentStatus.textContent = `✓ FAST-NUCES email verified! ${rate} rate applied.`;
+        studentStatus.className = 'student-status valid';
+        if (studentCta) {
+          studentCta.innerHTML = `Unlocked: Claim ${rate} Plan <span class="btn-arrow">→</span>`;
+          studentCta.style.background = '#107c41';
+        }
+      } else {
+        studentStatus.textContent = 'Requires a valid FAST email ending in @nu.edu.pk';
+        studentStatus.className = 'student-status invalid';
+        if (studentCta) {
+          studentCta.innerHTML = `Claim ${rate} Student Access <span class="btn-arrow">→</span>`;
+          studentCta.style.background = '#0062c4';
+        }
+      }
+    }
+
+    if (verifyBtn && studentInput) {
+      verifyBtn.addEventListener('click', checkStudentEmail);
+      studentInput.addEventListener('input', checkStudentEmail);
     }
   </script>
 </body>

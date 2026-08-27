@@ -393,14 +393,14 @@ def _gemini(prompt: str, system: str, schema: dict | None, model: str, key: str)
         if not resp.ok:
             raise LLMError(f"Gemini {resp.status_code}: {resp.text[:300]}")
         data = resp.json()
-        candidates = data.get("candidates") or []
-        if not candidates:
+        response_candidates = data.get("candidates") or []
+        if not response_candidates:
             block = (data.get("promptFeedback") or {}).get("blockReason")
             if block:
                 raise LLMError(f"Gemini blocked the prompt ({block}).")
             raise LLMError(f"Gemini returned no candidates: {json.dumps(data)[:300]}")
 
-        first = candidates[0]
+        first = response_candidates[0]
         parts = first.get("content", {}).get("parts") or []
         text = "".join(p.get("text", "") for p in parts)
         if text.strip():

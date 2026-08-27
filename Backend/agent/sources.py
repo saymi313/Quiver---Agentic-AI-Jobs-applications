@@ -1157,6 +1157,21 @@ def fetch_hidden_boards(limit: int = 150, *, keywords: Iterable[str] = (),
                                    f"{j.get('main_requirements','')}"),
             tags=[], posted_at=j.get("published_at")))
 
+    # -- StillHiring.today
+    with section("stillhiring"):
+        for entry in _safe(lambda: fetch_stillhiring(limit=30, keywords=wanted, log=lambda _: None), []):
+            results.append(entry)
+
+    # -- HiringCafe
+    with section("hiringcafe"):
+        for entry in _safe(lambda: fetch_hiringcafe(limit=40, keywords=wanted, log=lambda _: None), []):
+            results.append(entry)
+
+    # -- Contra
+    with section("contra"):
+        for entry in _safe(lambda: fetch_contra(limit=30, keywords=wanted, log=lambda _: None), []):
+            results.append(entry)
+
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for entry in results:
@@ -1169,6 +1184,138 @@ def fetch_hidden_boards(limit: int = 150, *, keywords: Iterable[str] = (),
             break
     log(f"[hidden] {len(out)} unique postings from low-competition boards")
     return out
+
+
+def fetch_stillhiring(limit: int = 50, *, keywords: Iterable[str] = (),
+                      log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Discovers companies and roles from StillHiring.today."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+
+    def matches(*parts: str) -> bool:
+        if not wanted:
+            return True
+        blob = " ".join(p or "" for p in parts).lower()
+        return any(k in blob for k in wanted)
+
+    try:
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": UA["User-Agent"]}
+        r = requests.get("https://stillhiring.today", headers=headers, timeout=15)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                name = a.get_text(strip=True)
+                if not name or any(skip in href for skip in ["stillhiring.today", "super.so", "twitter.com", "linkedin.com/in", "substack"]):
+                    continue
+                if matches(name, href):
+                    full_url = href if href.startswith("http") else f"https://stillhiring.today{href}"
+                    results.append(_board_entry(
+                        name=name, source="stillhiring", location="Remote", remote=True,
+                        title=f"Software Engineer / Tech Role at {name}", url=full_url,
+                        description=f"Active hiring verified company from StillHiring.today: {name}",
+                        tags=["stillhiring", "tech", "verified-hiring"], posted_at=None))
+                if len(results) >= limit:
+                    break
+    except Exception as exc:
+        log(f"[stillhiring] failed: {exc}")
+
+    log(f"[stillhiring] {len(results)} postings from stillhiring.today")
+    return results
+
+
+def fetch_hiringcafe(limit: int = 50, *, keywords: Iterable[str] = (),
+                     log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Discovers live job postings from HiringCafe."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+
+    def matches(*parts: str) -> bool:
+        if not wanted:
+            return True
+        blob = " ".join(p or "" for p in parts).lower()
+        return any(k in blob for k in wanted)
+
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto("https://hiringcafe.com", timeout=20000, wait_until="networkidle")
+            page.wait_for_timeout(2500)
+            items = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('a[href*="/job/"]')).map(a => {
+                    const href = a.href;
+                    const slug = href.split('/job/')[1] || '';
+                    return {
+                        title: a.innerText.trim() || slug.replace(/-/g, ' ').slice(0, 60),
+                        url: href,
+                        slug: slug
+                    };
+                });
+            }""")
+            browser.close()
+
+            for item in items:
+                title = item["title"]
+                slug = item.get("slug", "")
+                parts = slug.split("-")
+                company = parts[-2].title() if len(parts) >= 3 else "Company"
+                cleaned_title = " ".join(parts[:-3]).title() if len(parts) >= 4 else title
+                if not matches(cleaned_title, company, slug):
+                    continue
+                results.append(_board_entry(
+                    name=company, source="hiringcafe", location="Remote / Global", remote=True,
+                    title=cleaned_title or title, url=item["url"],
+                    description=f"Live job posting from HiringCafe: {cleaned_title} at {company}",
+                    tags=["hiringcafe", "tech"], posted_at=None))
+                if len(results) >= limit:
+                    break
+    except Exception as exc:
+        log(f"[hiringcafe] error: {exc}")
+
+    log(f"[hiringcafe] {len(results)} postings from hiringcafe.com")
+    return results
+
+
+def fetch_contra(limit: int = 50, *, keywords: Iterable[str] = (),
+                 log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Discovers freelance & remote tech opportunities from Contra."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+
+    def matches(*parts: str) -> bool:
+        if not wanted:
+            return True
+        blob = " ".join(p or "" for p in parts).lower()
+        return any(k in blob for k in wanted)
+
+    try:
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": UA["User-Agent"]}
+        r = requests.get("https://contra.com/hire", headers=headers, timeout=15)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                text = a.get_text(strip=True)
+                if not text or not href.startswith("/hire/"):
+                    continue
+                if matches(text, href):
+                    full_url = f"https://contra.com{href}"
+                    results.append(_board_entry(
+                        name="Contra Client", source="contra", location="Remote", remote=True,
+                        title=f"{text.title()} Project / Role", url=full_url,
+                        description=f"Freelance/contract opportunity from Contra: {text}",
+                        tags=["contra", "contract", "freelance"], posted_at=None))
+                if len(results) >= limit:
+                    break
+    except Exception as exc:
+        log(f"[contra] failed: {exc}")
+
+    log(f"[contra] {len(results)} postings from contra.com")
+    return results
 
 
 def _join_locations(value: Any) -> str:

@@ -47,7 +47,9 @@ OUT_OF_SCOPE = re.compile(
     r"test engineer|automation engineer|support engineer|solutions? (?:architect|engineer)|"
     r"sales engineer|technical writer|scrum master|project manager|product manager|"
     r"business analyst|graphic designer|motion designer|3d artist|illustrator|"
-    r"marketing|recruiter|accountant|hr\b)",
+    r"marketing|recruiter|accountant|hr|firmware|embedded (?:engineer|developer|software)|"
+    r"hardware engineer|fpga|asic|salesforce (?:developer|engineer|consultant)|"
+    r"sap (?:developer|consultant)|servicenow|gameplay programmer|game engine engineer)\b",
     re.I,
 )
 

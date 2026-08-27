@@ -38,11 +38,27 @@ function show(tone, title, detail) {
   outEl.appendChild(box)
 }
 
-async function post(host) {
-  const res = await fetch(`${host}/api/agent/job-from-url`, {
+async function getActiveTabDOM(tabId) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, { action: 'getJobDetails' }, (response) => {
+      if (chrome.runtime.lastError || !response) {
+        resolve(null)
+      } else {
+        resolve(response)
+      }
+    })
+  })
+}
+
+async function post(host, jobData) {
+  const isRich = jobData && (jobData.title || jobData.description)
+  const endpoint = isRich ? `${host}/api/agent/extension/import` : `${host}/api/agent/job-from-url`
+  const payload = isRich ? jobData : { url: current }
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: current }),
+    body: JSON.stringify(payload),
   })
   const body = await res.json().catch(() => ({}))
   return { res, body }
@@ -53,16 +69,20 @@ goEl.addEventListener('click', async () => {
   goEl.textContent = 'Reading the posting…'
   outEl.innerHTML = ''
 
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  let jobData = null
+  if (tab?.id) {
+    jobData = await getActiveTabDOM(tab.id)
+  }
+
   let reached = false
   try {
-    // 127.0.0.1 first, then localhost: which one resolves depends on how the
-    // user started uvicorn, and guessing wrong reads as "Jobenzy is not running".
     for (const host of HOSTS) {
       let attempt
       try {
-        attempt = await post(host)
+        attempt = await post(host, jobData)
       } catch {
-        continue // this host is not listening; try the other spelling
+        continue
       }
       reached = true
       const { res, body } = attempt
@@ -79,8 +99,6 @@ goEl.addEventListener('click', async () => {
       } else if (res.ok) {
         show('info', 'Already tracked', body.title || '')
       } else {
-        // The backend's own words. It distinguishes a closed posting from an
-        // unreadable page, and that distinction is the useful part.
         show('bad', 'Not tracked', body.detail || `${res.status} ${res.statusText}`)
       }
       break

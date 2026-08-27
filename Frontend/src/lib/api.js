@@ -294,4 +294,32 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ changes: changes || null }),
     }).then(handle),
+
+  // ---- core AI features (RAG, Typst, Alumni) ----
+  rankBullets: ({ jobDescription, bullets = [], topK = 4 }) =>
+    fetch(`${BASE}/api/agent/rag/rank_bullets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_description: jobDescription, bullets, top_k: topK }),
+    }).then(handle),
+
+  getAlumniReferrals: ({ companyName, roleTitle, contactName = 'there', almaMater = 'FAST-NUCES', skillsHighlight }) =>
+    fetch(`${BASE}/api/agent/outreach/alumni_referral`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_name: companyName,
+        role_title: roleTitle,
+        contact_name: contactName,
+        alma_mater: almaMater,
+        skills_highlight: skillsHighlight,
+      }),
+    }).then(handle),
+
+  compileTypst: ({ profile, font = 'times', fontSize = 10.0, margins = '0.65in' }) =>
+    fetch(`${BASE}/api/agent/resume/typst_compile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile, font, font_size: fontSize, margins }),
+    }).then(handle),
 }

@@ -25,6 +25,7 @@ console:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 import time
@@ -77,17 +78,60 @@ class Tracker:
     """
 
     def __init__(self, targeting: dict[str, Any], log: Callable[[str], None]) -> None:
+        self.targeting = targeting or {}
         self.enabled = categories.enabled_slugs(targeting)
-        self.use_llm = bool(targeting.get("classify_with_llm", False))
+        self.use_llm = bool(self.targeting.get("classify_with_llm", False))
         self.seen = store.known_hashes()
         self.log = log
         self.new_ids: list[int] = []
-        self.counts = {"off_category": 0, "already_tracked": 0, "new": 0}
+        self.counts = {"off_category": 0, "excluded": 0, "already_tracked": 0, "new": 0}
+        self.exclude_titles = [t.lower().strip() for t in (self.targeting.get("exclude_titles") or []) if t.strip()]
+        self.exclude_locations = [l.lower().strip() for l in (self.targeting.get("exclude_locations") or []) if l.strip()]
+        self.preferred_titles = [t.lower().strip() for t in (self.targeting.get("titles") or []) if t.strip()]
+        self.strict_title_matching = bool(self.targeting.get("strict_title_matching", False))
         log(f"[track] {len(self.seen)} job(s) already tracked · "
             f"{len(self.enabled)} categor{'y' if len(self.enabled) == 1 else 'ies'} enabled")
 
     def add(self, job: dict[str, Any], company_id: int, company_name: str) -> int | None:
-        title = job.get("title") or ""
+        title = (job.get("title") or "").strip()
+        if not title:
+            return None
+
+        low_title = title.lower()
+
+        # 1. Early title exclusions (e.g. Senior Staff, Principal, Director, VP, Manager, Intern)
+        if any(bad in low_title for bad in self.exclude_titles):
+            self.counts["excluded"] += 1
+            return None
+
+        # 2. Early location exclusions (e.g. non-target regions like India, US if excluded)
+        location = f"{job.get('location') or ''}".lower()
+        if location and any(bad in location for bad in self.exclude_locations):
+            if not (job.get("remote") and not any(re.search(rf"\b{re.escape(bad)}\b", location) for bad in self.exclude_locations)):
+                self.counts["excluded"] += 1
+                return None
+
+        # 3. Optional strict title matching against preferred titles
+        if self.strict_title_matching and self.preferred_titles:
+            matches_pref = False
+            for want in self.preferred_titles:
+                if want in low_title:
+                    matches_pref = True
+                    break
+                words = [w for w in re.findall(r"[a-z]+", want) if len(w) > 2]
+                if words:
+                    generic_words = {"engineer", "developer", "specialist", "designer", "architect",
+                                     "lead", "senior", "junior", "mid", "staff", "programmer"}
+                    specific_words = [w for w in words if w not in generic_words]
+                    if specific_words and any(w in low_title for w in specific_words):
+                        hit = sum(1 for w in words if w in low_title) / len(words)
+                        if hit >= 0.5:
+                            matches_pref = True
+                            break
+            if not matches_pref:
+                self.counts["off_category"] += 1
+                return None
+
         category = categories.classify(title, job.get("description") or "",
                                        use_llm=self.use_llm, log=self.log)
         if not category or category not in self.enabled:
@@ -112,8 +156,10 @@ class Tracker:
 
     def summary(self) -> str:
         c = self.counts
-        return (f"{c['new']} new · {c['already_tracked']} already tracked · "
-                f"{c['off_category']} outside the ten categories")
+        msg = f"{c['new']} new · {c['already_tracked']} already tracked · {c['off_category']} outside categories"
+        if c.get("excluded"):
+            msg += f" · {c['excluded']} excluded by targeting rules"
+        return msg
 
 
 def backfill_categories(log: Callable[[str], None] = _log) -> int:

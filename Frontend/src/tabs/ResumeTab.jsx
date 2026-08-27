@@ -248,19 +248,25 @@ export default function ResumeTab({ aiStatus }) {
                   </Select>
                 </Field>
                 <div className="space-y-2.5 sm:pt-5">
-                  <Checkbox
-                    checked={useLatex}
-                    onChange={setUseLatex}
-                    label="LaTeX"
-                    hint="Compiles a real .tex. Falls back to the plain builder with no engine installed."
-                  />
+                  <Field label="Compilation engine" hint="Typst compiles in sub-50ms with zero heavy system dependencies.">
+                    <Segmented
+                      size="sm"
+                      ariaLabel="Resume compilation engine"
+                      value={useLatex ? 'latex' : 'typst'}
+                      onChange={(v) => setUseLatex(v === 'latex')}
+                      options={[
+                        { value: 'typst', label: '⚡ Typst (Sub-50ms)' },
+                        { value: 'latex', label: 'LaTeX' },
+                      ]}
+                    />
+                  </Field>
                   <Checkbox
                     checked={onePage}
                     onChange={setOnePage}
                     label="Force one page"
                     hint="Off by default: the standard document is two pages with every project on it."
                   />
-                  <Checkbox checked={reorder} onChange={setReorder} label="Reorder bullets by relevance" />
+                  <Checkbox checked={reorder} onChange={setReorder} label="Reorder bullets by Vector RAG relevance" />
                   <Checkbox
                     checked={useAi}
                     onChange={setUseAi}

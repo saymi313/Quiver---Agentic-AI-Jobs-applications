@@ -259,6 +259,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "min_years_experience": 1,
         "max_years_experience": 3,
         "allow_internships": False,
+        "strict_title_matching": False,
     },
     # Being told when a strong match appears, within one scan cycle of it being
     # found. Two independent channels: a desktop notification while the

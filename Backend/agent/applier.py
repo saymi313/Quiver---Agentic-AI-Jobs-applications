@@ -67,6 +67,11 @@ FIELD_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"pronoun", re.I), "pronouns"),
     (re.compile(r"how.*(hear|find).*(us|role|position)|referral\s*source", re.I), "how_did_you_hear"),
     (re.compile(r"why.*(join|company|us|interested)|cover\s*letter|motivat", re.I), "_cover_letter"),
+    # Voluntary self-identification / EEOC
+    (re.compile(r"\bgender\b|voluntary.*gender|\bsex\b", re.I), "_eeoc_gender"),
+    (re.compile(r"\brace\b|\bethnicity\b|ethnic\s*background", re.I), "_eeoc_race"),
+    (re.compile(r"\bveteran\b|military\s*status", re.I), "_eeoc_veteran"),
+    (re.compile(r"\bdisability\b|handicap", re.I), "_eeoc_disability"),
 ]
 
 # Walls the agent cannot get past. Detected explicitly so the job is recorded as
@@ -484,10 +489,12 @@ def try_clear_wall(page, job: dict[str, Any], log: Callable[[str], None]) -> boo
 
 # Yes/No toggle groups (Ashby renders required screening questions this way —
 # as <button> pairs, not radio inputs, so input-based collection never sees
-# them). The script tags each group's buttons so Python can click by group id.
+# them). The script tags each group's buttons and radio labels so Python can click by group id.
 CHOICE_GROUPS_JS = """() => {
   const yn = ['Yes', 'No'];
   const seen = new Set(); const out = []; let gi = 0;
+
+  // 1. Button pairs (e.g. Ashby, Personio)
   [...document.querySelectorAll('button')].forEach((b) => {
     if (!yn.includes(b.innerText.trim())) return;
     let n = b.parentElement;
@@ -509,6 +516,24 @@ CHOICE_GROUPS_JS = """() => {
     out.push({ i: gi, question: question.slice(0, 160), answered });
     gi += 1;
   });
+
+  // 2. Radio groups / fieldsets (Greenhouse, Lever, Workday)
+  [...document.querySelectorAll('fieldset, [role="radiogroup"], .field, [class*="radio-group"]')].forEach((n) => {
+    if (seen.has(n)) return;
+    const radios = [...n.querySelectorAll('input[type="radio"], [role="radio"]')];
+    if (radios.length < 2 || radios.length > 6) return;
+    const labels = [...n.querySelectorAll('label, [class*="label"], span')].map(x => x.innerText.trim());
+    if (!yn.every(o => labels.some(l => l.toLowerCase() === o.toLowerCase()))) return;
+    seen.add(n);
+    const legend = n.querySelector('legend, label, h3, h4, [class*="legend"]') || n.parentElement;
+    const question = (legend ? legend.innerText : n.innerText).split(String.fromCharCode(10))
+      .map(s => s.trim()).filter(s => s && !yn.includes(s))[0] || '';
+    const answered = radios.some(x => x.checked || x.getAttribute('aria-checked') === 'true');
+    n.querySelectorAll('label, button, [role="radio"]').forEach(x => x.setAttribute('data-agent-choice', gi));
+    out.push({ i: gi, question: question.slice(0, 160), answered });
+    gi += 1;
+  });
+
   return out;
 }"""
 
@@ -593,11 +618,15 @@ def _answer_choice_groups(page, job: dict[str, Any], profile: dict[str, str],
                              "type": "choice", "reason": "no truthful answer"})
             continue
         try:
-            btn = page.locator(f'button[data-agent-choice="{g["i"]}"]').filter(
+            btn = page.locator(f'[data-agent-choice="{g["i"]}"]').filter(
                 has_text=re.compile(rf"^\s*{ans}\s*$", re.I))
-            btn.first.click(timeout=6000)
-            filled[g["question"][:70]] = ans
-            log(f"[apply]   {ans} -> {g['question'][:62]}")
+            if btn.count() and btn.first.is_visible():
+                btn.first.click(timeout=6000)
+                filled[g["question"][:70]] = ans
+                log(f"[apply]   {ans} -> {g['question'][:62]}")
+            else:
+                blocking.append({"label": g["question"][:90], "required": True,
+                                 "type": "choice", "reason": "could not find clickable option"})
         except Exception:
             blocking.append({"label": g["question"][:90], "required": True,
                              "type": "choice", "reason": "could not click the option"})
@@ -650,6 +679,10 @@ def _profile_values() -> dict[str, str]:
     parts = [x.strip() for x in (p.get("location") or "").split(",") if x.strip()]
     p["_city"] = parts[0] if parts else ""
     p["_country"] = parts[-1] if len(parts) > 1 else ""
+    p.setdefault("_eeoc_gender", "Prefer not to say")
+    p.setdefault("_eeoc_race", "I do not wish to disclose")
+    p.setdefault("_eeoc_veteran", "I am not a protected veteran")
+    p.setdefault("_eeoc_disability", "No, I do not have a disability")
     return {k: str(v or "") for k, v in p.items()}
 
 
@@ -1202,6 +1235,14 @@ def _fill_text(page, idx: int, value: str) -> bool:
     if not must_type:
         try:
             field.fill(value, timeout=8000)
+            try:
+                field.evaluate("""(el) => {
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    el.dispatchEvent(new Event('blur', { bubbles: true }));
+                }""")
+            except Exception:
+                pass
             if (field.input_value(timeout=2000) or "").strip():
                 return True
         except Exception:
@@ -1210,6 +1251,14 @@ def _fill_text(page, idx: int, value: str) -> bool:
     try:
         field.click(timeout=5000)
         field.type(value, delay=35, timeout=15000)
+        try:
+            field.evaluate("""(el) => {
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('blur', { bubbles: true }));
+            }""")
+        except Exception:
+            pass
         page.wait_for_timeout(1200)
         if picks_suggestion:
             if _pick_suggestion(page, field, value):
@@ -1424,10 +1473,27 @@ def _fill_select(page, idx: int, want: str, options: list[str]) -> str | None:
             opt = next((o for o in real if bucket and any(b in o.lower() for b in bucket)), None)
         if opt is None:
             return None
+    field = _handle(page, idx)
     try:
-        _handle(page, idx).select_option(label=opt, timeout=5000)
+        field.select_option(label=opt, timeout=5000)
+        try:
+            field.evaluate("""(el) => {
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }""")
+        except Exception:
+            pass
         return opt
     except Exception:
+        try:
+            field.click(timeout=3000)
+            opt_loc = page.locator("[role=option], li, [class*='option']").filter(
+                has_text=re.compile(rf"^\s*{re.escape(opt)}\s*$", re.I))
+            if opt_loc.count() and opt_loc.first.is_visible():
+                opt_loc.first.click(timeout=4000)
+                return opt
+        except Exception:
+            pass
         return None
 
 
@@ -1461,6 +1527,138 @@ def _llm_answers(page_fields: list[dict[str, Any]], job: dict[str, Any],
         log(f"[apply] LLM answering unavailable: {exc}")
         return {}
     return {int(a["index"]): a for a in (data or {}).get("answers", []) if "index" in a}
+
+
+def _find_next_button(form) -> tuple[Any, str | None]:
+    """
+    Find a step advancer button on multi-step forms (Workday, iCIMS, SmartRecruiters).
+    Returns (button_locator, action_label) or (None, None).
+    """
+    # 1. Workday specific automation ids
+    for sel in (
+        'button[data-automation-id="bottom-navigation-next-button"]:visible',
+        'button[data-automation-id="next-button"]:visible',
+        'button[data-automation-id="page-footer-next"]:visible',
+    ):
+        try:
+            loc = form.locator(sel)
+            if loc.count() and loc.first.is_visible() and loc.first.is_enabled():
+                return loc.first, "Workday Next"
+        except Exception:
+            pass
+
+    # 2. Text based step advancers
+    for name in ("Save and Continue", "Save & Continue", "Save and continue",
+                 "Next", "Next step", "Continue to next step", "Continue",
+                 "Review Application", "Review application", "Proceed"):
+        btn = form.get_by_role("button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
+        try:
+            if btn.count() and btn.first.is_visible() and btn.first.is_enabled():
+                return btn.first, name
+        except Exception:
+            pass
+    return None, None
+
+
+def _fill_form_step(form, fields: list[dict[str, Any]], job: dict[str, Any],
+                    profile: dict[str, str], letter: str, resume: Path | None,
+                    log: Callable[[str], None]) -> tuple[dict[str, str], list[dict[str, Any]], set[str]]:
+    """Fill fields present on the current form step/page. Returns (filled, leftovers, uploaded_labels)."""
+    filled: dict[str, str] = {}
+    leftovers: list[dict[str, Any]] = []
+    uploaded_labels: set[str] = set()
+
+    # Pass 1 — rules
+    file_fields = [f for f in fields if f["type"] == "file"]
+    for f in fields:
+        label = f["label"] or f["name"]
+        key = _match_rule(label)
+        if f["type"] == "file":
+            wants_resume = bool(re.search(r"resume|résumé|\bcv\b", label or "", re.I))
+            if resume and resume.is_file() and (wants_resume or len(file_fields) == 1):
+                try:
+                    _handle(form, f["idx"]).set_input_files(str(resume), timeout=15000)
+                    filled[label or "resume"] = resume.name
+                    uploaded_labels.add((label or "resume").strip().lower())
+                    log(f"[apply]   uploaded {resume.name} -> {label or 'file field'}")
+                except Exception as exc:
+                    log(f"[apply]   resume upload failed: {type(exc).__name__}")
+            continue
+        if not key:
+            leftovers.append(f)
+            continue
+
+        value = letter if key == "_cover_letter" else profile.get(key, "")
+        if not value:
+            leftovers.append(f)
+            continue
+        try:
+            if f["type"] == "select":
+                chosen = _fill_select(form, f["idx"], value, f["options"])
+                if chosen:
+                    filled[label] = chosen
+                else:
+                    leftovers.append(f)
+            elif f["type"] in ("checkbox", "radio"):
+                leftovers.append(f)
+            elif _fill_text(form, f["idx"], value):
+                filled[label] = value[:120]
+            else:
+                leftovers.append(f)
+        except Exception:
+            leftovers.append(f)
+
+    log(f"[apply]   {len(filled)} field(s) from profile rules, {len(leftovers)} to reason about")
+
+    # Pass 2 — saved answers first, then LLM for whatever is left
+    if leftovers:
+        saved_bank = answer_bank.load()
+        answers: dict[int, dict[str, Any]] = {}
+        to_reason: list[dict[str, Any]] = []
+        for f in leftovers:
+            hit = answer_bank.match(f["label"] or f["name"], saved=saved_bank)
+            if hit:
+                answers[f["idx"]] = {"answer": hit, "confident": True}
+            else:
+                to_reason.append(f)
+        if answers:
+            log(f"[apply]   {len(answers)} field(s) from your saved answers")
+        if to_reason:
+            answers.update(_llm_answers(to_reason, job, profile, letter, log))
+        still: list[dict[str, Any]] = []
+        for f in leftovers:
+            ans = answers.get(f["idx"])
+            if not ans or not ans.get("confident") or not (ans.get("answer") or "").strip():
+                still.append({"label": f["label"], "required": f["required"],
+                              "type": f["type"], "reason": "no confident answer"})
+                continue
+            value = ans["answer"].strip()
+            try:
+                if f["type"] == "select":
+                    chosen = _fill_select(form, f["idx"], value, f["options"])
+                    if chosen:
+                        filled[f["label"]] = chosen
+                    else:
+                        still.append({"label": f["label"], "required": f["required"],
+                                      "type": f["type"], "reason": "no matching option"})
+                elif f["type"] == "checkbox":
+                    if value.lower() in ("yes", "true", "on", "agree", "accept", "1"):
+                        _handle(form, f["idx"]).check(timeout=6000)
+                        filled[f["label"]] = "checked"
+                elif f["type"] == "radio":
+                    _handle(form, f["idx"]).check(timeout=6000)
+                    filled[f["label"]] = value[:80]
+                elif _fill_text(form, f["idx"], value):
+                    filled[f["label"]] = value[:120]
+                else:
+                    still.append({"label": f["label"], "required": f["required"],
+                                  "type": f["type"], "reason": "value did not stick"})
+            except Exception:
+                still.append({"label": f["label"], "required": f["required"],
+                              "type": f["type"], "reason": "could not set value"})
+        leftovers = still
+
+    return filled, leftovers, uploaded_labels
 
 
 def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool = True,
@@ -1660,129 +1858,58 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     f" — {result['error']}")
                 return result
 
-            filled: dict[str, str] = {}
-            leftovers: list[dict[str, Any]] = []
+            # Multi-step wizard loop: fills each step and clicks Next/Continue on multi-page ATS
+            # (Workday, iCIMS, SmartRecruiters) until the final Submit step is reached.
+            MAX_WIZARD_STEPS = 8
+            current_step = 1
+            all_filled: dict[str, str] = {}
+            blocking: list[dict[str, Any]] = []
             uploaded_labels: set[str] = set()
 
-            # Pass 1 — rules
-            file_fields = [f for f in fields if f["type"] == "file"]
-            for f in fields:
-                label = f["label"] or f["name"]
-                key = _match_rule(label)
-                if f["type"] == "file":
-                    # The resume goes into the field that asks for one — or the
-                    # only file field on the form. A second slot is usually the
-                    # cover letter or "additional files", and stuffing the
-                    # resume in there reads as carelessness to a recruiter.
-                    wants_resume = bool(re.search(r"resume|résumé|\bcv\b", label or "", re.I))
-                    if resume and resume.is_file() and (wants_resume or len(file_fields) == 1):
-                        try:
-                            _handle(form, f["idx"]).set_input_files(str(resume), timeout=15000)
-                            filled[label or "resume"] = resume.name
-                            uploaded_labels.add((label or "resume").strip().lower())
-                            log(f"[apply]   uploaded {resume.name} -> {label or 'file field'}")
-                        except Exception as exc:
-                            log(f"[apply]   resume upload failed: {type(exc).__name__}")
-                    continue
-                if not key:
-                    leftovers.append(f)
-                    continue
+            while current_step <= MAX_WIZARD_STEPS:
+                form, fields = _collect_form(page, log)
+                step_filled, leftovers, step_uploaded = _fill_form_step(
+                    form, fields, {**job, "company_name": company}, profile, letter, resume, log)
+                all_filled.update(step_filled)
+                uploaded_labels.update(step_uploaded)
 
-                value = letter if key == "_cover_letter" else profile.get(key, "")
-                if not value:
-                    leftovers.append(f)
-                    continue
-                try:
-                    if f["type"] == "select":
-                        chosen = _fill_select(form, f["idx"], value, f["options"])
-                        if chosen:
-                            filled[label] = chosen
-                        else:
-                            leftovers.append(f)
-                    elif f["type"] in ("checkbox", "radio"):
-                        leftovers.append(f)
-                    elif _fill_text(form, f["idx"], value):
-                        filled[label] = value[:120]
-                    else:
-                        leftovers.append(f)
-                except Exception:
-                    leftovers.append(f)
+                # Pass 3 — Choice groups on current step
+                group_filled, group_blocking = _answer_choice_groups(
+                    form, {**job, "company_name": company}, profile, log)
+                all_filled.update(group_filled)
 
-            log(f"[apply]   {len(filled)} field(s) from profile rules, {len(leftovers)} to reason about")
-
-            # Pass 2 — saved answers first, then the LLM for whatever is left.
-            # A question the user has answered by hand once is reused here, for
-            # free and deterministically, and never reaches the model.
-            if leftovers:
-                saved_bank = answer_bank.load()
-                answers: dict[int, dict[str, Any]] = {}
-                to_reason: list[dict[str, Any]] = []
-                for f in leftovers:
-                    hit = answer_bank.match(f["label"] or f["name"], saved=saved_bank)
-                    if hit:
-                        answers[f["idx"]] = {"answer": hit, "confident": True}
-                    else:
-                        to_reason.append(f)
-                if answers:
-                    log(f"[apply]   {len(answers)} field(s) from your saved answers")
-                if to_reason:
-                    answers.update(_llm_answers(to_reason, {**job, "company_name": company},
-                                                profile, letter, log))
-                still: list[dict[str, Any]] = []
-                for f in leftovers:
-                    ans = answers.get(f["idx"])
-                    if not ans or not ans.get("confident") or not (ans.get("answer") or "").strip():
-                        still.append({"label": f["label"], "required": f["required"],
-                                      "type": f["type"], "reason": "no confident answer"})
-                        continue
-                    value = ans["answer"].strip()
+                page.wait_for_timeout(600)
+                blocking = _unfilled_required(form) + group_blocking
+                if blocking and uploaded_labels and resume:
                     try:
-                        if f["type"] == "select":
-                            chosen = _fill_select(form, f["idx"], value, f["options"])
-                            if chosen:
-                                filled[f["label"]] = chosen
-                            else:
-                                still.append({"label": f["label"], "required": f["required"],
-                                              "type": f["type"], "reason": "no matching option"})
-                        elif f["type"] == "checkbox":
-                            if value.lower() in ("yes", "true", "on", "agree", "accept", "1"):
-                                _handle(form, f["idx"]).check(timeout=6000)
-                                filled[f["label"]] = "checked"
-                        elif f["type"] == "radio":
-                            _handle(form, f["idx"]).check(timeout=6000)
-                            filled[f["label"]] = value[:80]
-                        elif _fill_text(form, f["idx"], value):
-                            filled[f["label"]] = value[:120]
-                        else:
-                            still.append({"label": f["label"], "required": f["required"],
-                                          "type": f["type"], "reason": "value did not stick"})
+                        body_text = (form.inner_text("body") or "")
                     except Exception:
-                        still.append({"label": f["label"], "required": f["required"],
-                                      "type": f["type"], "reason": "could not set value"})
-                leftovers = still
+                        body_text = ""
+                    if resume.name in body_text:
+                        blocking = [b for b in blocking if b.get("type") != "file"
+                                    or (b.get("label") or "").strip().lower() not in uploaded_labels]
 
-            # Pass 3 — Yes/No button groups (screening questions that are not
-            # <input> elements at all, so passes 1 and 2 cannot see them).
-            group_filled, group_blocking = _answer_choice_groups(
-                form, {**job, "company_name": company}, profile, log)
-            filled.update(group_filled)
+                if blocking:
+                    # Could not answer required question on current step truthfully
+                    break
 
-            result["fields_filled"] = filled
+                # Check if there is a step advancer (Workday / multi-step next button)
+                next_btn, step_name = _find_next_button(form)
+                if not next_btn:
+                    # No Next button found — reached the final submit page
+                    break
 
-            page.wait_for_timeout(600)
-            blocking = _unfilled_required(form) + group_blocking
-            # React upload widgets (Ashby among them) read the file into their
-            # own state and clear the <input>, so `el.files` is empty again even
-            # though the upload took. If the page now shows our filename — the
-            # chip these widgets render — the requirement is met.
-            if blocking and uploaded_labels and resume:
+                log(f"[apply]   Step {current_step} complete — advancing with '{step_name}'")
                 try:
-                    body_text = (form.inner_text("body") or "")
-                except Exception:
-                    body_text = ""
-                if resume.name in body_text:
-                    blocking = [b for b in blocking if b.get("type") != "file"
-                                or (b.get("label") or "").strip().lower() not in uploaded_labels]
+                    next_btn.click(timeout=8000)
+                    page.wait_for_timeout(2500)
+                    _reveal_form(page, log)
+                    current_step += 1
+                except Exception as exc:
+                    log(f"[apply]   could not advance step ({type(exc).__name__})")
+                    break
+
+            result["fields_filled"] = all_filled
             result["unanswered"] = blocking or leftovers
             if blocking:
                 log(f"[apply]   {len(blocking)} required field(s) still empty")
@@ -1830,27 +1957,46 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             # hidden submit input of a site search form.
             submitted = False
             for name in ("Submit application", "Submit Application", "Submit",
-                         "Send application", "Apply"):
+                         "Send application", "Send Application", "Apply",
+                         "Apply now", "Apply Now", "Submit your application",
+                         "Complete application", "Finish application"):
                 # The submit control lives on the form surface — the frame, when
                 # the form is embedded in one.
                 btn = form.get_by_role(
                     "button", name=re.compile(rf"^\s*{re.escape(name)}\s*$", re.I))
                 try:
-                    if btn.count() and btn.first.is_visible() and btn.first.is_enabled():
-                        btn.first.click(timeout=8000)
-                        submitted = True
-                        break
+                    if btn.count() and btn.first.is_visible():
+                        if not btn.first.is_enabled():
+                            page.wait_for_timeout(1000)
+                        if btn.first.is_enabled():
+                            btn.first.click(timeout=8000)
+                            submitted = True
+                            break
                 except Exception as exc:
                     log(f"[apply]   '{name}' was not clickable ({type(exc).__name__}); "
                         f"trying the next candidate")
+
             if not submitted:
-                inp = form.locator("input[type=submit]:visible")
-                try:
-                    if inp.count():
-                        inp.first.click(timeout=8000)
-                        submitted = True
-                except Exception as exc:
-                    log(f"[apply]   submit input was not clickable ({type(exc).__name__})")
+                for sel in (
+                    "button[type=submit]:visible",
+                    "input[type=submit]:visible",
+                    "button[data-qa*='submit' i]:visible",
+                    "button[data-testid*='submit' i]:visible",
+                    "button[id*='submit' i]:visible",
+                    "button:has-text('Submit'):visible",
+                    "button:has-text('Apply'):visible",
+                ):
+                    try:
+                        loc = form.locator(sel)
+                        if loc.count() and loc.first.is_visible():
+                            if not loc.first.is_enabled():
+                                page.wait_for_timeout(1000)
+                            if loc.first.is_enabled():
+                                loc.first.click(timeout=8000)
+                                submitted = True
+                                break
+                    except Exception:
+                        pass
 
             if not submitted:
                 result["status"] = "needs_review"
@@ -1862,16 +2008,26 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             # check can take well over ten seconds, during which the form sits
             # on screen with its fields disabled. Judging at a fixed six
             # seconds misread an in-flight submission as a failure.
+            CONFIRMATION_URL_RE = re.compile(
+                r"/(confirmation|thank-you|thanks|submitted|success|application-complete|applied|post-apply)\b",
+                re.I,
+            )
             REJECTED = ("couldn't submit", "could not submit", "flagged as possible spam",
                         "flagged as spam", "submission was flagged", "failed to submit",
                         "error submitting", "please try again")
             ACCEPTED = ("thank you", "application received", "we have received",
                         "successfully submitted", "thanks for applying",
-                        "application submitted", "your application has been")
+                        "application submitted", "your application has been",
+                        "application was sent", "submission received",
+                        "we'll be in touch", "we will review", "submission successful")
             verdict = "pending"
             deadline = time.time() + 30
             while time.time() < deadline:
                 page.wait_for_timeout(2500)
+                current_url = page.url or ""
+                if CONFIRMATION_URL_RE.search(current_url):
+                    verdict = "accepted"
+                    break
                 # An embedded form shows its confirmation inside the frame, so
                 # read both surfaces.
                 body = (page.inner_text("body") or "").lower()
