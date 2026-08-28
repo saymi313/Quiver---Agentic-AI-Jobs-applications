@@ -72,21 +72,17 @@ def get_browser_context(
     if proxy_url:
         kwargs["proxy"] = {"server": proxy_url}
 
-    browser_inst = None
-    try:
-        context = playwright.chromium.launch_persistent_context(**kwargs)
-    except Exception as exc:
-        log(f"[browser] persistent context launch notice ({exc}) — using dedicated browser instance")
-        browser_inst = playwright.chromium.launch(
-            headless=headless,
-            args=launch_args,
-            proxy={"server": proxy_url} if proxy_url else None,
-        )
-        context = browser_inst.new_context(
-            viewport={"width": 1440, "height": 950},
-            user_agent=kwargs["user_agent"],
-            locale="en-US",
-        )
+    browser_inst = playwright.chromium.launch(
+        headless=headless,
+        args=launch_args,
+        proxy={"server": proxy_url} if proxy_url else None,
+    )
+    context = browser_inst.new_context(
+        viewport={"width": 1440, "height": 950},
+        user_agent=kwargs["user_agent"],
+        locale="en-US",
+        timezone_id="Asia/Karachi",
+    )
 
     # Anti-bot stealth initialization scripts
     try:
@@ -120,7 +116,6 @@ def get_browser_context(
 
     return browser_inst, context, False
 
-
 def save_browser_storage_state(context: Any, path: Path | None = None) -> bool:
     """Persists active cookies and storage state for future headless runs."""
     if not context:
@@ -130,7 +125,6 @@ def save_browser_storage_state(context: Any, path: Path | None = None) -> bool:
         target.parent.mkdir(parents=True, exist_ok=True)
         if hasattr(context, "storage_state"):
             context.storage_state(path=str(target))
-            return True
     except Exception:
         pass
     return False
