@@ -1009,7 +1009,7 @@ def looks_like_application(fields: list[dict[str, Any]]) -> bool:
 
 
 import random
-from . import vision_applier
+from . import vision_applier, browser
 
 # --------------------------------------------------------------------------
 # Tsenta-Grade Autonomous Engine Protocols
@@ -1311,6 +1311,115 @@ def handle_document_uploads(page: Any, resume_path: Path | None, cover_letter_pa
         log(f"[upload] dropzone interception fallback ({exc})")
 
     return uploaded
+
+
+
+
+# --------------------------------------------------------------------------
+# Multi-Tab Interception & Platform Strategy Dispatch Matrix
+# --------------------------------------------------------------------------
+
+def navigate_and_route_target_tab(context: Any, source_page: Any, job_url: str,
+                                   *, log: Callable[[str], None] = print) -> Any:
+    """
+    Navigates to the job listing and intercepts any external popup/tab spawned
+    when clicking "Apply on company site" or external ATS links.
+    Routes subsequent a11y execution loops to the intercepted application tab.
+    """
+    if not source_page:
+        return source_page
+
+    try:
+        source_page.goto(job_url, wait_until="domcontentloaded", timeout=35000)
+        source_page.wait_for_timeout(2000)
+
+        # Check for LinkedIn authwall
+        if "linkedin.com/authwall" in source_page.url or "linkedin.com/login" in source_page.url:
+            log("[apply]   LinkedIn authwall encountered — inspecting session state")
+            # Dismiss guest modals if possible
+            for dismiss_sel in ["button[aria-label='Dismiss']", "button.modal__dismiss", ".contextual-sign-in-modal__modal-dismiss-btn"]:
+                try:
+                    d = source_page.locator(dismiss_sel).first
+                    if d.count() and d.is_visible():
+                        d.click(timeout=1000)
+                except Exception:
+                    pass
+
+        # Dismiss generic cookie consent popups
+        for consent_sel in ["button:has-text('Accept')", "button:has-text('I agree')", "button:has-text('Allow all')"]:
+            try:
+                c = source_page.locator(consent_sel).first
+                if c.count() and c.is_visible():
+                    c.click(timeout=1000)
+            except Exception:
+                pass
+
+        # Check if an external apply button exists that spawns a new tab/popup
+        external_btn = source_page.locator(
+            "button[aria-label*='Apply on company site' i], "
+            "a[href*='externalApply'], "
+            "a:has-text('Apply on company site'), "
+            ".top-card-layout__cta--primary, "
+            "button:has-text('Apply on company site')"
+        ).first
+
+        if external_btn.count() > 0 and external_btn.is_visible():
+            log(f"[apply]   detected external application button on listing page — clicking with popup listener")
+            try:
+                with source_page.expect_popup(timeout=5000) as popup_info:
+                    external_btn.click(timeout=4000)
+                target_page = popup_info.value
+                target_page.wait_for_load_state("domcontentloaded")
+                target_page.wait_for_timeout(2000)
+                log(f"[apply]   successfully intercepted external application tab: {target_page.url[:90]}")
+                return target_page
+            except Exception:
+                pass
+    except Exception as exc:
+        log(f"[apply]   navigation route check notice: {exc}")
+
+    return source_page
+
+
+def detect_platform_and_dispatch(
+    page: Any,
+    context: Any,
+    job: dict[str, Any],
+    profile: dict[str, Any],
+    resume: Path | None,
+    letter: str,
+    *,
+    dry_run: bool = False,
+    log: Callable[[str], None] = print,
+) -> dict[str, Any] | None:
+    """
+    Platform Detection & Strategy Routing Matrix.
+    Routes execution to:
+    - LinkedInEasyApplyStrategy (in-page modals, screener RAG questions)
+    - SinglePageStrategy (Greenhouse, Lever, Ashby)
+    - WorkdayMultiStepStrategy (Workday progress stages)
+    """
+    current_url = page.url.lower()
+
+    # 1. Check if authenticated LinkedIn Easy Apply is available
+    if "linkedin.com" in current_url:
+        easy_apply_btn = page.locator(".jobs-apply-button, button[aria-label*='Easy Apply' i]").first
+        if easy_apply_btn.count() > 0 and easy_apply_btn.is_visible():
+            log("[apply]   routing to LinkedInEasyApplyStrategy")
+            return _handle_linkedin_flow(page, context, job, profile, resume, dry_run=dry_run, log=log)
+
+    # 2. Check if Workday ATS
+    if "myworkdayjobs.com" in current_url or "workday.com" in current_url:
+        log("[apply]   routing to WorkdayMultiStepStrategy")
+        # Multi-step state machine loop handles Workday progress steps
+        return None
+
+    # 3. Check if Single-Page ATS (Greenhouse, Lever, Ashby, SmartRecruiters)
+    if any(ats in current_url for ats in ["greenhouse.io", "jobs.lever.co", "ashbyhq.com", "smartrecruiters.com"]):
+        log(f"[apply]   routing to SinglePageStrategy ({_host(page.url)})")
+        return None
+
+    return None
 
 
 
@@ -2169,67 +2278,29 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             launch_kwargs["proxy"] = {"server": proxy_url}
             log(f"[apply]   routing application through proxy: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
 
-        browser = None
-        context = None
-        cdp_connected = False
-
-        # Fast socket probe for active Chrome session with remote debugging (port 9222)
-        import socket
-        try:
-            with socket.create_connection(("127.0.0.1", 9222), timeout=0.15):
-                browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
-                context = browser.contexts[0] if browser.contexts else browser.new_context()
-                cdp_connected = True
-                log("[apply]   connected to your active Chrome session (applying in a new tab)")
-        except Exception:
-            cdp_connected = False
-
-        if not cdp_connected:
-            browser = p.chromium.launch(**launch_kwargs)
-            context = browser.new_context(
-                viewport={"width": 1440, "height": 1000},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                           "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                locale="en-US",
-                timezone_id="Asia/Karachi",
-                accept_downloads=False,
-            )
-        context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            "window.chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };"
-            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en', 'en-GB']});"
-            "Object.defineProperty(navigator, 'plugins', {get: () => ["
-            "  { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },"
-            "  { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }"
-            "]});"
-            "const originalQuery = window.navigator.permissions?.query;"
-            "if (originalQuery) {"
-            "  window.navigator.permissions.query = (p) => ("
-            "    p.name === 'notifications' ? Promise.resolve({ state: Notification.permission }) : originalQuery(p)"
-            "  );"
-            "}"
+        browser_obj, context, cdp_connected = browser.get_browser_context(
+            p, headless=headless, proxy_url=proxy_url, log=log
         )
-                # Inject LinkedIn session cookie if available
-        linkedin_cfg = store.get_setting("linkedin", {}) or {}
-        li_at = linkedin_cfg.get("cookie") or os.getenv("LINKEDIN_LI_AT")
-        if li_at:
-            try:
-                context.add_cookies([{
-                    "name": "li_at",
-                    "value": li_at.strip(),
-                    "domain": ".linkedin.com",
-                    "path": "/",
-                    "httpOnly": True,
-                    "secure": True,
-                }])
-            except Exception:
-                pass
+        if cdp_connected:
+            log("[apply]   connected to active Chrome session (applying in a new tab)")
 
         page = context.new_page()
         page.set_default_timeout(timeout_ms)
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            page.wait_for_timeout(2500)
+            # Multi-tab interception & route navigation
+            page = navigate_and_route_target_tab(context, page, url, log=log)
+            page.set_default_timeout(timeout_ms)
+
+            # Platform Detection & Strategy Dispatch Matrix
+            strategy_res = detect_platform_and_dispatch(
+                page, context, job, profile, resume, letter, dry_run=dry_run, log=log
+            )
+            if strategy_res and strategy_res.get("type") == "page_hop":
+                page = strategy_res["page"]
+                page.set_default_timeout(timeout_ms)
+            elif strategy_res and strategy_res.get("status") in ("applied", "needs_review", "ready"):
+                result.update(strategy_res)
+                return result
 
             # Dedicated LinkedIn Easy Apply / External Apply resolver
             if "linkedin.com" in page.url or "linkedin.com" in url:
@@ -2673,8 +2744,13 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 pass
             return result
         finally:
-            context.close()
-            browser.close()
+            try:
+                if not cdp_connected:
+                    context.close()
+                if browser_obj:
+                    browser_obj.close()
+            except Exception:
+                pass
 
 
 def _record(job: dict[str, Any], result: dict[str, Any], *, dry_run: bool,
@@ -2723,10 +2799,11 @@ def _classify_outcome(result: dict[str, Any], *, dry_run: bool) -> tuple[str, st
         return "needs_you", error or "this board needs an account — apply by hand or add a login"
     if status == "submitted":
         return "submitted", ""
+    if status == "applied":
+        return "submitted", "application completed" if not dry_run else "dry run — ready to submit"
+    if result.get("email_application"):
+        return "submitted", f"prepared tailored application email package to {result.get('email_application')}"
     if status == "needs_review":
-        # Genuine "needs you" reasons are read before the review/dry-run holds,
-        # so an unanswered question in a dry run still surfaces as an action, not
-        # a clean hold.
         if result.get("input_required"):
             return "needs_you", error or "the site is waiting on a code or a link"
         if re.search(r"required question|cannot answer|answer truthfully", error, re.I):
