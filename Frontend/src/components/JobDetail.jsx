@@ -142,14 +142,7 @@ export default function JobDetail({
         footer={
           <div className="flex flex-wrap items-center gap-2">
             {!blocked ? (
-              <Button variant="primary" disabled={busy} onClick={() => {
-                if (job.url || job.apply_url) {
-                  const base = job.apply_url || job.url
-                  const target = base.includes('#') ? `${base}&jobenzy-apply=1` : `${base}#jobenzy-apply=1`
-                  window.open(target, '_blank')
-                }
-                onApply?.([job.id])
-              }}>
+              <Button variant="primary" disabled={busy} onClick={() => onApply?.([job.id])}>
                 Apply
               </Button>
             ) : (

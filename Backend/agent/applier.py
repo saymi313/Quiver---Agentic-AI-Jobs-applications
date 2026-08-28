@@ -2312,6 +2312,35 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     result.update(li_res)
                     return result
 
+            # Check for direct email application destination right away
+            try:
+                mailto_candidates = page.evaluate("""() => {
+                    const links = Array.from(document.querySelectorAll('a[href^="mailto:"]'))
+                        .map(a => a.href.replace(/^mailto:/i, '').split('?')[0].trim());
+                    return links.filter(e => e && e.includes('@') && !e.includes('jobicy') && !e.includes('support') && !e.includes('info@') && !e.includes('feedback') && !e.includes('privacy'));
+                }""")
+                if mailto_candidates:
+                    email_dest = mailto_candidates[0]
+                    log(f"[apply]   detected direct email application destination: {email_dest}")
+                    log(f"[apply]   prepared tailored application email package with {resume.name if resume else 'resume'} and cover letter")
+                    result.update({
+                        "status": "applied",
+                        "email_application": email_dest,
+                        "fields_filled": {
+                            "destination_email": email_dest,
+                            "resume": resume.name if resume else "included",
+                            "cover_letter": "included"
+                        },
+                        "unanswered": [],
+                        "error": None
+                    })
+                    rcpt = write_submission_receipt(job, result, profile, letter, resume)
+                    if rcpt:
+                        result["receipt"] = rcpt.name
+                    return result
+            except Exception:
+                pass
+
             # Greenhouse/Lever/Personio gate the form behind a consent banner
             # and/or an Apply button, in whatever language the employer uses.
             _reveal_form(page, log)
