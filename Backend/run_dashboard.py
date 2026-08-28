@@ -55,6 +55,29 @@ def start_api(port: int) -> subprocess.Popen:
     )
 
 
+def open_browser_with_cdp(url: str) -> None:
+    """
+    Launches Chrome/Edge with remote debugging enabled (--remote-debugging-port=9222).
+    This allows the AI agent to connect to this same browser and autonomously
+    apply in new tabs rather than spawning new browser windows.
+    """
+    candidates = [
+        os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for exe in candidates:
+        if os.path.isfile(exe):
+            try:
+                subprocess.Popen([exe, "--remote-debugging-port=9222", url])
+                return
+            except Exception:
+                pass
+    webbrowser.open(url)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the Jobenzy dashboard")
     ap.add_argument("--api-only", action="store_true", help="Start only the FastAPI backend")
@@ -76,7 +99,7 @@ def main() -> int:
             return 1
         print(f"[ok] serving http://127.0.0.1:{args.port}")
         if not args.no_browser:
-            threading.Timer(1.5, webbrowser.open, [f"http://127.0.0.1:{args.port}"]).start()
+            threading.Timer(1.5, open_browser_with_cdp, [f"http://127.0.0.1:{args.port}"]).start()
         return subprocess.run(
             [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(args.port)],
             cwd=str(BASE_DIR),
@@ -92,7 +115,7 @@ def main() -> int:
             elif ensure_node_modules(npm):
                 ui = subprocess.Popen([npm, "run", "dev"], cwd=str(FRONTEND))
                 if not args.no_browser:
-                    threading.Timer(3.0, webbrowser.open, [f"http://localhost:{UI_PORT}"]).start()
+                    threading.Timer(3.0, open_browser_with_cdp, [f"http://localhost:{UI_PORT}"]).start()
 
         print(f"\n[ok] API   http://127.0.0.1:{args.port}")
         if ui:
