@@ -170,6 +170,15 @@ CLOSED_MARKERS = re.compile(
     r"this (job|posting|opening|listing) (is|has) (closed|expired|been filled|no longer)|"
     r"job not found|posting not found|not accepting applications)\b", re.I)
 
+# Regional / Geo-blocking markers: when a board or employer restricts job access by candidate IP/region.
+REGION_BLOCKED_MARKERS = re.compile(
+    r"\b(not available in your (region|country|location|area)|"
+    r"restricted in your (region|country|location|area)|"
+    r"blocked in your (region|country|location|area)|"
+    r"geo-?restricted|geo-?blocked|access is not permitted from your location|"
+    r"not accessible in your (region|country|location)|"
+    r"similar jobs in your region)\b", re.I)
+
 
 def _posting_closed(page) -> str | None:
     """A reason if the page reads as a taken-down posting, else None."""
@@ -179,6 +188,18 @@ def _posting_closed(page) -> str | None:
         return ""
     if CLOSED_MARKERS.search(text):
         return "this posting has been taken down — the page is gone, so there is nothing to apply to"
+    return None
+
+
+def _posting_region_blocked(page) -> str | None:
+    """A reason if the page indicates geo-blocking / regional restriction, else None."""
+    try:
+        text = (page.inner_text("body") or "")[:4000]
+    except Exception:
+        return None
+    if REGION_BLOCKED_MARKERS.search(text):
+        return ("this job board restricted access for your region (page says: 'not available in your region') — "
+                "connect via a VPN in the target country (e.g. UK/US) or open the employer listing directly")
     return None
 
 
@@ -886,8 +907,9 @@ APPLICATION_HINT = re.compile(
     r"salary|why do you|tell us about", re.I)
 
 APPLY_LINK_TEXT = re.compile(
-    r"^\s*(apply(\s+(now|here|for this (job|role|position)|on .{0,30})?)?|"
-    r"i'?m interested|submit application|go to application|"
+    r"^\s*(apply(\s+(now|here|for this (job|role|position)|on .{0,40}|with .{0,40}|online|externally|directly)?)?|"
+    r"i'?m interested|submit application|go to (the )?application|visit company website|view and apply|"
+    r"continue to apply|easy apply|apply to job|"
     # The EU boards this reaches are often not in English.
     r"(jetzt |auf diese stelle )?bewerben|zur bewerbung|postuler)\s*$", re.I)
 
@@ -1828,11 +1850,14 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
 
             log(f"[apply]   {len(fields)} form field(s) detected")
             if not fields or not looks_like_application(fields):
-                # A dead posting is not a failure to fix: say so plainly and let
-                # it leave the queue, rather than reading as "the agent broke".
+                # A dead posting or geo-blocked board is diagnosed explicitly:
+                region_blocked = _posting_region_blocked(page)
                 closed = _posting_closed(page)
                 board_wall = bool(AUTH_URL.search(page.url or "")) or _board_account_wall(page)
-                if closed:
+                if region_blocked:
+                    result["region_blocked"] = True
+                    result["error"] = region_blocked
+                elif closed:
                     result["closed"] = True
                     result["error"] = closed
                 elif board_wall:
@@ -1854,7 +1879,7 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                 shot = SHOT_DIR / f"job{job.get('id')}_noform.png"
                 page.screenshot(path=str(shot), full_page=True)
                 result["screenshot"] = shot.name
-                log(f"[apply]   {'CLOSED' if closed else 'BOARD WALL' if board_wall else 'FAILED'}"
+                log(f"[apply]   {'REGION BLOCKED' if region_blocked else 'CLOSED' if closed else 'BOARD WALL' if board_wall else 'FAILED'}"
                     f" — {result['error']}")
                 return result
 
