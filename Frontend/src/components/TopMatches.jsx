@@ -161,16 +161,15 @@ export default function TopMatches({ refreshKey, busy, onApply, onGenerate }) {
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => pass(r)}>
                     Pass
                   </Button>
-                  <a
-                    href={r.apply_url || r.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="press ml-auto inline-flex items-center gap-1 rounded bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 text-tiny font-semibold shadow-sm transition-colors"
-                    title="Apply in new tab in current browser"
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={busy}
+                    className="ml-auto"
+                    onClick={() => onApply([r.id])}
                   >
-                    <Icon.External className="size-3" />
-                    <span>Apply</span>
-                  </a>
+                    Apply
+                  </Button>
                 </div>
               </m.article>
             )

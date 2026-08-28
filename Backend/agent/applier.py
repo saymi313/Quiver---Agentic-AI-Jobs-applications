@@ -1746,15 +1746,29 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             launch_kwargs["proxy"] = {"server": proxy_url}
             log(f"[apply]   routing application through proxy: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
 
-        browser = p.chromium.launch(**launch_kwargs)
-        context = browser.new_context(
-            viewport={"width": 1440, "height": 1000},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            locale="en-US",
-            timezone_id="Asia/Karachi",
-            accept_downloads=False,
-        )
+        browser = None
+        context = None
+        cdp_connected = False
+
+        # If user has Chrome open with remote debugging, connect and apply in a new tab of their existing browser
+        try:
+            browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222", timeout=1200)
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            cdp_connected = True
+            log("[apply]   connected to your active Chrome session (applying in a new tab)")
+        except Exception:
+            cdp_connected = False
+
+        if not cdp_connected:
+            browser = p.chromium.launch(**launch_kwargs)
+            context = browser.new_context(
+                viewport={"width": 1440, "height": 1000},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                locale="en-US",
+                timezone_id="Asia/Karachi",
+                accept_downloads=False,
+            )
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
             "window.chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };"

@@ -481,16 +481,9 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       ) : null}
 
                       {blocked ? null : (
-                        <a
-                          href={r.apply_url || r.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="press inline-flex items-center gap-1 rounded bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 text-tiny font-semibold shadow-sm transition-colors"
-                          title="Apply in new tab in current browser"
-                        >
-                          <Icon.External className="size-3" />
-                          <span>Apply</span>
-                        </a>
+                        <Button size="sm" variant="primary" disabled={busy} onClick={() => onApply([r.id])}>
+                          Apply
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -673,16 +666,9 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       <Icon.File className="size-3.5" />
                     </button>
                     {blocked ? null : (
-                      <a
-                        href={r.apply_url || r.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="press inline-flex items-center gap-1 rounded bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 text-tiny font-semibold shadow-sm transition-colors"
-                        title="Apply in new tab in current browser"
-                      >
-                        <Icon.External className="size-3" />
-                        <span>Apply</span>
-                      </a>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onApply([r.id])}>
+                        Apply
+                      </Button>
                     )}
                   </div>
                 </Td>

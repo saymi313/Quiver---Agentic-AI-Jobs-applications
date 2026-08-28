@@ -140,16 +140,9 @@ export default function JobDetail({
         footer={
           <div className="flex flex-wrap items-center gap-2">
             {!blocked ? (
-              <a
-                href={job.apply_url || job.url}
-                target="_blank"
-                rel="noreferrer"
-                className="press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-tiny font-semibold shadow-sm transition-colors"
-                title="Apply in new tab in current browser"
-              >
-                <Icon.External className="size-3.5" />
-                <span>Apply in new tab</span>
-              </a>
+              <Button variant="primary" disabled={busy} onClick={() => onApply?.([job.id])}>
+                Apply
+              </Button>
             ) : (
               <Status tone={job.status === 'applied' ? 'ok' : 'neutral'}>{job.status}</Status>
             )}
