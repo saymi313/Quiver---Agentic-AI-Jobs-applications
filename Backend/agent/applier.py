@@ -1716,14 +1716,37 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
     result["cover_letter"] = letter
     profile = _profile_values()
 
+    # 1. High-Efficiency Direct ATS Dispatch (Greenhouse, Lever, Ashby REST/GraphQL APIs)
+    try:
+        from . import ats_dispatch
+        direct_res = ats_dispatch.direct_apply(
+            job, profile, resume, letter, dry_run=dry_run, log=log
+        )
+        if direct_res:
+            result.update(direct_res)
+            return result
+    except Exception as exc:
+        log(f"[apply]   direct ATS dispatch check skipped ({type(exc).__name__})")
+
     with sync_playwright() as p:
-        # Anti-bot scorers (Ashby runs invisible reCAPTCHA on submit) rate a
-        # stock headless browser as spam. Strip the obvious automation tells:
-        # the AutomationControlled blink feature sets navigator.webdriver, and
-        # a context with no languages/plugins reads as a script.
-        browser = p.chromium.launch(headless=headless, args=[
-            "--disable-blink-features=AutomationControlled",
-        ])
+        # Anti-bot scorers (Ashby / Cloudflare Turnstile / reCAPTCHA Enterprise) rate a
+        # stock headless browser as spam. Strip the obvious automation tells and add
+        # full hardware/permissions/plugin stealth spoofing.
+        proxy_cfg = store.get_setting("proxy", {}) or {}
+        proxy_url = proxy_cfg.get("url") or None
+        launch_kwargs: dict[str, Any] = {
+            "headless": headless,
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--no-sandbox",
+            ],
+        }
+        if proxy_url:
+            launch_kwargs["proxy"] = {"server": proxy_url}
+            log(f"[apply]   routing application through proxy: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
+
+        browser = p.chromium.launch(**launch_kwargs)
         context = browser.new_context(
             viewport={"width": 1440, "height": 1000},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -1734,9 +1757,18 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
         )
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            "window.chrome = window.chrome || {runtime: {}};"
-            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});"
-            "Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});"
+            "window.chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };"
+            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en', 'en-GB']});"
+            "Object.defineProperty(navigator, 'plugins', {get: () => ["
+            "  { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },"
+            "  { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }"
+            "]});"
+            "const originalQuery = window.navigator.permissions?.query;"
+            "if (originalQuery) {"
+            "  window.navigator.permissions.query = (p) => ("
+            "    p.name === 'notifications' ? Promise.resolve({ state: Notification.permission }) : originalQuery(p)"
+            "  );"
+            "}"
         )
         page = context.new_page()
         page.set_default_timeout(timeout_ms)
