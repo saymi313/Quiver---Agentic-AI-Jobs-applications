@@ -1081,13 +1081,15 @@ def agent_job_interview_prep(job_id: int) -> dict[str, Any]:
 
 @app.get("/api/agent/sources/status")
 def agent_sources_status() -> dict[str, Any]:
-    """Status and configuration of all integrated job portals."""
+    """Status and configuration of all integrated job portals and search sources."""
     from agent import store as agent_store
     agent_store.init()
     linkedin_cfg = agent_store.get_setting("linkedin", {}) or {}
+    search_cfg = agent_store.get_setting("search", {}) or {}
     
     return {
         "ok": True,
+        "search_settings": search_cfg,
         "sources": [
             {
                 "id": "linkedin",
@@ -1149,9 +1151,25 @@ def agent_sources_status() -> dict[str, Any]:
             },
             {
                 "id": "yc",
-                "name": "Y Combinator (WorkAtAStartup)",
+                "name": "Y Combinator",
                 "type": "directory",
                 "regions": ["US", "Europe", "Remote"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "hn",
+                "name": 'HN "Who is hiring"',
+                "type": "community",
+                "regions": ["Remote", "Worldwide"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "hidden",
+                "name": "Hidden Job Market",
+                "type": "crawler",
+                "regions": ["Remote", "Worldwide"],
                 "status": "active",
                 "supports_easy_apply": False,
             },
@@ -1161,11 +1179,11 @@ def agent_sources_status() -> dict[str, Any]:
 
 @app.post("/api/agent/sources/fetch")
 def agent_sources_fetch(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Fetch live jobs from LinkedIn, WeWorkRemotely, Jobicy, and Remote boards."""
+    """Fetch live jobs from any combination of enabled sources and portals."""
     from agent import matcher, runner, sources, store as agent_store
 
     agent_store.init()
-    selected_sources = body.get("sources") or ["linkedin", "weworkremotely", "jobicy"]
+    selected_sources = body.get("sources") or ["linkedin", "weworkremotely", "jobicy", "himalayas"]
     keywords = body.get("keywords") or ["Full Stack", "Software Engineer", "React", "Node.js", "Python"]
     limit_per_source = int(body.get("limit") or 25)
     locations = tuple(body.get("locations") or ("Pakistan", "Remote"))
@@ -1182,25 +1200,59 @@ def agent_sources_fetch(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if "linkedin" in selected_sources:
         linkedin_jobs = sources.fetch_linkedin(limit=limit_per_source, keywords=keywords, locations=locations, log=log)
         for entry in linkedin_jobs:
-            job = entry.pop("_job")
+            job = entry.pop("_job", None) or entry
             cid = agent_store.upsert_company(entry)
-            if track.add(job, cid, entry["name"]):
+            if track.add(job, cid, entry.get("name", "")):
                 added_count += 1
 
     if "weworkremotely" in selected_sources:
         wwr_jobs = sources.fetch_weworkremotely(limit=limit_per_source, keywords=keywords, log=log)
         for entry in wwr_jobs:
-            job = entry.pop("_job")
+            job = entry.pop("_job", None) or entry
             cid = agent_store.upsert_company(entry)
-            if track.add(job, cid, entry["name"]):
+            if track.add(job, cid, entry.get("name", "")):
                 added_count += 1
 
     if "jobicy" in selected_sources:
         jobicy_jobs = sources.fetch_jobicy(limit=limit_per_source, keywords=keywords, log=log)
         for entry in jobicy_jobs:
-            job = entry.pop("_job")
+            job = entry.pop("_job", None) or entry
             cid = agent_store.upsert_company(entry)
-            if track.add(job, cid, entry["name"]):
+            if track.add(job, cid, entry.get("name", "")):
+                added_count += 1
+
+    if any(k in selected_sources for k in ["himalayas", "remotive", "remoteok", "arbeitnow", "remote"]):
+        remote_jobs = sources.fetch_remote_boards(limit=limit_per_source * 2, keywords=keywords, log=log)
+        for entry in remote_jobs:
+            src = entry.get("source", "")
+            if src in selected_sources or "remote" in selected_sources:
+                job = entry.pop("_job", None) or entry
+                cid = agent_store.upsert_company(entry)
+                if track.add(job, cid, entry.get("name", "")):
+                    added_count += 1
+
+    if "yc" in selected_sources:
+        yc_jobs = sources.fetch_yc(limit=limit_per_source, keywords=keywords, log=log)
+        for entry in yc_jobs:
+            job = entry.pop("_job", None) or entry
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry.get("name", "")):
+                added_count += 1
+
+    if "hn" in selected_sources:
+        hn_jobs = sources.fetch_hn(limit=limit_per_source, keywords=keywords, log=log)
+        for entry in hn_jobs:
+            job = entry.pop("_job", None) or entry
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry.get("name", "")):
+                added_count += 1
+
+    if "hidden" in selected_sources:
+        hidden_jobs = sources.fetch_hidden_boards(limit=limit_per_source, keywords=keywords, log=log)
+        for entry in hidden_jobs:
+            job = entry.pop("_job", None) or entry
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry.get("name", "")):
                 added_count += 1
 
     # Enrich detail & score newly added jobs

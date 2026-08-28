@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { Button, Disclosure, Empty, Icon, Input, Note, Status, Table, Td, Tr } from './ui'
+import { Button, Checkbox, Disclosure, Empty, Field, Icon, Input, Note, Status, Table, Td, Tr } from './ui'
 
 /*
-  Live Portals, Job Board Integrations & ATS Capabilities in Settings.
-  Enables toggling active sources, connecting LinkedIn, running scans, and viewing ATS support.
+  Unified Search, Live Job Portals & ATS Capabilities.
+  Combines source selection, crawl depth, career portal scanning, LinkedIn auth, live fetch, and ATS support.
 */
 
 const SUBMIT_TONE = {
@@ -21,13 +21,26 @@ const SUBMIT_LABEL = {
   no: 'via employer',
 }
 
-export default function Portals({ open, onToggle, onFetched }) {
+export default function Portals({ open, onToggle, overview, onSaved }) {
   const [data, setData] = useState(null)
   const [sources, setSources] = useState([])
-  const [selectedSources, setSelectedSources] = useState(['linkedin', 'weworkremotely', 'jobicy', 'himalayas'])
+  const [selectedSources, setSelectedSources] = useState(['linkedin', 'weworkremotely', 'jobicy', 'himalayas', 'yc', 'hn', 'hidden'])
+  
+  // Search parameters
+  const savedSearch = overview?.settings?.search || {}
+  const targeting = overview?.settings?.targeting || {}
+  const [depth, setDepth] = useState(savedSearch.depth ?? 30)
+  const [scanAts, setScanAts] = useState(savedSearch.scan_ats !== false)
+  const [findPeople, setFindPeople] = useState(savedSearch.find_people !== false)
   const [keywords, setKeywords] = useState('Software Engineer, Full Stack, React, Node.js')
   const [location, setLocation] = useState('Pakistan, Remote')
-  const [limit, setLimit] = useState(20)
+  
+  // Form feedback state
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
+  
+  // Live Fetch state
   const [fetching, setFetching] = useState(false)
   const [fetchResult, setFetchResult] = useState(null)
   const [fetchError, setFetchError] = useState('')
@@ -56,6 +69,9 @@ export default function Portals({ open, onToggle, onFetched }) {
             setProfileUrl(linkedIn.profile_url || '')
           }
         }
+        if (res?.search_settings?.sources?.length) {
+          setSelectedSources(res.search_settings.sources)
+        }
       })
       .catch(() => {})
   }, [open, data])
@@ -64,6 +80,28 @@ export default function Portals({ open, onToggle, onFetched }) {
     setSelectedSources(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     )
+  }
+
+  const handleSaveSearchSettings = async () => {
+    setSavingSettings(true)
+    setSettingsError('')
+    setSettingsSaved(false)
+    try {
+      await api.agentSettings({
+        search: {
+          sources: selectedSources,
+          depth: Number(depth) || 30,
+          scan_ats: scanAts,
+          find_people: findPeople,
+        },
+      })
+      setSettingsSaved(true)
+      onSaved?.()
+    } catch (err) {
+      setSettingsError(err.message || 'Could not save search settings.')
+    } finally {
+      setSavingSettings(false)
+    }
   }
 
   const handleFetch = async () => {
@@ -79,10 +117,10 @@ export default function Portals({ open, onToggle, onFetched }) {
         sources: selectedSources,
         keywords: kwList.length ? kwList : ['Software Engineer'],
         locations: locList.length ? locList : ['Pakistan', 'Remote'],
-        limit: Number(limit) || 20,
+        limit: Number(depth) || 30,
       })
       setFetchResult(res)
-      onFetched?.()
+      onSaved?.()
     } catch (err) {
       setFetchError(err.message || 'Failed to fetch jobs from selected portals.')
     } finally {
@@ -100,9 +138,9 @@ export default function Portals({ open, onToggle, onFetched }) {
       })
       if (res?.connected) {
         setConnected(true)
-        setConnectMsg('LinkedIn session saved and authenticated successfully.')
+        setConnectMsg('LinkedIn session saved and authenticated.')
       } else {
-        setConnectMsg('LinkedIn settings saved.')
+        setConnectMsg('LinkedIn profile details saved.')
       }
     } catch (err) {
       setConnectMsg(err.message || 'Could not save connection.')
@@ -112,23 +150,24 @@ export default function Portals({ open, onToggle, onFetched }) {
   }
 
   const s = data?.summary || {}
+  const count = selectedSources.length
 
   return (
     <Disclosure
-      title="Live Portals & Job Sources"
-      description="Active discovery boards (LinkedIn, WeWorkRemotely, Jobicy), LinkedIn session auth, and ATS submission support."
+      title="Search & Job Sources"
+      description={`${count} active source${count === 1 ? '' : 's'} · depth ${depth} · roles in last ${targeting.max_age_days ?? 3} days · ${s.detects || 12} ATS platforms supported`}
       open={open}
       onToggle={onToggle}
     >
       <div className="space-y-6">
-        {/* Section 1: Active Job Sources */}
+        {/* Section 1: Active Job Sources & Discovery Portals */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2.5">
             <h4 className="text-micro font-semibold uppercase tracking-wider text-n-300">
-              Active Job Boards &amp; Discovery Sources
+              Active Job Sources &amp; Portals
             </h4>
             <span className="text-micro text-n-400">
-              {selectedSources.length} of {sources.length || 8} enabled
+              {count} of {sources.length || 10} enabled
             </span>
           </div>
 
@@ -154,7 +193,7 @@ export default function Portals({ open, onToggle, onFetched }) {
                       )}
                     </div>
                     <div className="text-micro text-n-400 mt-0.5">
-                      Regions: {src.regions.join(', ')}
+                      Regions: {src.regions?.join(', ') || 'Global'}
                     </div>
                   </div>
                   <div className={`size-4 rounded border flex items-center justify-center mt-0.5 ${
@@ -168,7 +207,104 @@ export default function Portals({ open, onToggle, onFetched }) {
           </div>
         </div>
 
-        {/* Section 2: LinkedIn Connection */}
+        {/* Section 2: Search Parameters & Crawl Depth */}
+        <div className="grid gap-5 sm:grid-cols-2 p-4 rounded-xl border border-line bg-raised/30">
+          <div className="space-y-3">
+            <Field label="Crawl Depth" hint="Companies per source, and roles scored.">
+              <Input
+                type="number"
+                min={1}
+                max={200}
+                value={depth}
+                onChange={(e) => setDepth(e.target.value)}
+              />
+            </Field>
+            <div>
+              <label className="text-micro font-medium text-n-300 block mb-1">
+                Target Keywords
+              </label>
+              <Input
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="e.g. Software Engineer, React, Node.js"
+              />
+            </div>
+            <div>
+              <label className="text-micro font-medium text-n-300 block mb-1">
+                Target Locations
+              </label>
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Pakistan, Remote, Worldwide"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3 flex flex-col justify-between">
+            <div className="space-y-3">
+              <Checkbox
+                checked={scanAts}
+                onChange={(v) => setScanAts(v)}
+                label="Scan career portals"
+                hint="Detect Greenhouse, Lever, Workday and Ashby boards, then pull their live openings."
+              />
+              <Checkbox
+                checked={findPeople}
+                onChange={(v) => setFindPeople(v)}
+                label="Find and verify recruiter emails"
+                hint="Crawl company team pages, then MX and SMTP check every hiring contact."
+              />
+            </div>
+
+            <div className="pt-2 flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                busy={savingSettings}
+                disabled={!count}
+                onClick={handleSaveSearchSettings}
+              >
+                Save search settings
+              </Button>
+              <Button
+                variant="outline"
+                busy={fetching}
+                disabled={!count}
+                onClick={handleFetch}
+                className="border-accent-500/40 text-accent-300 hover:bg-accent-950/30"
+              >
+                <Icon.Sparkles className="size-3.5 mr-1.5" />
+                Scan &amp; Fetch Now
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {settingsSaved && (
+          <span className="text-tiny text-ok-400 block -mt-3">
+            Search settings saved successfully.
+          </span>
+        )}
+
+        {fetchResult && (
+          <span className="text-tiny text-ok-400 block -mt-3">
+            Discovered {fetchResult.added || 0} fresh matching jobs ({fetchResult.enriched || 0} enriched, {fetchResult.scored || 0} scored).
+          </span>
+        )}
+
+        {settingsError && (
+          <Note tone="bad" title="Save Notice" onDismiss={() => setSettingsError('')}>
+            {settingsError}
+          </Note>
+        )}
+
+        {fetchError && (
+          <Note tone="bad" title="Scan Notice" onDismiss={() => setFetchError('')}>
+            {fetchError}
+          </Note>
+        )}
+
+        {/* Section 3: LinkedIn Session Authentication */}
         <div className="p-4 rounded-xl border border-line bg-surface-sunken/40 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -185,7 +321,7 @@ export default function Portals({ open, onToggle, onFetched }) {
           </div>
 
           <p className="text-micro text-n-400 leading-relaxed">
-            Attach your profile URL and <code className="text-accent-300">li_at</code> session cookie to bypass LinkedIn's guest auth walls and enable Easy Apply.
+            Attach your profile URL and <code className="text-accent-300">li_at</code> session cookie to bypass LinkedIn guest auth walls and enable Easy Apply automation.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -225,60 +361,6 @@ export default function Portals({ open, onToggle, onFetched }) {
               <span className="text-micro text-accent-300">{connectMsg}</span>
             )}
           </div>
-        </div>
-
-        {/* Section 3: Run Discovery Scan */}
-        <div className="p-4 rounded-xl border border-line bg-raised/30 space-y-3">
-          <h4 className="text-tiny font-semibold text-n-100">
-            Fetch Fresh Jobs from Enabled Portals
-          </h4>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="text-micro font-medium text-n-300 block mb-1">
-                Search Keywords
-              </label>
-              <Input
-                value={keywords}
-                onChange={e => setKeywords(e.target.value)}
-                placeholder="e.g. Software Engineer, React, Node.js"
-              />
-            </div>
-            <div>
-              <label className="text-micro font-medium text-n-300 block mb-1">
-                Target Locations
-              </label>
-              <Input
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="e.g. Pakistan, Remote"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <Button
-              variant="primary"
-              busy={fetching}
-              disabled={!selectedSources.length}
-              onClick={handleFetch}
-            >
-              <Icon.Sparkles className="size-3.5 mr-1.5" />
-              Scan &amp; Fetch Jobs
-            </Button>
-
-            {fetchResult && (
-              <span className="text-micro text-ok-400">
-                Discovered {fetchResult.found || 0} jobs ({fetchResult.saved || 0} new added to queue)
-              </span>
-            )}
-          </div>
-
-          {fetchError && (
-            <Note tone="bad" title="Scan Notice" onDismiss={() => setFetchError('')}>
-              {fetchError}
-            </Note>
-          )}
         </div>
 
         {/* Section 4: ATS Capabilities Table */}
