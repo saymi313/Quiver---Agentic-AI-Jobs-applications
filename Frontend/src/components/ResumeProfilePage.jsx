@@ -364,9 +364,6 @@ export default function ResumeProfilePage({ profileName, onBack }) {
               { value: 'split', label: 'Split View' },
               { value: 'content', label: 'Content & Data' },
               { value: 'style', label: 'Typography & Style' },
-            ]}
-          />
-          {isDefault ? <Status tone="ok">Default Profile</Status> : null}
           {pages ? <Status tone="neutral">{pages} page{pages === '1' ? '' : 's'}</Status> : null}
         </div>
       </div>

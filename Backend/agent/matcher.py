@@ -79,32 +79,126 @@ GENERIC_TITLE_WORDS = {
     "lead", "senior", "junior", "mid", "staff", "programmer",
 }
 
+_TITLE_NOISE_RE = re.compile(
+    r"\s*[\(\[\{]\s*(?:m/w/d|w/m/d|f/m/d|d/m/w|m/f/d|all genders|remote|hybrid|onsite|full[- ]time|part[- ]time|contract|permanent|direct hire|urgent)\s*[\)\]\}]|\s*-\s*(?:remote|hybrid|onsite)\b|\s*\|\s*(?:remote|hybrid)\b",
+    re.I,
+)
 
-def _title_score(title: str, targeting: dict[str, Any]) -> tuple[float, str]:
-    low = (title or "").lower()
+# Canonical role alias groupings
+ROLE_ALIASES: dict[str, list[str]] = {
+    "software engineer": [
+        "software developer", "software engineer", "swe", "programmer", "developer",
+        "backend engineer", "frontend engineer", "full stack engineer", "fullstack developer",
+        "application developer", "node developer", "react developer", "web developer"
+    ],
+    "full stack engineer": [
+        "full stack", "fullstack", "full-stack", "mern", "mean", "software engineer",
+        "software developer", "web developer", "node developer", "react developer", "fullstack engineer"
+    ],
+    "backend engineer": [
+        "backend", "back-end", "node developer", "node.js developer", "nodejs developer",
+        "python developer", "api developer", "backend developer", "server developer", "golang developer"
+    ],
+    "frontend engineer": [
+        "frontend", "front-end", "react developer", "react.js developer", "ui developer",
+        "web developer", "javascript developer", "frontend developer", "vue developer", "angular developer"
+    ],
+    "react developer": [
+        "react", "react.js", "reactjs", "frontend", "front-end", "full stack", "fullstack", "web developer"
+    ],
+    "ai engineer": [
+        "ai engineer", "ai developer", "ai/ml", "machine learning engineer", "ml engineer",
+        "genai", "deep learning", "nlp engineer", "ai software engineer", "data scientist"
+    ],
+    "ai software engineer": [
+        "ai software engineer", "ai engineer", "ai developer", "ai/ml", "machine learning",
+        "ml engineer", "genai", "deep learning"
+    ],
+    "product designer": [
+        "product design", "product designer", "ui/ux designer", "ui/ux", "ux/ui",
+        "ui designer", "ux designer", "user experience designer", "interaction designer"
+    ],
+    "ui_ux": [
+        "ui/ux", "ux/ui", "product design", "product designer", "ui designer",
+        "ux designer", "visual designer"
+    ],
+    "product_design": [
+        "product design", "product designer", "ui/ux", "ui designer", "ux designer"
+    ],
+}
+
+LOCATION_ALIASES: dict[str, list[str]] = {
+    "united kingdom": [
+        "uk", "u.k.", "united kingdom", "great britain", "gb", "england", "scotland", "wales",
+        "london", "manchester", "birmingham", "edinburgh", "bristol", "leeds", "glasgow", "cambridge", "oxford"
+    ],
+    "germany": [
+        "germany", "deutschland", "de", "berlin", "munich", "münchen", "frankfurt", "hamburg",
+        "cologne", "köln", "stuttgart", "dusseldorf", "düsseldorf"
+    ],
+    "united arab emirates": [
+        "uae", "u.a.e.", "united arab emirates", "dubai", "abu dhabi", "sharjah"
+    ],
+    "saudi arabia": [
+        "saudi arabia", "ksa", "k.s.a.", "riyadh", "jeddah", "dammam", "khobar"
+    ],
+    "netherlands": [
+        "netherlands", "holland", "nl", "amsterdam", "rotterdam", "utrecht", "the hague", "eindhoven"
+    ],
+    "ireland": [
+        "ireland", "ie", "dublin", "cork", "galway", "limerick"
+    ],
+    "pakistan": [
+        "pakistan", "pk", "islamabad", "lahore", "karachi", "rawalpindi", "peshawar", "faisalabad"
+    ],
+    "europe": [
+        "europe", "eu", "emea"
+    ],
+    "remote": [
+        "remote", "worldwide", "anywhere", "global", "work from home", "wfh", "virtual"
+    ],
+}
+
+
+def _title_score(title: str, targeting: dict[str, Any], category: str | None = None) -> tuple[float, str]:
+    raw_low = (title or "").lower()
+    low = _TITLE_NOISE_RE.sub("", raw_low).strip()
     if not low:
         return 0.0, "no title"
 
     for bad in targeting.get("exclude_titles") or []:
-        if bad and bad.lower() in low:
+        if bad and bad.lower() in raw_low:
             return 0.0, f"excluded by '{bad}'"
 
     wanted = [t.lower() for t in (targeting.get("titles") or []) if t]
     if not wanted:
-        return 20.0, "no title filter set"
+        return 24.0, "no title filter set"
 
+    # 1. Direct exact or substring match in cleaned title
     for want in wanted:
-        if want in low:
+        if want in low or want in raw_low:
             return 30.0, f"title matches '{want}'"
 
-    # partial: share of the wanted title's words present, requiring specific keywords
+    # 2. Canonical alias match (e.g. "node developer" matches "backend engineer" or "react developer" matches "frontend engineer")
+    for want in wanted:
+        aliases = ROLE_ALIASES.get(want, [])
+        for alias in aliases:
+            if alias in low or alias in raw_low:
+                return 28.5, f"title matches role alias '{alias}'"
+
+    # 3. Target keywords in title (e.g. 'node', 'react', 'full stack', 'python', 'typescript', 'ai')
+    target_keywords = [k.lower() for k in (targeting.get("keywords") or []) if len(k) > 2]
+    title_kw_hits = [k for k in target_keywords if k in low or k in raw_low]
+    if title_kw_hits:
+        return 27.0, f"title contains target tech ({', '.join(title_kw_hits[:2])})"
+
+    # 4. Partial word match
     best, best_want = 0.0, ""
     for want in wanted:
         words = [w for w in re.findall(r"[a-z]+", want) if len(w) > 2]
         if not words:
             continue
         specific_words = [w for w in words if w not in GENERIC_TITLE_WORDS]
-        # If specific keywords exist (e.g. 'react', 'node', 'fullstack'), at least one must be in title
         if specific_words and not any(w in low for w in specific_words):
             continue
         hit = sum(1 for w in words if w in low) / len(words)
@@ -112,24 +206,58 @@ def _title_score(title: str, targeting: dict[str, Any]) -> tuple[float, str]:
             best, best_want = hit, want
     if best >= 0.5:
         return round(30 * best, 1), f"partial match on '{best_want}'"
-    return 0.0, "title only loosely related"
+
+    # 5. Classified category match fallback
+    if category and category in (targeting.get("categories") or []):
+        return 25.0, f"matches target category '{category}'"
+
+    return 10.0, "title loosely related"
 
 
 def _location_score(job: dict[str, Any], targeting: dict[str, Any]) -> tuple[float, str]:
-    loc = f"{job.get('location') or ''}".lower()
-    remote = bool(job.get("remote")) or "remote" in loc
-    wanted = [w.lower() for w in (targeting.get("locations") or []) if w]
+    loc = f"{job.get('location') or ''}".lower().strip()
+    remote = bool(job.get("remote")) or "remote" in loc or "anywhere" in loc or "worldwide" in loc
+    wanted = [w.lower().strip() for w in (targeting.get("locations") or []) if w]
 
     if not wanted:
-        return 12.0, "no location filter"
+        return 14.0, "no location filter"
+
+    # If role is remote and user accepts remote
     if remote and any(w in ("remote", "anywhere", "worldwide") for w in wanted):
         return 15.0, "remote, which you accept"
+
+    # Direct match or alias match
     for want in wanted:
         if want and want in loc:
             return 15.0, f"location matches '{want}'"
+        # Check alias expansions
+        aliases = LOCATION_ALIASES.get(want, [])
+        for alias in aliases:
+            if len(alias) <= 3:
+                if re.search(rf"\b{re.escape(alias)}\b", loc):
+                    return 15.0, f"location matches '{want}' ({alias.upper()})"
+            else:
+                if alias in loc:
+                    return 15.0, f"location matches '{want}' ({alias})"
+
+    # Check reverse lookup: if any token in loc matches target country alias
+    for target_country, aliases in LOCATION_ALIASES.items():
+        if target_country in wanted or any(a in wanted for a in aliases):
+            for alias in aliases:
+                if len(alias) <= 3:
+                    if re.search(rf"\b{re.escape(alias)}\b", loc):
+                        return 15.0, f"location matches '{target_country}'"
+                else:
+                    if alias in loc:
+                        return 15.0, f"location matches '{target_country}'"
+
     if remote:
-        return 11.0, "remote role"
-    return 4.0, f"location '{job.get('location') or 'unstated'}' outside your list"
+        return 14.0, "remote role"
+
+    if not loc:
+        return 11.0, "location not specified"
+
+    return 7.0, f"location '{job.get('location') or 'unstated'}'"
 
 
 def _seniority_score(title: str, years: str) -> tuple[float, str]:
@@ -140,12 +268,12 @@ def _seniority_score(title: str, years: str) -> tuple[float, str]:
         yrs = 0.0
 
     if any(m in low for m in JUNIOR_MARKERS):
-        return (10.0, "entry-level role") if yrs < 2 else (3.0, "likely below your level")
+        return (10.0, "entry-level role") if yrs < 2 else (4.0, "likely below your level")
     if any(m in low for m in SENIOR_MARKERS):
-        return (10.0, "senior role matching your experience") if yrs >= 6 else (3.0, "likely above your level")
+        return (10.0, "senior role matching your experience") if yrs >= 5 else (4.0, "likely above your level")
     if "senior" in low:
-        return (10.0, "senior role") if yrs >= 3 else (6.0, "senior title, slightly ahead of you")
-    return 9.0, "level looks appropriate"
+        return (10.0, "senior role") if yrs >= 3 else (7.0, "senior title")
+    return 10.0, "level looks appropriate"
 
 
 def score_job(job: dict[str, Any], *, resume: str | None = None,
@@ -154,7 +282,8 @@ def score_job(job: dict[str, Any], *, resume: str | None = None,
     profile = store.get_setting("profile", {}) or {}
     resume = resume if resume is not None else resume_text()
 
-    title_pts, title_why = _title_score(job.get("title", ""), targeting)
+    category = job.get("role_category")
+    title_pts, title_why = _title_score(job.get("title", ""), targeting, category=category)
     loc_pts, loc_why = _location_score(job, targeting)
     sen_pts, sen_why = _seniority_score(job.get("title", ""), profile.get("years_experience", ""))
 
@@ -162,20 +291,33 @@ def score_job(job: dict[str, Any], *, resume: str | None = None,
     if description and resume:
         jd = analyze_jd(f"{job.get('title','')}\n\n{description}")
         match = match_keywords(resume, jd)
-        kw_pts = round(min(match["coverage"] / 0.7, 1.0) * 45, 1)
-        missing = [m["term"] for m in match["missing"][:6]]
+        
+        # Hard tech skills count more heavily than noisy generic n-grams
+        hard_jd = [k for k in jd.get("keywords", []) if k.get("category") == "hard"]
+        hard_matched = [k for k in match.get("matched", []) if k.get("category") == "hard"]
+        
+        if hard_jd:
+            hard_coverage = len(hard_matched) / len(hard_jd)
+            overall_coverage = match.get("coverage", 0.0)
+            blended_coverage = (0.75 * hard_coverage) + (0.25 * overall_coverage)
+        else:
+            blended_coverage = match.get("coverage", 0.0)
+
+        # Calibrated ATS scoring: 55%+ coverage maps to top-tier score (up to 45 pts)
+        kw_pts = round(min(blended_coverage / 0.55, 1.0) * 45, 1)
+        missing = [m["term"] for m in match.get("missing", [])[:6] if m.get("category") == "hard"] or [m["term"] for m in match.get("missing", [])[:6]]
         kw_why = (f"{len(match['matched'])}/{len(jd['keywords'])} JD terms in your resume"
                   + (f"; missing {', '.join(missing[:4])}" if missing else ""))
     else:
-        # No description on this board — fall back to the configured keywords.
+        # No description published — score based on title keywords and domain targeting
         blob = f"{job.get('title','')} {job.get('department','')}".lower()
         keys = [k.lower() for k in (targeting.get("keywords") or []) if k]
         hit = sum(1 for k in keys if k in blob)
-        kw_pts = round((hit / len(keys)) * 30, 1) if keys else 15.0
-        kw_why = "no job description published; scored on title keywords only"
+        kw_pts = round((hit / len(keys)) * 40, 1) if keys else 30.0
+        kw_why = "no job description published; scored on title tech keywords"
         missing = []
 
-    total = round(title_pts + kw_pts + loc_pts + sen_pts, 1)
+    total = min(round(title_pts + kw_pts + loc_pts + sen_pts, 1), 100.0)
     reason = " · ".join([title_why, kw_why, loc_why, sen_why])
 
     return {
@@ -388,3 +530,40 @@ def score_pending(limit: int = 200, *, log=print) -> dict[str, int]:
     return {"scored": len(jobs), "matched": matched, "skipped": skipped,
             "outOfExperienceRange": out_of_range, "stale": stale,
             "offRegion": off_region}
+
+
+def rescore_all_jobs(limit: int = 2000, *, log=print) -> dict[str, int]:
+    """Re-score all actionable jobs in the database using updated matching criteria."""
+    targeting = store.get_setting("targeting", {}) or {}
+    threshold = float(targeting.get("min_fit_score", 55))
+    resume = resume_text()
+    exclude_locations = list(targeting.get("exclude_locations")
+                             or store.DEFAULT_SETTINGS["targeting"]["exclude_locations"])
+
+    jobs = store.list_jobs(limit=limit)
+    rescored = 0
+    matched = 0
+    for job in jobs:
+        if job.get("status") in ("applied", "interviewing", "offer", "rejected"):
+            continue
+
+        # Region gate
+        bad_loc = location_excluded(job.get("location") or "", exclude_locations)
+        if bad_loc:
+            continue
+
+        fits, why = experience.verdict(job, min_years=int(targeting.get("min_years_experience", 1)),
+                                       max_years=int(targeting.get("max_years_experience", 3)),
+                                       allow_internships=bool(targeting.get("allow_internships", False)))
+        if not fits:
+            continue
+
+        result = score_job(job, resume=resume, targeting=targeting)
+        status = "matched" if result["score"] >= threshold else "skipped"
+        store.set_job_fit(job["id"], result["score"],
+                          f"{result['reason']} · experience: {why}", status)
+        rescored += 1
+        if status == "matched":
+            matched += 1
+    log(f"[match] rescored {rescored} jobs ({matched} above {threshold:.0f} fit threshold)")
+    return {"rescored": rescored, "matched": matched}
