@@ -1,17 +1,15 @@
 import { useCallback, useState } from 'react'
 import { api } from '../lib/api'
-import { Button, Icon, Input, Note, Section } from './ui'
-import FetchPortalsModal from './FetchPortalsModal'
+import { Button, Input, Note, Section } from './ui'
 
 /*
-  Paste a link, track the job, or fetch directly from live portals (LinkedIn, etc.)
+  Paste a link and track the job into your queue.
 */
 export default function AddJobByUrl({ onAdded }) {
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [showPortalsModal, setShowPortalsModal] = useState(false)
 
   const submit = useCallback(() => {
     if (!url.trim()) return
@@ -31,8 +29,8 @@ export default function AddJobByUrl({ onAdded }) {
 
   return (
     <Section
-      title="Add or Discover Jobs"
-      description="Paste any posting URL, or fetch live verified roles from LinkedIn, WeWorkRemotely, and Jobicy."
+      title="Track a job by URL"
+      description="Paste a link from Lever, Greenhouse, Workday, or an employer's careers page to tailor a resume and apply."
     >
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-[16rem] flex-1">
@@ -40,28 +38,14 @@ export default function AddJobByUrl({ onAdded }) {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
-            placeholder="https://jobs.lever.co/company/... or https://www.linkedin.com/jobs/view/..."
+            placeholder="https://jobs.lever.co/company/... or https://boards.greenhouse.io/..."
             aria-label="Job posting URL"
           />
         </div>
         <Button variant="primary" busy={busy} disabled={!url.trim()} onClick={submit}>
           Track link
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => setShowPortalsModal(true)}
-          className="border-accent-500/40 text-accent-300 hover:bg-accent-950/30"
-        >
-          <Icon.Sparkles className="size-3.5 mr-1.5" />
-          Fetch from Portals (LinkedIn, Remote)
-        </Button>
       </div>
-
-      <FetchPortalsModal
-        isOpen={showPortalsModal}
-        onClose={() => setShowPortalsModal(false)}
-        onFetched={onAdded}
-      />
 
       {error ? (
         <div className="mt-3">
@@ -73,15 +57,9 @@ export default function AddJobByUrl({ onAdded }) {
 
       {result ? (
         <div className="mt-3">
-          <Note
-            tone={result.created ? 'ok' : 'info'}
-            title={result.created ? 'Tracked' : 'Already tracked'}
-            onDismiss={() => setResult(null)}
-          >
-            {result.title}
-            {result.company ? ` at ${result.company}` : ''}
-            {result.fitScore ? ` · scored ${Math.round(result.fitScore)}` : ''}
-            {result.fitReason ? ` — ${result.fitReason}` : ''}
+          <Note tone="ok" title="Job added">
+            {result.company ? `${result.company} — ` : ''}
+            {result.title || url}
           </Note>
         </div>
       ) : null}
