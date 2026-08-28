@@ -406,32 +406,51 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                     {/* Preview JD & Intelligence Action Buttons */}
                     <div className="pt-1 flex flex-wrap items-center gap-1.5">
                       <button
-                        onClick={() => setViewing(r)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setViewing(r)
+                        }}
                         className="press inline-flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300 hover:underline"
                       >
                         <Icon.File className="size-3.5" />
                         <span>Details →</span>
                       </button>
                       <button
-                        onClick={() => setOutreachJob(r)}
-                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOutreachJob(r)
+                        }}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-micro font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20"
                         title="Generate Alumni & Recruiter Outreach Notes"
                       >
-                        🎓 Outreach
+                        <Icon.Send className="size-3" />
+                        <span>Outreach</span>
                       </button>
                       <button
-                        onClick={() => setAtsAuditJob(r)}
-                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setAtsAuditJob(r)
+                        }}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-micro font-medium bg-ok-500/10 text-ok-400 border border-ok-500/20 hover:bg-ok-500/20"
                         title="Audit ATS Keyword Penetration"
                       >
-                        📊 ATS Audit
+                        <Icon.Check className="size-3" />
+                        <span>ATS Audit</span>
                       </button>
                       <button
-                        onClick={() => setInterviewPrepJob(r)}
-                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setInterviewPrepJob(r)
+                        }}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-micro font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20"
                         title="Generate 1-Page Interview Prep Cheat Sheet"
                       >
-                        🧠 Prep
+                        <Icon.Sparkles className="size-3" />
+                        <span>Prep</span>
                       </button>
                     </div>
                   </div>

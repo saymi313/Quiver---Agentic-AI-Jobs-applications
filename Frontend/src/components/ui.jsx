@@ -718,4 +718,32 @@ export const Icon = {
       <path d="M17.4 20 15.1 9.3m0 0 2.7 1.5m-2.7-1.5-.6 3" />
     </svg>
   ),
+  Copy: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+  Mail: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
+  ),
+  Sparkles: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="m12 3 1.912 5.885L20 12l-6.088 3.115L12 21l-1.912-5.885L4 12l6.088-3.115L12 3Z" />
+    </svg>
+  ),
+  Check: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  ),
+  External: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <path d="M15 3h6v6M10 14 21 3" />
+    </svg>
+  ),
 }

@@ -157,24 +157,30 @@ export default function JobDetail({
         ) : null}
 
         {/* Action Toolbar for AI & Outreach Intelligence */}
-        <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl bg-surface-sunken border border-line">
+        <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-lg bg-surface-sunken border border-line">
           <button
+            type="button"
             onClick={() => onOpenOutreach?.(job)}
-            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
+            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
           >
-            <span>🎓 Alumni Outreach</span>
+            <Icon.Send className="size-3.5" />
+            <span>Outreach</span>
           </button>
           <button
+            type="button"
             onClick={() => onOpenAtsAudit?.(job)}
-            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-emerald-400 flex items-center justify-center gap-1.5 transition-colors"
+            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-ok-400 flex items-center justify-center gap-1.5 transition-colors"
           >
-            <span>📊 ATS Keyword Audit</span>
+            <Icon.Check className="size-3.5" />
+            <span>ATS Audit</span>
           </button>
           <button
+            type="button"
             onClick={() => onOpenInterviewPrep?.(job)}
-            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-purple-400 flex items-center justify-center gap-1.5 transition-colors"
+            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-purple-400 flex items-center justify-center gap-1.5 transition-colors"
           >
-            <span>🧠 Interview Prep</span>
+            <Icon.Sparkles className="size-3.5" />
+            <span>Interview Prep</span>
           </button>
         </div>
 
