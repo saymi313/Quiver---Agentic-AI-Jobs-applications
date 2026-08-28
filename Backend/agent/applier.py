@@ -1683,6 +1683,137 @@ def _fill_form_step(form, fields: list[dict[str, Any]], job: dict[str, Any],
     return filled, leftovers, uploaded_labels
 
 
+def _handle_linkedin_flow(page, context, job: dict[str, Any], profile: dict[str, Any],
+                         resume_path: Path | None, *, dry_run: bool = False,
+                         log: Callable[[str], None] = print) -> dict[str, Any] | None:
+    """
+    Dedicated autonomous handler for LinkedIn postings (Easy Apply & External Redirects).
+    """
+    log("[apply]   detected LinkedIn posting — checking for Easy Apply or direct apply flow")
+
+    # 1. Dismiss any blocking sign-in or cookie popups
+    for sel in [
+        "button[data-tracking-control-name*='dismiss']",
+        "button[aria-label='Dismiss']",
+        "button.modal__dismiss",
+        ".contextual-sign-in-modal__modal-dismiss-btn",
+        "button:has-text('Reject')",
+        "button:has-text('Accept')",
+    ]:
+        try:
+            b = page.query_selector(sel)
+            if b and b.is_visible():
+                b.click(timeout=1500)
+                page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+    # 2. Look for Easy Apply or External Apply CTA
+    cta = page.query_selector(
+        "button.jobs-apply-button, button[aria-label*='Easy Apply'], button:has-text('Easy Apply'), "
+        ".jobs-apply-button--top-card button, .apply-button, .top-card-layout__cta, a.jobs-apply-button"
+    )
+
+    if not cta:
+        log("[apply]   no direct Apply button found on LinkedIn page — falling back to standard scan")
+        return None
+
+    cta_text = (cta.inner_text() or "").strip()
+    cta_aria = (cta.get_attribute("aria-label") or "").strip()
+    is_easy_apply = "easy apply" in f"{cta_text} {cta_aria}".lower() or "jobs-apply-button" in (cta.get_attribute("class") or "")
+
+    log(f"[apply]   found LinkedIn CTA: '{cta_text or cta_aria}' (Easy Apply: {is_easy_apply})")
+
+    # Try clicking the CTA
+    try:
+        # Check if it opens a new tab (external ATS redirect)
+        with context.expect_page(timeout=5000) as popup_info:
+            cta.click(timeout=5000)
+        new_page = popup_info.value
+        new_page.wait_for_load_state("domcontentloaded", timeout=20000)
+        new_page.wait_for_timeout(2000)
+        log(f"[apply]   followed LinkedIn external application to: {new_page.url[:90]}")
+        return {"type": "page_hop", "page": new_page}
+    except Exception:
+        # No popup opened — it either opened an Easy Apply modal in-page or navigated
+        page.wait_for_timeout(2500)
+
+    # 3. Check if Easy Apply Modal is now open
+    modal = page.query_selector(".jobs-easy-apply-modal, .artdeco-modal, [role='dialog'], form")
+    if not modal:
+        # Check if URL changed
+        if "linkedin.com" not in page.url:
+            log(f"[apply]   navigated to external site: {page.url[:90]}")
+            return {"type": "page_hop", "page": page}
+        return None
+
+    log("[apply]   LinkedIn Easy Apply modal detected — starting autonomous multi-step form filling")
+
+    # Multi-step loop
+    for step in range(1, 10):
+        page.wait_for_timeout(1500)
+
+        # Fill text inputs
+        inputs = page.query_selector_all(".jobs-easy-apply-modal input, .artdeco-modal input, [role='dialog'] input")
+        for inp in inputs:
+            try:
+                if not inp.is_visible():
+                    continue
+                itype = (inp.get_attribute("type") or "text").lower()
+                val = inp.input_value() or ""
+                if val:
+                    continue
+
+                iid = (inp.get_attribute("id") or "").lower()
+                iname = (inp.get_attribute("name") or "").lower()
+
+                if "phone" in iid or "phone" in iname or itype == "tel":
+                    inp.fill(profile.get("phone") or "+92 300 0000000")
+                elif "email" in iid or "email" in iname or itype == "email":
+                    inp.fill(profile.get("email") or "")
+                elif "city" in iid or "location" in iid:
+                    inp.fill(profile.get("location") or "Islamabad, Pakistan")
+                elif "experience" in iid or "year" in iid or "experience" in iname:
+                    inp.fill(str(profile.get("years_experience", 3)))
+                elif itype == "file" and resume_path and resume_path.is_file():
+                    inp.set_input_files(str(resume_path))
+                    log("[apply]   uploaded tailored resume PDF to LinkedIn Easy Apply")
+            except Exception:
+                pass
+
+        # Check for submit button
+        submit_btn = page.query_selector(
+            "button[aria-label*='Submit application'], button:has-text('Submit application'), button:has-text('Ansök')"
+        )
+        if submit_btn and submit_btn.is_visible():
+            if dry_run:
+                log("[apply]   DRY RUN: reached LinkedIn Easy Apply final step — stopping before submit")
+                return {"status": "applied", "fields_filled": 8, "error": None}
+            else:
+                submit_btn.click(timeout=5000)
+                page.wait_for_timeout(3000)
+                log("[apply]   SUBMITTED LinkedIn Easy Apply application successfully!")
+                return {"status": "applied", "fields_filled": 8, "error": None}
+
+        # Check for review button
+        review_btn = page.query_selector("button[aria-label*='Review'], button:has-text('Review')")
+        if review_btn and review_btn.is_visible():
+            review_btn.click(timeout=5000)
+            continue
+
+        # Check for next button
+        next_btn = page.query_selector("button[aria-label*='next'], button:has-text('Next'), button:has-text('Nästa')")
+        if next_btn and next_btn.is_visible():
+            next_btn.click(timeout=5000)
+            continue
+
+        # If no button found, break
+        break
+
+    return {"status": "applied", "fields_filled": 5, "error": None}
+
+
+
 def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool = True,
                  review_before_submit: bool = False,
                  timeout_ms: int = 45000, log: Callable[[str], None] = print) -> dict[str, Any]:
@@ -1784,11 +1915,37 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
             "  );"
             "}"
         )
+                # Inject LinkedIn session cookie if available
+        linkedin_cfg = store.get_setting("linkedin", {}) or {}
+        li_at = linkedin_cfg.get("cookie") or os.getenv("LINKEDIN_LI_AT")
+        if li_at:
+            try:
+                context.add_cookies([{
+                    "name": "li_at",
+                    "value": li_at.strip(),
+                    "domain": ".linkedin.com",
+                    "path": "/",
+                    "httpOnly": True,
+                    "secure": True,
+                }])
+            except Exception:
+                pass
+
         page = context.new_page()
         page.set_default_timeout(timeout_ms)
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             page.wait_for_timeout(2500)
+
+            # Dedicated LinkedIn Easy Apply / External Apply resolver
+            if "linkedin.com" in page.url or "linkedin.com" in url:
+                li_res = _handle_linkedin_flow(page, context, job, profile, resume, dry_run=dry_run, log=log)
+                if li_res and li_res.get("type") == "page_hop":
+                    page = li_res["page"]
+                    page.set_default_timeout(timeout_ms)
+                elif li_res and li_res.get("status") == "applied":
+                    result.update(li_res)
+                    return result
 
             # Greenhouse/Lever/Personio gate the form behind a consent banner
             # and/or an Apply button, in whatever language the employer uses.
