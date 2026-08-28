@@ -591,6 +591,19 @@ export const Icon = {
       <path d="m14 9-3 3 3 3" />
     </svg>
   ),
+  Grid: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  List: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  ),
 
   /* Navigation. Line icons at a consistent 1.6 weight, sized to sit on the
      same optical baseline as the label beside them. */

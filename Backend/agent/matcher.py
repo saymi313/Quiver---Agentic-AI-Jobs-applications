@@ -172,25 +172,25 @@ def _title_score(title: str, targeting: dict[str, Any], category: str | None = N
 
     wanted = [t.lower() for t in (targeting.get("titles") or []) if t]
     if not wanted:
-        return 24.0, "no title filter set"
+        return 20.0, "no title filter set"
 
     # 1. Direct exact or substring match in cleaned title
     for want in wanted:
         if want in low or want in raw_low:
-            return 30.0, f"title matches '{want}'"
+            return 25.0, f"title matches '{want}'"
 
     # 2. Canonical alias match (e.g. "node developer" matches "backend engineer" or "react developer" matches "frontend engineer")
     for want in wanted:
         aliases = ROLE_ALIASES.get(want, [])
         for alias in aliases:
             if alias in low or alias in raw_low:
-                return 28.5, f"title matches role alias '{alias}'"
+                return 23.0, f"title matches role alias '{alias}'"
 
     # 3. Target keywords in title (e.g. 'node', 'react', 'full stack', 'python', 'typescript', 'ai')
     target_keywords = [k.lower() for k in (targeting.get("keywords") or []) if len(k) > 2]
     title_kw_hits = [k for k in target_keywords if k in low or k in raw_low]
     if title_kw_hits:
-        return 27.0, f"title contains target tech ({', '.join(title_kw_hits[:2])})"
+        return 20.0, f"title contains target tech ({', '.join(title_kw_hits[:2])})"
 
     # 4. Partial word match
     best, best_want = 0.0, ""
@@ -205,13 +205,13 @@ def _title_score(title: str, targeting: dict[str, Any], category: str | None = N
         if hit > best:
             best, best_want = hit, want
     if best >= 0.5:
-        return round(30 * best, 1), f"partial match on '{best_want}'"
+        return round(25.0 * best, 1), f"partial match on '{best_want}'"
 
     # 5. Classified category match fallback
     if category and category in (targeting.get("categories") or []):
-        return 25.0, f"matches target category '{category}'"
+        return 18.0, f"matches target category '{category}'"
 
-    return 10.0, "title loosely related"
+    return 7.0, "title loosely related"
 
 
 def _location_score(job: dict[str, Any], targeting: dict[str, Any]) -> tuple[float, str]:
@@ -220,7 +220,7 @@ def _location_score(job: dict[str, Any], targeting: dict[str, Any]) -> tuple[flo
     wanted = [w.lower().strip() for w in (targeting.get("locations") or []) if w]
 
     if not wanted:
-        return 14.0, "no location filter"
+        return 13.0, "no location filter"
 
     # If role is remote and user accepts remote
     if remote and any(w in ("remote", "anywhere", "worldwide") for w in wanted):
@@ -252,12 +252,12 @@ def _location_score(job: dict[str, Any], targeting: dict[str, Any]) -> tuple[flo
                         return 15.0, f"location matches '{target_country}'"
 
     if remote:
-        return 14.0, "remote role"
+        return 13.0, "remote role"
 
     if not loc:
-        return 11.0, "location not specified"
+        return 10.0, "location not specified"
 
-    return 7.0, f"location '{job.get('location') or 'unstated'}'"
+    return 6.0, f"location '{job.get('location') or 'unstated'}'"
 
 
 def _seniority_score(title: str, years: str) -> tuple[float, str]:
@@ -292,19 +292,21 @@ def score_job(job: dict[str, Any], *, resume: str | None = None,
         jd = analyze_jd(f"{job.get('title','')}\n\n{description}")
         match = match_keywords(resume, jd)
         
-        # Hard tech skills count more heavily than noisy generic n-grams
+        # Hard tech skills count for 80%, general phrase overlap for 20%
         hard_jd = [k for k in jd.get("keywords", []) if k.get("category") == "hard"]
         hard_matched = [k for k in match.get("matched", []) if k.get("category") == "hard"]
         
         if hard_jd:
             hard_coverage = len(hard_matched) / len(hard_jd)
             overall_coverage = match.get("coverage", 0.0)
-            blended_coverage = (0.75 * hard_coverage) + (0.25 * overall_coverage)
+            blended_coverage = (0.80 * hard_coverage) + (0.20 * overall_coverage)
         else:
             blended_coverage = match.get("coverage", 0.0)
 
-        # Calibrated ATS scoring: 55%+ coverage maps to top-tier score (up to 45 pts)
-        kw_pts = round(min(blended_coverage / 0.55, 1.0) * 45, 1)
+        # Honest continuous linear scaling (max 50.0 pts for keywords)
+        kw_pts = round(blended_coverage * 47.0 + (3.0 if blended_coverage >= 0.8 else 0.0), 1)
+        kw_pts = min(kw_pts, 50.0)
+
         missing = [m["term"] for m in match.get("missing", [])[:6] if m.get("category") == "hard"] or [m["term"] for m in match.get("missing", [])[:6]]
         kw_why = (f"{len(match['matched'])}/{len(jd['keywords'])} JD terms in your resume"
                   + (f"; missing {', '.join(missing[:4])}" if missing else ""))
@@ -313,7 +315,7 @@ def score_job(job: dict[str, Any], *, resume: str | None = None,
         blob = f"{job.get('title','')} {job.get('department','')}".lower()
         keys = [k.lower() for k in (targeting.get("keywords") or []) if k]
         hit = sum(1 for k in keys if k in blob)
-        kw_pts = round((hit / len(keys)) * 40, 1) if keys else 30.0
+        kw_pts = round((hit / len(keys)) * 32.0 + 10.0, 1) if keys else 24.0
         kw_why = "no job description published; scored on title tech keywords"
         missing = []
 
