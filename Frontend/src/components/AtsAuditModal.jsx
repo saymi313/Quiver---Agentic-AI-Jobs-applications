@@ -54,6 +54,15 @@ export function AtsAuditModal({ job, onClose }) {
                 ATS Keyword &amp; Penetration Audit
               </span>
               <span className="text-micro text-n-500">Job #{job.id}</span>
+              {data?.is_tailored ? (
+                <span className="text-micro font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  Tailored Version
+                </span>
+              ) : (
+                <span className="text-micro font-medium px-1.5 py-0.5 rounded bg-surface text-n-400 border border-line">
+                  Master Resume
+                </span>
+              )}
             </div>
             <h2 className="text-sm font-semibold text-n-100 mt-0.5">
               {job.title} <span className="text-n-400 font-normal">at {job.company_name}</span>
@@ -111,11 +120,11 @@ export function AtsAuditModal({ job, onClose }) {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <Status tone={scoreTone}>
-                      {score >= 80 ? 'High ATS Fit' : score >= 60 ? 'Moderate Fit' : 'Low Keyword Match'}
+                      {score >= 80 ? 'High ATS Fit' : score >= 60 ? 'Moderate Fit' : 'Needs Alignment'}
                     </Status>
                   </div>
                   <p className="text-tiny text-n-300 leading-relaxed">
-                    {data?.fit_reason || `${matched.length} key hard skills verified in your tailored resume.`}
+                    {matched.length} key required hard skills verified in your resume with high density.
                   </p>
                   <div className="flex items-center gap-3 text-micro pt-1">
                     <span className="text-ok-400 font-medium">{matched.length} Matched</span>

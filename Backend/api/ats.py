@@ -473,10 +473,22 @@ def match_keywords(resume_text: str, jd: dict[str, Any]) -> dict[str, Any]:
 
     total_w = sum(k["weight"] for k in jd["keywords"]) or 1.0
     matched_w = sum(k["weight"] for k in matched)
+
+    # Hard tech skills drive ATS filters (80% weight), general context/phrases 20%
+    hard_keywords = [k for k in jd["keywords"] if k.get("category") == "hard"]
+    hard_matched = [k for k in matched if k.get("category") == "hard"]
+
+    if hard_keywords:
+        hard_cov = sum(k["weight"] for k in hard_matched) / sum(k["weight"] for k in hard_keywords)
+        overall_cov = matched_w / total_w
+        blended_coverage = round((0.80 * hard_cov) + (0.20 * overall_cov), 4)
+    else:
+        blended_coverage = round(matched_w / total_w, 4)
+
     return {
         "matched": matched,
-        "missing": sorted(missing, key=lambda k: -k["weight"]),
-        "coverage": round(matched_w / total_w, 4),
+        "missing": sorted(missing, key=lambda k: (-(2 if k.get("category") == "hard" else 1), -k["weight"])),
+        "coverage": blended_coverage,
         "countCoverage": round(len(matched) / max(len(jd["keywords"]), 1), 4),
     }
 

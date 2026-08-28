@@ -866,8 +866,9 @@ def agent_job_outreach(job_id: int) -> dict[str, Any]:
 def agent_job_ats_audit(job_id: int) -> dict[str, Any]:
     """Compute detailed ATS keyword penetration, matched skills, and density recommendations."""
     import re
-    from agent import matcher, store as agent_store
+    from agent import matcher, store as agent_store, tailor
     from api.ats import analyze_jd, match_keywords
+    from api.resume_parse import parse_resume
 
     agent_store.init()
     job = agent_store.job(job_id)
@@ -879,7 +880,19 @@ def agent_job_ats_audit(job_id: int) -> dict[str, Any]:
         jd_text = f"{job.get('title')} at {job.get('company_name')} in {job.get('location')}."
 
     category = job.get("role_category")
-    resume_str = matcher.resume_text(category)
+    
+    # 1. Prefer the actual tailored resume generated for this job if one exists
+    existing_pdf = tailor.existing(job)
+    resume_str = ""
+    if existing_pdf and existing_pdf.is_file():
+        try:
+            resume_str = parse_resume(existing_pdf).raw_text
+        except Exception:
+            resume_str = ""
+
+    # Fallback to category-specific master resume if no tailored resume yet
+    if not resume_str:
+        resume_str = matcher.resume_text(category)
 
     jd_analysis = analyze_jd(jd_text)
     match_result = match_keywords(resume_str, jd_analysis) if resume_str else {}
@@ -915,12 +928,14 @@ def agent_job_ats_audit(job_id: int) -> dict[str, Any]:
         except Exception:
             raw_skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
 
+    computed_score = round(coverage_score * 100, 1) if coverage_score <= 1.0 else round(coverage_score, 1)
+
     return {
         "ok": True,
         "job_id": job_id,
         "company": job.get("company_name"),
         "title": job.get("title"),
-        "score": round(coverage_score * 100, 1) if coverage_score <= 1.0 else round(coverage_score, 1),
+        "score": computed_score,
         "fit_score": round(job.get("fit_score") or 0.0, 1),
         "fit_reason": job.get("fit_reason") or "",
         "matched_count": len(matched_keywords),
@@ -928,9 +943,14 @@ def agent_job_ats_audit(job_id: int) -> dict[str, Any]:
         "skills_density": skills_density,
         "action_verbs": verb_counts[:8],
         "hard_skills": raw_skills,
+        "is_tailored": bool(existing_pdf and existing_pdf.is_file()),
         "recommendations": [
-            f"Add high-priority keyword '{item.get('term') if isinstance(item, dict) else item}' to project bullets"
+            f"Add target skill '{item.get('term') if isinstance(item, dict) else item}' into project experience"
             for item in missing_keywords[:4]
+            if (isinstance(item, dict) and item.get("category") == "hard") or not isinstance(item, dict)
+        ] or [
+            f"Emphasize impact metrics for '{item.get('term') if isinstance(item, dict) else item}'"
+            for item in missing_keywords[:2]
         ],
     }
 
