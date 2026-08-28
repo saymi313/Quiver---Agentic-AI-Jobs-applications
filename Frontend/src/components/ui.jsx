@@ -746,4 +746,10 @@ export const Icon = {
       <path d="M15 3h6v6M10 14 21 3" />
     </svg>
   ),
+  Globe: (p) => (
+    <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" {...stroke} {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20" />
+    </svg>
+  ),
 }
