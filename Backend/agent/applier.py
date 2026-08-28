@@ -2140,12 +2140,13 @@ def _handle_linkedin_flow(page, context, job: dict[str, Any], profile: dict[str,
         page.wait_for_timeout(1500)
 
     # 3. Check if Easy Apply Modal is now open
-    modal = page.query_selector(".jobs-easy-apply-modal, .artdeco-modal, [role='dialog'], form")
+    modal = page.query_selector(".jobs-easy-apply-modal, .jobs-easy-apply-content, [role='dialog'].jobs-easy-apply-modal, div.jobs-easy-apply-modal")
     if not modal:
-        # Check if URL changed
+        # Check if URL changed to an external ATS
         if "linkedin.com" not in page.url:
             log(f"[apply]   navigated to external site: {page.url[:90]}")
             return {"type": "page_hop", "page": page}
+        log("[apply]   no Easy Apply modal opened — falling back to ATS page scanner")
         return None
 
     log("[apply]   LinkedIn Easy Apply modal detected — starting autonomous multi-step form filling")
@@ -2961,7 +2962,7 @@ def apply_to_ids(job_ids: list[int], *, dry_run: bool = False, headless: bool = 
     # ---- the report ------------------------------------------------------
     # Grouped by what the user has to do next, so a batch run ends in an action
     # list rather than a scroll-back through per-job logs.
-    log("[apply] ──────── summary ────────")
+    log("[apply] -------- summary --------")
     LABELS = [
         ("submitted", "Submitted" if not dry_run else "Would submit"),
         ("held", "Held for your review"),
