@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { Segmented } from '../components/apple'
 import {
@@ -22,8 +22,7 @@ import {
   Resume — one posting in, one tailored resume out.
 
   Linear: give it a resume and a posting, read what a parser sees, generate.
-  The previous version put fifteen panels on the page at once, several of them
-  showing the same numbers in different shapes.
+  Uses the default resume configured in settings if none is uploaded.
 */
 
 const ACCEPT = '.pdf,.docx,.txt,.md'
@@ -37,6 +36,8 @@ function prettyBytes(n) {
 
 export default function ResumeTab({ aiStatus }) {
   const [resumeFile, setResumeFile] = useState(null)
+  const [defaultResume, setDefaultResume] = useState(null)
+  const [loadingDefault, setLoadingDefault] = useState(true)
   const [jdText, setJdText] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState(null)
@@ -55,7 +56,25 @@ export default function ResumeTab({ aiStatus }) {
   const [showOptions, setShowOptions] = useState(false)
 
   const fileRef = useRef(null)
-  const canAnalyze = resumeFile && jdText.trim().length >= 60
+
+  useEffect(() => {
+    let active = true
+    api.defaultResume()
+      .then((res) => {
+        if (active && res && res.exists) {
+          setDefaultResume(res)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingDefault(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const canAnalyze = (resumeFile || defaultResume?.exists) && jdText.trim().length >= 60
 
   const runAnalyze = useCallback(async () => {
     setError('')
@@ -113,7 +132,21 @@ export default function ResumeTab({ aiStatus }) {
       <Section title="The posting" description="Your resume, and the job description to aim it at.">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
           <div>
-            <p className="mb-1 text-micro font-medium tracking-wide text-n-400 uppercase">Resume</p>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-micro font-medium tracking-wide text-n-400 uppercase">Resume</p>
+              {resumeFile ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setResumeFile(null)
+                  }}
+                  className="text-tiny text-brand-400 hover:underline"
+                >
+                  Reset to default
+                </button>
+              ) : null}
+            </div>
             <button
               onClick={() => fileRef.current?.click()}
               className="press flex w-full items-center gap-3 rounded-sm border border-dashed border-line-strong px-3 py-3 text-left hover:border-n-600 hover:bg-raised"
@@ -121,9 +154,21 @@ export default function ResumeTab({ aiStatus }) {
               <Icon.Doc className="size-4 shrink-0 text-n-500" />
               {resumeFile ? (
                 <span className="min-w-0">
-                  <span className="block truncate text-sm text-n-200">{resumeFile.name}</span>
+                  <span className="block truncate text-sm font-medium text-n-200">{resumeFile.name}</span>
                   <span className="text-tiny text-n-500">
-                    {prettyBytes(resumeFile.size)} · click to replace
+                    {prettyBytes(resumeFile.size)} · Custom upload · click to replace
+                  </span>
+                </span>
+              ) : defaultResume?.exists ? (
+                <span className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="block truncate text-sm font-medium text-n-200">{defaultResume.filename}</span>
+                    <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-micro font-semibold text-brand-400">
+                      Default
+                    </span>
+                  </div>
+                  <span className="text-tiny text-n-500">
+                    {prettyBytes(defaultResume.size)} · From Settings · click to upload alternative
                   </span>
                 </span>
               ) : (
@@ -164,7 +209,7 @@ export default function ResumeTab({ aiStatus }) {
           </Button>
           {!canAnalyze ? (
             <span className="text-tiny text-n-500">
-              Add a resume and paste at least a paragraph of the posting.
+              {defaultResume?.exists || resumeFile ? 'Paste at least a paragraph of the posting.' : 'Add a resume and paste at least a paragraph of the posting.'}
             </span>
           ) : null}
         </div>

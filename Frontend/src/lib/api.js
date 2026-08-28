@@ -17,11 +17,19 @@ async function handle(res) {
 export const api = {
   health: () => fetch(`${BASE}/api/health`).then(handle),
 
-  analyze: ({ resumeFile, jdText, jdFile }) => {
+  defaultResume: (category) =>
+    fetch(`${BASE}/api/ats/default-resume` + (category ? `?category=${encodeURIComponent(category)}` : '')).then(handle),
+
+  analyze: ({ resumeFile, jdText, jdFile, category }) => {
     const form = new FormData()
-    form.append('resume', resumeFile)
+    if (resumeFile) {
+      form.append('resume', resumeFile)
+    } else {
+      form.append('use_default', 'true')
+    }
     form.append('jd_text', jdText || '')
     if (jdFile) form.append('jd_file', jdFile)
+    if (category) form.append('category', category)
     return fetch(`${BASE}/api/ats/analyze`, { method: 'POST', body: form }).then(handle)
   },
 

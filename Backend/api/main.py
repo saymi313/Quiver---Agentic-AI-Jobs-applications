@@ -131,25 +131,64 @@ def _latex_engine() -> str:
 
 
 # --------------------------------------------------------------------------
-# ATS: analyze
+# ATS: analyze & default resume
 # --------------------------------------------------------------------------
+
+@app.get("/api/ats/default-resume")
+def ats_default_resume(category: str | None = None) -> dict[str, Any]:
+    """Returns the default resume configured in settings / cv_data."""
+    from agent import matcher, store
+    store.init()
+    path = matcher.resume_path(category)
+    if not path or not path.is_file():
+        return {
+            "exists": False,
+            "filename": None,
+            "path": None,
+            "size": 0,
+        }
+    return {
+        "exists": True,
+        "filename": path.name,
+        "path": str(path),
+        "size": path.stat().st_size,
+    }
+
 
 @app.post("/api/ats/analyze")
 async def ats_analyze(
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
     jd_text: str = Form(""),
     jd_file: UploadFile | None = File(None),
+    use_default: bool = Form(False),
+    category: str | None = Form(None),
 ) -> JSONResponse:
     _gc_sessions()
 
-    ext = Path(resume.filename or "").suffix.lower()
-    if ext not in ALLOWED_RESUME_EXT:
-        raise HTTPException(400, f"Unsupported resume type '{ext or 'unknown'}'. "
-                                 f"Upload {', '.join(sorted(ALLOWED_RESUME_EXT))}.")
+    payload: bytes = b""
+    filename: str = ""
+    ext: str = ""
 
-    payload = await resume.read()
+    if resume is not None and getattr(resume, "filename", ""):
+        filename = resume.filename
+        ext = Path(filename).suffix.lower()
+        if ext not in ALLOWED_RESUME_EXT:
+            raise HTTPException(400, f"Unsupported resume type '{ext or 'unknown'}'. "
+                                     f"Upload {', '.join(sorted(ALLOWED_RESUME_EXT))}.")
+        payload = await resume.read()
+    else:
+        # Resolve default resume from settings / cv_data
+        from agent import matcher, store
+        store.init()
+        def_path = matcher.resume_path(category)
+        if not def_path or not def_path.is_file():
+            raise HTTPException(400, "No default resume found in settings or cv_data/ folder. Please upload a resume file.")
+        filename = def_path.name
+        ext = def_path.suffix.lower()
+        payload = def_path.read_bytes()
+
     if not payload:
-        raise HTTPException(400, "The uploaded resume is empty.")
+        raise HTTPException(400, "The resume is empty.")
     if len(payload) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"Resume exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
 
@@ -206,12 +245,12 @@ async def ats_analyze(
         "jd": jd_analysis,
         "analysis": result,
         "files": {},
-        "filename": resume.filename,
+        "filename": filename,
     }
 
     return JSONResponse({
         "sessionId": session_id,
-        "originalFilename": resume.filename,
+        "originalFilename": filename,
         **result,
     })
 
