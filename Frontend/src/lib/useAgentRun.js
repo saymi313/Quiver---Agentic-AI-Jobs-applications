@@ -22,12 +22,8 @@ import { useJobStream } from './useJobStream'
  *  screen mounted later does not reset what the other one chose. */
 const shared = {
   dryRun: true,
-  // Headed by default: Ashby's anti-bot scoring rejected a headless browser as
-  // spam in testing and accepted the identical submission with a visible one.
-  headed: true,
-  // Only offered with the browser hidden: several visible Chromium windows
-  // fighting for focus is unusable, and focus theft corrupts the fields being
-  // typed into.
+  // Headless by default so background runs never pop up desktop windows
+  headed: false,
   workers: 1,
 }
 
