@@ -902,7 +902,7 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
     return rows
 
 
-def job_facets() -> dict[str, Any]:
+def job_facets(status: str | None = None) -> dict[str, Any]:
     """
     How many jobs sit under each category, portal and status.
 

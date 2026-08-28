@@ -827,7 +827,7 @@ def agent_jobs(limit: int = 200, status: str | None = None,
             if r.get("status") == "failed":
                 r["screenshot"] = shots.get(int(r["id"]))
 
-    facets = agent_store.job_facets()
+    facets = agent_store.job_facets(status=status)
     return {
         "rows": rows,
         "total": facets["total"],

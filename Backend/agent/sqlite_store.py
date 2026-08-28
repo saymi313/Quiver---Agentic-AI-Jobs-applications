@@ -1106,29 +1106,36 @@ def list_jobs(limit: int = 100, status: str | None = None, *,
     return rows
 
 
-def job_facets() -> dict[str, Any]:
+def job_facets(status: str | None = None) -> dict[str, Any]:
     """
     How many jobs sit under each category, portal and status.
-
-    Counted by the database. The dashboard used to work this out by fetching a
-    thousand whole rows — descriptions and all — and tallying them in Python,
-    once per request, which is most of what made the jobs table slow to open.
+    Respects the active status view (Ready, Applied, Filtered out, All) so facet chips match row results.
     """
     conn = _conn()
+    where = ""
+    args: list[Any] = []
+    if status == "not_applied":
+        where = "WHERE status NOT IN ('applied','failed','skipped','duplicate')"
+    elif status:
+        where = "WHERE status = ?"
+        args.append(status)
 
-    def tally(column: str) -> dict[str, int]:
+    def tally(column: str, use_status_filter: bool = True) -> dict[str, int]:
+        w = where if use_status_filter else ""
+        a = args if use_status_filter else []
+        clause = f"{w} AND " if w else "WHERE "
+        clause += f"{column} IS NOT NULL AND {column} != ''"
         rows = conn.execute(
             f"SELECT {column} AS k, COUNT(*) AS n FROM jobs "
-            f"WHERE {column} IS NOT NULL AND {column} != '' "
-            f"GROUP BY {column} ORDER BY n DESC").fetchall()
+            f"{clause} GROUP BY {column} ORDER BY n DESC", tuple(a)).fetchall()
         return {str(r["k"]): int(r["n"]) for r in rows}
 
-    total = int(conn.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"])
+    total = int(conn.execute(f"SELECT COUNT(*) AS n FROM jobs {where}", tuple(args)).fetchone()["n"])
     return {
         "total": total,
-        "categories": tally("role_category"),
-        "sources": tally("source"),
-        "statuses": tally("status"),
+        "categories": tally("role_category", use_status_filter=True),
+        "sources": tally("source", use_status_filter=True),
+        "statuses": tally("status", use_status_filter=False),
     }
 
 
