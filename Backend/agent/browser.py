@@ -72,37 +72,44 @@ def get_browser_context(
     if proxy_url:
         kwargs["proxy"] = {"server": proxy_url}
 
+    browser_inst = None
     try:
         context = playwright.chromium.launch_persistent_context(**kwargs)
     except Exception as exc:
-        log(f"[browser] persistent context launch error ({exc}) — falling back to standard launch")
-        browser = playwright.chromium.launch(
+        log(f"[browser] persistent context launch notice ({exc}) — using dedicated browser instance")
+        browser_inst = playwright.chromium.launch(
             headless=headless,
             args=launch_args,
             proxy={"server": proxy_url} if proxy_url else None,
         )
-        context = browser.new_context(
+        context = browser_inst.new_context(
             viewport={"width": 1440, "height": 950},
             user_agent=kwargs["user_agent"],
             locale="en-US",
         )
-        return browser, context, False
 
     # Anti-bot stealth initialization scripts
-    context.add_init_script(
-        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-        "window.chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };"
-        "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en', 'en-GB']});"
-    )
+    try:
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            "window.chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };"
+            "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en', 'en-GB']});"
+        )
+    except Exception:
+        pass
 
     # Inject stored LinkedIn cookie if available
     try:
         linkedin_cfg = store.get_setting("linkedin", {}) or {}
-        li_at = linkedin_cfg.get("cookie") or os.getenv("LINKEDIN_LI_AT")
+        li_at = (
+            linkedin_cfg.get("li_at")
+            or linkedin_cfg.get("cookie")
+            or os.getenv("LINKEDIN_LI_AT")
+        )
         if li_at:
             context.add_cookies([{
                 "name": "li_at",
-                "value": li_at.strip(),
+                "value": str(li_at).strip(),
                 "domain": ".linkedin.com",
                 "path": "/",
                 "httpOnly": True,
@@ -111,7 +118,7 @@ def get_browser_context(
     except Exception:
         pass
 
-    return None, context, False
+    return browser_inst, context, False
 
 
 def save_browser_storage_state(context: Any, path: Path | None = None) -> bool:
