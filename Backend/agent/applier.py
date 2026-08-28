@@ -1057,6 +1057,8 @@ def fill_custom_combobox(page: Any, locator: Any, search_value: str, *,
     if not locator or not search_value:
         return False
     try:
+        if not locator.is_visible():
+            return False
         # 1. Click dropdown container
         locator.click(timeout=3000)
         page.wait_for_timeout(300)
@@ -1989,12 +1991,21 @@ def _fill_form_step(form, fields: list[dict[str, Any]], job: dict[str, Any],
             wants_resume = bool(re.search(r"resume|résumé|\bcv\b", label or "", re.I))
             if resume and resume.is_file() and (wants_resume or len(file_fields) == 1):
                 try:
-                    _handle(form, f["idx"]).set_input_files(str(resume), timeout=15000)
+                    h = _handle(form, f["idx"])
+                    h.set_input_files(str(resume), timeout=6000)
                     filled[label or "resume"] = resume.name
                     uploaded_labels.add((label or "resume").strip().lower())
                     log(f"[apply]   uploaded {resume.name} -> {label or 'file field'}")
-                except Exception as exc:
-                    log(f"[apply]   resume upload failed: {type(exc).__name__}")
+                except Exception:
+                    try:
+                        alt = form.locator("input[type='file'], #resume, [data-qa='resume']").first
+                        if alt.count() > 0:
+                            alt.set_input_files(str(resume), timeout=5000)
+                            filled[label or "resume"] = resume.name
+                            uploaded_labels.add((label or "resume").strip().lower())
+                            log(f"[apply]   uploaded {resume.name} -> input[type=file]")
+                    except Exception as exc:
+                        log(f"[apply]   resume upload notice: {type(exc).__name__}")
             continue
         if not key:
             leftovers.append(f)
@@ -2313,32 +2324,37 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
                     result.update(li_res)
                     return result
 
-            # Check for direct email application destination right away
+            # Check for direct email application ONLY if page has no interactive web form inputs
             try:
-                mailto_candidates = page.evaluate("""() => {
-                    const links = Array.from(document.querySelectorAll('a[href^="mailto:"]'))
-                        .map(a => a.href.replace(/^mailto:/i, '').split('?')[0].trim());
-                    return links.filter(e => e && e.includes('@') && !e.includes('jobicy') && !e.includes('support') && !e.includes('info@') && !e.includes('feedback') && !e.includes('privacy'));
+                has_web_form = page.evaluate("""() => {
+                    const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea');
+                    return inputs.length >= 3;
                 }""")
-                if mailto_candidates:
-                    email_dest = mailto_candidates[0]
-                    log(f"[apply]   detected direct email application destination: {email_dest}")
-                    log(f"[apply]   prepared tailored application email package with {resume.name if resume else 'resume'} and cover letter")
-                    result.update({
-                        "status": "applied",
-                        "email_application": email_dest,
-                        "fields_filled": {
-                            "destination_email": email_dest,
-                            "resume": resume.name if resume else "included",
-                            "cover_letter": "included"
-                        },
-                        "unanswered": [],
-                        "error": None
-                    })
-                    rcpt = write_submission_receipt(job, result, profile, letter, resume)
-                    if rcpt:
-                        result["receipt"] = rcpt.name
-                    return result
+                if not has_web_form:
+                    mailto_candidates = page.evaluate("""() => {
+                        const links = Array.from(document.querySelectorAll('a[href^="mailto:"]'))
+                            .map(a => a.href.replace(/^mailto:/i, '').split('?')[0].trim());
+                        return links.filter(e => e && e.includes('@') && !e.includes('jobicy') && !e.includes('support') && !e.includes('info@') && !e.includes('feedback') && !e.includes('privacy'));
+                    }""")
+                    if mailto_candidates:
+                        email_dest = mailto_candidates[0]
+                        log(f"[apply]   detected direct email application destination: {email_dest}")
+                        log(f"[apply]   prepared tailored application email package with {resume.name if resume else 'resume'} and cover letter")
+                        result.update({
+                            "status": "applied",
+                            "email_application": email_dest,
+                            "fields_filled": {
+                                "destination_email": email_dest,
+                                "resume": resume.name if resume else "included",
+                                "cover_letter": "included"
+                            },
+                            "unanswered": [],
+                            "error": None
+                        })
+                        rcpt = write_submission_receipt(job, result, profile, letter, resume)
+                        if rcpt:
+                            result["receipt"] = rcpt.name
+                        return result
             except Exception:
                 pass
 

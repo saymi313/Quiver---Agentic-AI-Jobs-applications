@@ -125,7 +125,7 @@ def direct_apply(
     if not platform:
         return None
 
-    log(f"[apply]   ⚡ detected direct ATS endpoint: {platform.upper()} ({url[:80]})")
+    log(f"[apply]   [direct] detected direct ATS endpoint: {platform.upper()} ({url[:80]})")
 
     first_name = profile.get("_first_name") or (profile.get("full_name", "").split()[0] if profile.get("full_name") else "")
     last_name = profile.get("_last_name") or (" ".join(profile.get("full_name", "").split()[1:]) if len(profile.get("full_name", "").split()) > 1 else "Candidate")
@@ -173,7 +173,7 @@ def direct_apply(
             data[f"question_{k}"] = v
 
         if dry_run:
-            log(f"[apply]   DRY RUN — Greenhouse payload prepared ({len(data)} fields mapped, resume: {resume_path.name if resume_path else 'none'})")
+            log(f"[apply]   DRY RUN - Greenhouse payload prepared ({len(data)} fields mapped, resume: {resume_path.name if resume_path else 'none'})")
             return {
                 "status": "needs_review",
                 "fields_filled": data,
@@ -190,7 +190,7 @@ def direct_apply(
         try:
             resp = requests.post(post_url, data=data, files=files, timeout=30)
             if resp.status_code in (200, 201):
-                log("[apply]   ✅ Greenhouse application submitted successfully via direct API")
+                log("[apply]   [success] Greenhouse application submitted successfully via direct API")
                 return {
                     "status": "applied",
                     "fields_filled": data,
@@ -224,7 +224,7 @@ def direct_apply(
         }
 
         if dry_run:
-            log(f"[apply]   DRY RUN — Lever payload prepared ({len(data)} fields mapped, resume: {resume_path.name if resume_path else 'none'})")
+            log(f"[apply]   DRY RUN - Lever payload prepared ({len(data)} fields mapped, resume: {resume_path.name if resume_path else 'none'})")
             return {
                 "status": "needs_review",
                 "fields_filled": data,
@@ -240,7 +240,7 @@ def direct_apply(
         try:
             resp = requests.post(post_url, data=data, files=files, timeout=30)
             if resp.status_code in (200, 201):
-                log("[apply]   ✅ Lever application submitted successfully via direct API")
+                log("[apply]   [success] Lever application submitted successfully via direct API")
                 return {
                     "status": "applied",
                     "fields_filled": data,
