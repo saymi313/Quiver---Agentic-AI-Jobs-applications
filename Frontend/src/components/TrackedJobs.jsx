@@ -358,7 +358,9 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                           {r.source}
                         </span>
                       ) : null}
-                      <span className="ml-auto text-micro text-n-500">{when(r.discovered_at)}</span>
+                      <span className="ml-auto text-micro font-mono text-n-400" title={r.posted_at ? `Posted: ${r.posted_at}` : 'Recently discovered'}>
+                        {r.posted_at ? `Posted ${when(r.posted_at)}` : when(r.discovered_at)}
+                      </span>
                     </div>
                   </div>
 
@@ -514,7 +516,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
             { label: 'Score', className: 'min-w-[75px] w-[8%] whitespace-nowrap' },
             { label: 'Portal', className: 'min-w-[75px] w-[7%]' },
             { label: 'Status', className: 'min-w-[75px] w-[7%]' },
-            { label: 'Found', className: 'min-w-[75px] w-[7%] whitespace-nowrap' },
+            { label: 'Posted', className: 'min-w-[75px] w-[7%] whitespace-nowrap' },
             { label: 'Resume', className: 'min-w-[90px] w-[8%]' },
             { label: '', className: 'min-w-[80px] w-[6%] text-right' },
           ]}
@@ -618,7 +620,9 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                   </Status>
                 </Td>
 
-                <Td className="whitespace-nowrap text-n-500">{when(r.discovered_at)}</Td>
+                <Td className="whitespace-nowrap font-mono text-micro text-n-400" title={r.posted_at ? `Posted: ${r.posted_at}` : 'Recently discovered'}>
+                  {r.posted_at ? when(r.posted_at) : when(r.discovered_at)}
+                </Td>
 
                 <Td className="whitespace-nowrap">
                   {r.has_resume ? (

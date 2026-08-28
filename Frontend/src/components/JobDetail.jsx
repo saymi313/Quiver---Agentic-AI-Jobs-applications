@@ -73,6 +73,17 @@ function Fact({ icon: I, label, children }) {
   )
 }
 
+function when(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  return d.toLocaleDateString()
+}
+
 function deadlineWhen(iso) {
   if (!iso) return null
   const d = new Date(iso)
@@ -207,6 +218,9 @@ export default function JobDetail({
             <Fact icon={Icon.Pin} label="Location">
               {job.location || (job.remote ? 'Remote' : null)}
             </Fact>
+            <Fact icon={Icon.Calendar} label="Posted">
+              {when(job.posted_at || job.discovered_at)}
+            </Fact>
             <Fact icon={Icon.Coin} label="Salary">{salary}</Fact>
             <Fact icon={Icon.Steps} label="Level">
               {job.seniority ? job.seniority[0].toUpperCase() + job.seniority.slice(1) : null}
@@ -215,7 +229,9 @@ export default function JobDetail({
               {AR_LABEL[job.work_arrangement]}
             </Fact>
             <Fact icon={Icon.Clock} label="Type">{job.employment_type}</Fact>
-            <Fact icon={Icon.Calendar} label="Closes">{deadlineWhen(job.deadline)}</Fact>
+            {job.deadline ? (
+              <Fact icon={Icon.Calendar} label="Closes">{deadlineWhen(job.deadline)}</Fact>
+            ) : null}
           </div>
 
           {/* the skills the posting named — what a tailored resume is aimed at */}

@@ -17,6 +17,17 @@ function salaryHint(job) {
   return `${sym}${k(lo ?? hi)}`
 }
 
+function when(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  return d.toLocaleDateString()
+}
+
 /*
   The best few roles, as cards.
 
@@ -126,7 +137,12 @@ export default function TopMatches({ refreshKey, busy, onApply, onGenerate }) {
                     ) : r.location ? (
                       <p className="mt-1 truncate text-micro text-n-400">{r.location}</p>
                     ) : null}
-                    <CategoryChip slug={r.role_category} className="mt-2" />
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <CategoryChip slug={r.role_category} />
+                      <span className="text-micro font-mono text-n-500">
+                        {r.posted_at ? `Posted ${when(r.posted_at)}` : when(r.discovered_at)}
+                      </span>
+                    </div>
                   </div>
                   <ScoreRing value={r.fit_score} />
                 </button>

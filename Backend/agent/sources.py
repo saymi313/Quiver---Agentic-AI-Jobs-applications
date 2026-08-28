@@ -846,47 +846,6 @@ def _search_term(wanted: list[str]) -> str:
     return " ".join(wanted[:4]) if wanted else "software developer"
 
 
-def _adzuna_markets() -> list[str]:
-    from . import store
-    regions = [r.lower() for r in (store.get_setting("targeting", {}) or {}).get("regions", [])]
-    codes: list[str] = []
-    for r in regions:
-        for c in _ADZUNA_MARKETS.get(r, []):
-            if c not in codes:
-                codes.append(c)
-    return codes or ["gb"]
-
-
-def _fetch_adzuna(results: list, wanted: list[str], limit: int,
-                  log: Callable[[str], None]) -> None:
-    from . import env as _envmod
-    _envmod.load()
-    app_id, app_key = _env("ADZUNA_APP_ID"), _env("ADZUNA_APP_KEY")
-    if not (app_id and app_key):
-        return
-    term = _search_term(wanted)
-    excludes = _region_excludes()
-    for country in _adzuna_markets():
-        data = _safe(lambda c=country: _get(
-            f"https://api.adzuna.com/v1/api/jobs/{c}/search/1",
-            {"app_id": app_id, "app_key": app_key, "results_per_page": 50,
-             "what_or": term, "max_days_old": 14, "content-type": "application/json"}), {})
-        for j in (data or {}).get("results", []):
-            loc = ((j.get("location") or {}).get("display_name")) or "Europe"
-            company = (j.get("company") or {}).get("display_name") or ""
-            cat = (j.get("category") or {}).get("label") or ""
-            if _off_region(loc, excludes):
-                continue
-            if not matches_kw(wanted, j.get("title", ""), f"{cat} {j.get('description','')[:200]}"):
-                continue
-            results.append(_board_entry(
-                name=company, source="adzuna",
-                location=loc, remote="remote" in loc.lower(),
-                title=j.get("title", ""), url=j.get("redirect_url", ""),
-                description=strip_html(j.get("description")), tags=[cat] if cat else [],
-                posted_at=j.get("created")))
-
-
 def _fetch_jooble(results: list, wanted: list[str], limit: int,
                   log: Callable[[str], None]) -> None:
     import requests
@@ -949,17 +908,18 @@ def _fetch_linkedin(results: list, wanted: list[str], limit: int,
                     locations: tuple[str, ...] = ("Pakistan", "Remote")) -> None:
     """
     Fetches real-time tech jobs from LinkedIn's public guest search API.
-    Zero keys required; supports Pakistan, specific cities, and Global Remote.
+    Strictly filters for jobs posted in the LAST 3 DAYS (f_TPR=r259200).
     """
     from bs4 import BeautifulSoup
     term = _search_term(wanted)
-    
+
     for loc in locations:
         for start in (0, 25):
             url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-            params = {"keywords": term, "location": loc, "start": start}
+            # f_TPR=r259200 restricts results to the past 72 hours (3 days)
+            params = {"keywords": term, "location": loc, "start": start, "f_TPR": "r259200"}
             try:
-                resp = requests.get(url, params=params, headers=UA, timeout=15)
+                resp = requests.get(url, params=params, headers=UA, timeout=10)
                 if resp.status_code != 200:
                     break
                 soup = BeautifulSoup(resp.text, "html.parser")
@@ -977,12 +937,18 @@ def _fetch_linkedin(results: list, wanted: list[str], limit: int,
                     company = company_el.get_text(strip=True) if company_el else ""
                     location = loc_el.get_text(strip=True) if loc_el else loc
                     link = (link_el["href"].split("?")[0] if link_el and link_el.has_attr("href") else "").strip()
-                    posted_str = time_el["datetime"] if time_el and time_el.has_attr("datetime") else (time_el.get_text(strip=True) if time_el else None)
+                    posted_str = time_el.get("datetime") if time_el and time_el.has_attr("datetime") else (time_el.get_text(strip=True) if time_el else None)
 
                     if not title or not link:
                         continue
                     if not matches_kw(wanted, title, f"{company} {location}"):
                         continue
+
+                    # Strict 3-day freshness check
+                    if posted_str:
+                        ts = parse_posted_at(posted_str)
+                        if ts and (age_days(ts) or 0) > 3.0:
+                            continue
 
                     results.append(_board_entry(
                         name=company or "LinkedIn Employer", source="linkedin",
@@ -990,7 +956,7 @@ def _fetch_linkedin(results: list, wanted: list[str], limit: int,
                         title=title, url=link,
                         description=f"{title} at {company} in {location}. Verified listing from LinkedIn.",
                         tags=["linkedin", "tech", "pakistan" if "pakistan" in location.lower() or loc.lower() == "pakistan" else "remote"],
-                        posted_at=posted_str,
+                        posted_at=posted_str or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     ))
                     if len(results) >= limit:
                         return
@@ -998,12 +964,16 @@ def _fetch_linkedin(results: list, wanted: list[str], limit: int,
                 log(f"[linkedin] {loc} start={start} error: {exc}")
                 break
 
-
 def _fetch_weworkremotely(results: list, wanted: list[str], limit: int,
                           log: Callable[[str], None]) -> None:
-    """Fetches programming & tech jobs from WeWorkRemotely RSS feed."""
+    """Fetches programming & tech jobs from WeWorkRemotely RSS feed (max 3 days old)."""
     items = _rss_items("https://weworkremotely.com/categories/remote-programming-jobs.rss")
     for item in items:
+        pub = item.get("pubDate") or ""
+        ts = parse_posted_at(pub)
+        if ts and (age_days(ts) or 0) > 3.0:
+            continue
+
         title_raw = item.get("title") or ""
         if ":" in title_raw:
             company, title = title_raw.split(":", 1)
@@ -1015,7 +985,6 @@ def _fetch_weworkremotely(results: list, wanted: list[str], limit: int,
 
         url = item.get("link") or ""
         desc = item.get("description") or ""
-        pub = item.get("pubDate") or ""
 
         if not title or not url:
             continue
@@ -1033,18 +1002,21 @@ def _fetch_weworkremotely(results: list, wanted: list[str], limit: int,
         if len(results) >= limit:
             break
 
-
 def _fetch_jobicy(results: list, wanted: list[str], limit: int,
                   log: Callable[[str], None]) -> None:
-    """Fetches global remote engineering opportunities from Jobicy API."""
+    """Fetches global remote engineering opportunities from Jobicy API (max 3 days old)."""
     data = _safe(lambda: _get("https://jobicy.com/api/v2/remote-jobs", {"count": 50, "industry": "engineering"}), {})
     for j in (data or {}).get("jobs", []):
+        pub = j.get("pubDate") or ""
+        ts = parse_posted_at(pub)
+        if ts and (age_days(ts) or 0) > 3.0:
+            continue
+
         title = j.get("jobTitle") or ""
         company = j.get("companyName") or ""
         url = j.get("url") or ""
         geo = j.get("jobGeo") or "Remote / Worldwide"
         desc = j.get("jobDescription") or j.get("jobExcerpt") or ""
-        pub = j.get("pubDate") or ""
 
         if not title or not url:
             continue
@@ -1061,7 +1033,6 @@ def _fetch_jobicy(results: list, wanted: list[str], limit: int,
         ))
         if len(results) >= limit:
             break
-
 
 def fetch_linkedin(limit: int = 60, *, keywords: Iterable[str] = (),
                    locations: tuple[str, ...] = ("Pakistan", "Remote"),
@@ -1097,95 +1068,101 @@ def fetch_jobicy(limit: int = 50, *, keywords: Iterable[str] = (),
 def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
                         log: Callable[[str], None] = print) -> list[dict[str, Any]]:
     """
-    Returns company+job pairs from open job APIs. Each entry has a `_job` key
-    holding the posting so the caller can store both in one pass.
+    Returns fresh company+job pairs (max 3 days old) concurrently in parallel
+    across LinkedIn, WeWorkRemotely, Jobicy, Himalayas, Remotive, RemoteOK, and Arbeitnow.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     wanted = [k.lower() for k in keywords if k]
     results: list[dict[str, Any]] = []
 
-    def matches(title: str, tags: str) -> bool:
-        if not wanted:
-            return True
-        blob = f"{title} {tags}".lower()
-        return any(k in blob for k in wanted)
-
-    def section(label: str):
-        return _section(results, label, "remote", log)
-
-    # -- Arbeitnow (Europe-heavy)
-    with section("arbeitnow"):
+    def fetch_arbeitnow():
         data = _safe(lambda: _get("https://www.arbeitnow.com/api/job-board-api"), {})
         for j in (data or {}).get("data", [])[: limit * 2]:
+            created = str(j.get("created_at") or "")
+            ts = parse_posted_at(created)
+            if ts and (age_days(ts) or 0) > 3.0:
+                continue
             tags = " ".join(j.get("tags") or [])
-            if not matches(j.get("title", ""), tags):
+            if not matches_kw(wanted, j.get("title", ""), tags):
                 continue
             results.append(_board_entry(
                 name=j.get("company_name", ""), source="arbeitnow",
                 location=j.get("location", ""), remote=bool(j.get("remote")),
                 title=j.get("title", ""), url=j.get("url", ""),
                 description=strip_html(j.get("description")), tags=j.get("tags") or [],
-                posted_at=str(j.get("created_at") or "")))
+                posted_at=created))
 
-    # -- Remotive
-    with section("remotive"):
-        data = _safe(lambda: _get("https://remotive.com/api/remote-jobs", {"limit": 200}), {})
+    def fetch_remotive():
+        data = _safe(lambda: _get("https://remotive.com/api/remote-jobs", {"limit": 100}), {})
         for j in (data or {}).get("jobs", []):
+            pub = j.get("publication_date")
+            ts = parse_posted_at(pub)
+            if ts and (age_days(ts) or 0) > 3.0:
+                continue
             tags = " ".join(j.get("tags") or [])
-            if not matches(j.get("title", ""), tags):
+            if not matches_kw(wanted, j.get("title", ""), tags):
                 continue
             results.append(_board_entry(
                 name=j.get("company_name", ""), source="remotive",
                 location=j.get("candidate_required_location", "Remote"), remote=True,
                 title=j.get("title", ""), url=j.get("url", ""),
                 description=strip_html(j.get("description")), tags=j.get("tags") or [],
-                posted_at=j.get("publication_date")))
+                posted_at=pub))
 
-    # -- RemoteOK (index 0 is a legal notice, not a job)
-    with section("remoteok"):
+    def fetch_remoteok():
         data = _safe(lambda: _get("https://remoteok.com/api"), [])
         for j in (data or [])[1:]:
             if not isinstance(j, dict):
                 continue
+            dt = j.get("date")
+            ts = parse_posted_at(dt)
+            if ts and (age_days(ts) or 0) > 3.0:
+                continue
             tags = " ".join(j.get("tags") or [])
-            if not matches(j.get("position", ""), tags):
+            if not matches_kw(wanted, j.get("position", ""), tags):
                 continue
             results.append(_board_entry(
                 name=j.get("company", ""), source="remoteok",
                 location=j.get("location") or "Remote", remote=True,
                 title=j.get("position", ""), url=j.get("url", ""),
                 description=strip_html(j.get("description")), tags=j.get("tags") or [],
-                posted_at=j.get("date")))
+                posted_at=dt))
 
-    # -- LinkedIn (Pakistan & Global Remote)
-    with section("linkedin"):
-        _fetch_linkedin(results, wanted, limit, log)
-
-    # -- WeWorkRemotely
-    with section("weworkremotely"):
-        _fetch_weworkremotely(results, wanted, limit, log)
-
-    # -- Jobicy (Global Engineering)
-    with section("jobicy"):
-        _fetch_jobicy(results, wanted, limit, log)
-
-    # -- Himalayas
-    with section("himalayas"):
-        data = _safe(lambda: _get("https://himalayas.app/jobs/api", {"limit": 100}), {})
+    def fetch_himalayas():
+        data = _safe(lambda: _get("https://himalayas.app/jobs/api", {"limit": 60}), {})
         for j in (data or {}).get("jobs", []):
-            if not matches(j.get("title", ""), " ".join(j.get("categories") or [])):
+            pub = str(j.get("pubDate") or "")
+            ts = parse_posted_at(pub)
+            if ts and (age_days(ts) or 0) > 3.0:
+                continue
+            if not matches_kw(wanted, j.get("title", ""), " ".join(j.get("categories") or [])):
                 continue
             results.append(_board_entry(
                 name=j.get("companyName", ""), source="himalayas",
                 location=", ".join(j.get("locationRestrictions") or []) or "Remote", remote=True,
                 title=j.get("title", ""), url=j.get("applicationLink") or j.get("guid") or "",
                 description=strip_html(j.get("description") or j.get("excerpt")),
-                tags=j.get("categories") or [], posted_at=str(j.get("pubDate") or "")))
+                tags=j.get("categories") or [], posted_at=pub))
 
-    # -- Adzuna & Jooble (keyed aggregators; skipped silently without keys)
-    with section("adzuna"):
-        _fetch_adzuna(results, wanted, limit, log)
-    with section("jooble"):
-        _fetch_jooble(results, wanted, limit, log)
+    tasks = [
+        ("linkedin", lambda: _fetch_linkedin(results, wanted, limit, log)),
+        ("weworkremotely", lambda: _fetch_weworkremotely(results, wanted, limit, log)),
+        ("jobicy", lambda: _fetch_jobicy(results, wanted, limit, log)),
+        ("himalayas", fetch_himalayas),
+        ("remotive", fetch_remotive),
+        ("remoteok", fetch_remoteok),
+        ("arbeitnow", fetch_arbeitnow),
+    ]
+
+    with ThreadPoolExecutor(max_workers=min(len(tasks), 8)) as executor:
+        futures = {executor.submit(fn): name for name, fn in tasks}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                future.result()
+            except Exception as exc:
+                log(f"[{name}] fetch error: {exc}")
 
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
@@ -1197,9 +1174,8 @@ def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
         deduped.append(entry)
         if len(deduped) >= limit:
             break
-    log(f"[remote] {len(deduped)} unique postings after de-duplication")
+    log(f"[remote] {len(deduped)} fresh unique postings (< 3 days old) fetched")
     return deduped
-
 
 def fetch_hidden_boards(limit: int = 150, *, keywords: Iterable[str] = (),
                         log: Callable[[str], None] = print) -> list[dict[str, Any]]:
