@@ -943,6 +943,157 @@ def _off_region(location: str, excludes: list[str]) -> bool:
     return location_excluded(location, excludes) is not None
 
 
+
+def _fetch_linkedin(results: list, wanted: list[str], limit: int,
+                    log: Callable[[str], None],
+                    locations: tuple[str, ...] = ("Pakistan", "Remote")) -> None:
+    """
+    Fetches real-time tech jobs from LinkedIn's public guest search API.
+    Zero keys required; supports Pakistan, specific cities, and Global Remote.
+    """
+    from bs4 import BeautifulSoup
+    term = _search_term(wanted)
+    
+    for loc in locations:
+        for start in (0, 25):
+            url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+            params = {"keywords": term, "location": loc, "start": start}
+            try:
+                resp = requests.get(url, params=params, headers=UA, timeout=15)
+                if resp.status_code != 200:
+                    break
+                soup = BeautifulSoup(resp.text, "html.parser")
+                cards = soup.find_all("li")
+                if not cards:
+                    break
+                for card in cards:
+                    title_el = card.find("h3", class_="base-search-card__title")
+                    company_el = card.find("h4", class_="base-search-card__subtitle")
+                    loc_el = card.find("span", class_="job-search-card__location")
+                    link_el = card.find("a", class_="base-card__full-link")
+                    time_el = card.find("time")
+
+                    title = title_el.get_text(strip=True) if title_el else ""
+                    company = company_el.get_text(strip=True) if company_el else ""
+                    location = loc_el.get_text(strip=True) if loc_el else loc
+                    link = (link_el["href"].split("?")[0] if link_el and link_el.has_attr("href") else "").strip()
+                    posted_str = time_el["datetime"] if time_el and time_el.has_attr("datetime") else (time_el.get_text(strip=True) if time_el else None)
+
+                    if not title or not link:
+                        continue
+                    if not matches_kw(wanted, title, f"{company} {location}"):
+                        continue
+
+                    results.append(_board_entry(
+                        name=company or "LinkedIn Employer", source="linkedin",
+                        location=location, remote="remote" in location.lower() or loc.lower() == "remote",
+                        title=title, url=link,
+                        description=f"{title} at {company} in {location}. Verified listing from LinkedIn.",
+                        tags=["linkedin", "tech", "pakistan" if "pakistan" in location.lower() or loc.lower() == "pakistan" else "remote"],
+                        posted_at=posted_str,
+                    ))
+                    if len(results) >= limit:
+                        return
+            except Exception as exc:
+                log(f"[linkedin] {loc} start={start} error: {exc}")
+                break
+
+
+def _fetch_weworkremotely(results: list, wanted: list[str], limit: int,
+                          log: Callable[[str], None]) -> None:
+    """Fetches programming & tech jobs from WeWorkRemotely RSS feed."""
+    items = _rss_items("https://weworkremotely.com/categories/remote-programming-jobs.rss")
+    for item in items:
+        title_raw = item.get("title") or ""
+        if ":" in title_raw:
+            company, title = title_raw.split(":", 1)
+            company = company.strip()
+            title = title.strip()
+        else:
+            company = item.get("company") or "Remote Company"
+            title = title_raw.strip()
+
+        url = item.get("link") or ""
+        desc = item.get("description") or ""
+        pub = item.get("pubDate") or ""
+
+        if not title or not url:
+            continue
+        if not matches_kw(wanted, title, f"{company} {desc[:200]}"):
+            continue
+
+        results.append(_board_entry(
+            name=company, source="weworkremotely",
+            location="Remote (Worldwide)", remote=True,
+            title=title, url=url,
+            description=strip_html(desc),
+            tags=["weworkremotely", "programming", "remote"],
+            posted_at=pub,
+        ))
+        if len(results) >= limit:
+            break
+
+
+def _fetch_jobicy(results: list, wanted: list[str], limit: int,
+                  log: Callable[[str], None]) -> None:
+    """Fetches global remote engineering opportunities from Jobicy API."""
+    data = _safe(lambda: _get("https://jobicy.com/api/v2/remote-jobs", {"count": 50, "industry": "engineering"}), {})
+    for j in (data or {}).get("jobs", []):
+        title = j.get("jobTitle") or ""
+        company = j.get("companyName") or ""
+        url = j.get("url") or ""
+        geo = j.get("jobGeo") or "Remote / Worldwide"
+        desc = j.get("jobDescription") or j.get("jobExcerpt") or ""
+        pub = j.get("pubDate") or ""
+
+        if not title or not url:
+            continue
+        if not matches_kw(wanted, title, f"{company} {desc[:200]}"):
+            continue
+
+        results.append(_board_entry(
+            name=company, source="jobicy",
+            location=geo, remote=True,
+            title=title, url=url,
+            description=strip_html(desc),
+            tags=["jobicy", "engineering", "remote"],
+            posted_at=pub,
+        ))
+        if len(results) >= limit:
+            break
+
+
+def fetch_linkedin(limit: int = 60, *, keywords: Iterable[str] = (),
+                   locations: tuple[str, ...] = ("Pakistan", "Remote"),
+                   log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Standalone fetcher for live LinkedIn jobs."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+    _fetch_linkedin(results, wanted, limit, log, locations=locations)
+    log(f"[linkedin] {len(results)} postings from LinkedIn")
+    return results
+
+
+def fetch_weworkremotely(limit: int = 50, *, keywords: Iterable[str] = (),
+                         log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Standalone fetcher for WeWorkRemotely programming jobs."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+    _fetch_weworkremotely(results, wanted, limit, log)
+    log(f"[weworkremotely] {len(results)} postings from WeWorkRemotely")
+    return results
+
+
+def fetch_jobicy(limit: int = 50, *, keywords: Iterable[str] = (),
+                 log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """Standalone fetcher for Jobicy remote tech jobs."""
+    results: list[dict[str, Any]] = []
+    wanted = [k.lower() for k in keywords if k]
+    _fetch_jobicy(results, wanted, limit, log)
+    log(f"[jobicy] {len(results)} postings from Jobicy")
+    return results
+
+
 def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
                         log: Callable[[str], None] = print) -> list[dict[str, Any]]:
     """
@@ -1004,6 +1155,18 @@ def fetch_remote_boards(limit: int = 120, *, keywords: Iterable[str] = (),
                 title=j.get("position", ""), url=j.get("url", ""),
                 description=strip_html(j.get("description")), tags=j.get("tags") or [],
                 posted_at=j.get("date")))
+
+    # -- LinkedIn (Pakistan & Global Remote)
+    with section("linkedin"):
+        _fetch_linkedin(results, wanted, limit, log)
+
+    # -- WeWorkRemotely
+    with section("weworkremotely"):
+        _fetch_weworkremotely(results, wanted, limit, log)
+
+    # -- Jobicy (Global Engineering)
+    with section("jobicy"):
+        _fetch_jobicy(results, wanted, limit, log)
 
     # -- Himalayas
     with section("himalayas"):

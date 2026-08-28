@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -1025,6 +1025,168 @@ def agent_job_interview_prep(job_id: int) -> dict[str, Any]:
         "company": company,
         "title": title,
         "guide": data,
+    }
+
+
+@app.get("/api/agent/sources/status")
+def agent_sources_status() -> dict[str, Any]:
+    """Status and configuration of all integrated job portals."""
+    from agent import store as agent_store
+    agent_store.init()
+    linkedin_cfg = agent_store.get_setting("linkedin", {}) or {}
+    
+    return {
+        "ok": True,
+        "sources": [
+            {
+                "id": "linkedin",
+                "name": "LinkedIn (Pakistan & Global Remote)",
+                "type": "direct_guest_api",
+                "regions": ["Pakistan", "Remote", "Worldwide"],
+                "status": "active",
+                "supports_easy_apply": True,
+                "connected": bool(linkedin_cfg.get("connected")),
+                "profile_url": linkedin_cfg.get("profile_url", ""),
+            },
+            {
+                "id": "weworkremotely",
+                "name": "WeWorkRemotely",
+                "type": "rss_feed",
+                "regions": ["Remote", "Worldwide"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "jobicy",
+                "name": "Jobicy Engineering",
+                "type": "rest_api",
+                "regions": ["Worldwide", "APAC", "EMEA"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "himalayas",
+                "name": "Himalayas Tech",
+                "type": "rest_api",
+                "regions": ["Remote", "Worldwide"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "remotive",
+                "name": "Remotive Remote",
+                "type": "rest_api",
+                "regions": ["Remote", "Worldwide"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "remoteok",
+                "name": "RemoteOK",
+                "type": "rest_api",
+                "regions": ["Remote"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "arbeitnow",
+                "name": "Arbeitnow",
+                "type": "rest_api",
+                "regions": ["Europe", "Remote"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+            {
+                "id": "yc",
+                "name": "Y Combinator (WorkAtAStartup)",
+                "type": "directory",
+                "regions": ["US", "Europe", "Remote"],
+                "status": "active",
+                "supports_easy_apply": False,
+            },
+        ],
+    }
+
+
+@app.post("/api/agent/sources/fetch")
+def agent_sources_fetch(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Fetch live jobs from LinkedIn, WeWorkRemotely, Jobicy, and Remote boards."""
+    from agent import matcher, runner, sources, store as agent_store
+
+    agent_store.init()
+    selected_sources = body.get("sources") or ["linkedin", "weworkremotely", "jobicy"]
+    keywords = body.get("keywords") or ["Full Stack", "Software Engineer", "React", "Node.js", "Python"]
+    limit_per_source = int(body.get("limit") or 25)
+    locations = tuple(body.get("locations") or ("Pakistan", "Remote"))
+
+    targeting = agent_store.get_setting("targeting", {}) or {}
+    log_lines: list[str] = []
+
+    def log(msg: str):
+        log_lines.append(msg)
+
+    track = runner.Tracker(targeting, log=log)
+    added_count = 0
+
+    if "linkedin" in selected_sources:
+        linkedin_jobs = sources.fetch_linkedin(limit=limit_per_source, keywords=keywords, locations=locations, log=log)
+        for entry in linkedin_jobs:
+            job = entry.pop("_job")
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry["name"]):
+                added_count += 1
+
+    if "weworkremotely" in selected_sources:
+        wwr_jobs = sources.fetch_weworkremotely(limit=limit_per_source, keywords=keywords, log=log)
+        for entry in wwr_jobs:
+            job = entry.pop("_job")
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry["name"]):
+                added_count += 1
+
+    if "jobicy" in selected_sources:
+        jobicy_jobs = sources.fetch_jobicy(limit=limit_per_source, keywords=keywords, log=log)
+        for entry in jobicy_jobs:
+            job = entry.pop("_job")
+            cid = agent_store.upsert_company(entry)
+            if track.add(job, cid, entry["name"]):
+                added_count += 1
+
+    # Enrich detail & score newly added jobs
+    done = matcher.enrich_pending(limit=200, log=log)
+    scored = matcher.score_pending(limit=200, log=log)
+
+    return {
+        "ok": True,
+        "added": added_count,
+        "enriched": done,
+        "scored": scored,
+        "sources": selected_sources,
+        "logs": log_lines,
+    }
+
+
+@app.post("/api/agent/linkedin/connect")
+def agent_linkedin_connect(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Connect LinkedIn profile or session cookie for synchronized tracking."""
+    from agent import store as agent_store
+
+    agent_store.init()
+    profile_url = str(body.get("profile_url") or "").strip()
+    li_at = str(body.get("li_at") or "").strip()
+
+    linkedin_cfg = agent_store.get_setting("linkedin", {}) or {}
+    if profile_url:
+        linkedin_cfg["profile_url"] = profile_url
+    if li_at:
+        linkedin_cfg["li_at"] = li_at
+    linkedin_cfg["connected"] = bool(profile_url or li_at)
+
+    agent_store.set_setting("linkedin", linkedin_cfg)
+    return {
+        "ok": True,
+        "connected": linkedin_cfg["connected"],
+        "profile_url": linkedin_cfg.get("profile_url", ""),
     }
 
 

@@ -314,6 +314,29 @@ def discover(*, which: list[str], limit: int, find_people: bool,
             if track.add(job, cid, entry["name"]):
                 counts["jobs"] += 1
 
+    # ---- LinkedIn (Pakistan & Global Remote) ----------------------------
+    if "linkedin" in which:
+        log(_rule("LinkedIn: Pakistan & Global Remote"))
+        for entry in sources.fetch_linkedin(limit=min(limit * 3, 150),
+                                            keywords=keywords,
+                                            locations=("Pakistan", "Remote"), log=log):
+            job = entry.pop("_job")
+            cid = store.upsert_company(entry)
+            counts["companies"] += 1
+            if track.add(job, cid, entry["name"]):
+                counts["jobs"] += 1
+
+    # ---- WeWorkRemotely -------------------------------------------------
+    if "weworkremotely" in which or "wwr" in which:
+        log(_rule("WeWorkRemotely: Programming"))
+        for entry in sources.fetch_weworkremotely(limit=min(limit * 2, 100),
+                                                 keywords=keywords, log=log):
+            job = entry.pop("_job")
+            cid = store.upsert_company(entry)
+            counts["companies"] += 1
+            if track.add(job, cid, entry["name"]):
+                counts["jobs"] += 1
+
     # ---- Low-competition boards -----------------------------------------
     if "hidden" in which:
         log(_rule("Hidden job market: low-competition boards"))

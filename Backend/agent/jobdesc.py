@@ -187,6 +187,25 @@ def fetch_description(job: dict[str, Any], *,
     if not url:
         return existing, "unavailable" if not existing else "api"
 
+    # Fast direct endpoint for LinkedIn postings
+    if "linkedin.com/jobs" in url:
+        m = re.search(r"(\d{9,12})", url)
+        if m:
+            job_id = m.group(1)
+            api_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+            l_html = sources._safe(lambda: sources._get(api_url, as_json=False, timeout=12), on_error="")
+            if l_html:
+                try:
+                    from bs4 import BeautifulSoup
+                    dsoup = BeautifulSoup(l_html, "html.parser")
+                    desc_el = dsoup.find("div", class_="show-more-less-html__markup")
+                    if desc_el:
+                        l_text = _clean(desc_el.get_text(separator="\n", strip=True))
+                        if len(l_text) >= MIN_USEFUL:
+                            return l_text, "fetched"
+                except Exception:
+                    pass
+
     html = sources._safe(
         lambda: sources._get(url, as_json=False), on_error="") or ""
     fetched = _from_html(html) if isinstance(html, str) else ""

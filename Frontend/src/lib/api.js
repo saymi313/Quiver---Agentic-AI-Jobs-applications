@@ -337,5 +337,20 @@ export const api = {
   agentJobOutreach: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/outreach`).then(handle),
   agentJobAtsAudit: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/ats-audit`).then(handle),
   agentJobInterviewPrep: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/interview-prep`).then(handle),
+
+  // ---- source portals & integrations ----
+  agentSourcesStatus: () => fetch(`${BASE}/api/agent/sources/status`).then(handle),
+  agentSourcesFetch: (params) =>
+    fetch(`${BASE}/api/agent/sources/fetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params || {}),
+    }).then(handle),
+  agentConnectLinkedIn: (data) =>
+    fetch(`${BASE}/api/agent/linkedin/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    }).then(handle),
 }
 
