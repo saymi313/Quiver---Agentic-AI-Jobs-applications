@@ -55,6 +55,29 @@ def start_api(port: int) -> subprocess.Popen:
     )
 
 
+def open_browser_with_cdp(url: str) -> None:
+    """
+    Launches Chrome/Edge with remote debugging enabled (--remote-debugging-port=9222).
+    This allows the AI agent to connect to this same browser and autonomously
+    apply in new tabs rather than spawning new browser windows.
+    """
+    candidates = [
+        os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for exe in candidates:
+        if os.path.isfile(exe):
+            try:
+                subprocess.Popen([exe, "--remote-debugging-port=9222", url])
+                return
+            except Exception:
+                pass
+    webbrowser.open(url)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the Jobenzy dashboard")
     ap.add_argument("--api-only", action="store_true", help="Start only the FastAPI backend")
