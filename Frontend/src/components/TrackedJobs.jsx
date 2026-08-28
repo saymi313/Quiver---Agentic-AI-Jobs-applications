@@ -241,32 +241,6 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
 
       {toolbar ? <div className="border-b border-line px-4 py-2.5">{toolbar}</div> : null}
 
-      <ResumeReview
-        jobId={reviewing}
-        onDone={() => {
-          setReviewing(null)
-          load()
-        }}
-        onClose={() => setReviewing(null)}
-      />
-
-      <JobDetail
-        job={viewing}
-        busy={busy}
-        onClose={() => setViewing(null)}
-        onApply={(ids) => {
-          setViewing(null)
-          onApply(ids)
-        }}
-        onGenerate={onGenerate}
-        onReview={(id) => {
-          setViewing(null)
-          setReviewing(id)
-        }}
-        onSave={saveJob}
-        onPass={passJob}
-      />
-
       {/* What you can do with a selection floats over the list rather than
           opening inside it, so picking a row never moves the next one. */}
       <SelectionBar open={chosen.length > 0}>

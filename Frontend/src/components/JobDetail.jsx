@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import { api } from '../lib/api'
 import { CategoryChip, ScoreRing, SidePanel } from './apple'
 import { Button, Icon, Status } from './ui'
+import { OutreachModal } from './OutreachModal'
+import { AtsAuditModal } from './AtsAuditModal'
+import { InterviewPrepModal } from './InterviewPrepModal'
 
 /*
   One role, opened out.
@@ -94,6 +98,10 @@ export default function JobDetail({
   onOpenAtsAudit,
   onOpenInterviewPrep,
 }) {
+  const [outreachOpen, setOutreachOpen] = useState(false)
+  const [atsAuditOpen, setAtsAuditOpen] = useState(false)
+  const [interviewPrepOpen, setInterviewPrepOpen] = useState(false)
+
   if (!job) return null
 
   const salary = formatSalary(job)
@@ -101,162 +109,184 @@ export default function JobDetail({
   const blocked = ['applied', 'skipped', 'duplicate'].includes(job.status)
 
   return (
-    <SidePanel
-      open={!!job}
-      onClose={onClose}
-      title={job.title}
-      subtitle={job.company_name || undefined}
-      badge={
-        <div className="flex flex-wrap items-center gap-2">
-          <CategoryChip slug={job.role_category} />
-          {job.source ? <span className="text-micro text-n-500">{job.source}</span> : null}
-          {job.deadline ? (
-            <Status tone="warn" dot={false}>
-              closes {deadlineWhen(job.deadline)}
-            </Status>
-          ) : null}
-        </div>
-      }
-      footer={
-        <div className="flex flex-wrap items-center gap-2">
-          {!blocked ? (
-            <Button variant="primary" disabled={busy} onClick={() => onApply?.([job.id])}>
-              Apply
-            </Button>
-          ) : (
-            <Status tone={job.status === 'applied' ? 'ok' : 'neutral'}>{job.status}</Status>
-          )}
-          <Button variant="ghost" disabled={busy} onClick={() => onSave?.(job)}>
-            <Icon.Bookmark filled={job.saved} className="size-3.5" />
-            {job.saved ? 'Saved' : 'Save'}
-          </Button>
-          {!blocked ? (
-            <Button variant="ghost" disabled={busy} onClick={() => onPass?.(job)}>
-              Pass
-            </Button>
-          ) : null}
-          <a
-            href={job.url}
-            target="_blank"
-            rel="noreferrer"
-            className="press ml-auto inline-flex items-center gap-1.5 text-tiny text-blue-500 hover:underline"
-          >
-            <Icon.Doc className="size-3.5" />
-            Original posting
-          </a>
-        </div>
-      }
-    >
-      <div className="space-y-5">
-        {/* the score, large, because it is the first question */}
-        {job.fit_score ? (
-          <div className="flex items-center gap-3">
-            <ScoreRing value={job.fit_score} size={52} stroke={4} />
-            <p className="text-tiny leading-relaxed text-n-500">{job.fit_reason}</p>
-          </div>
-        ) : null}
-
-        {/* Action Toolbar for AI & Outreach Intelligence */}
-        <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-lg bg-surface-sunken border border-line">
-          <button
-            type="button"
-            onClick={() => onOpenOutreach?.(job)}
-            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon.Send className="size-3.5" />
-            <span>Outreach</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenAtsAudit?.(job)}
-            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-ok-400 flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon.Check className="size-3.5" />
-            <span>ATS Audit</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenInterviewPrep?.(job)}
-            className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-purple-400 flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon.Sparkles className="size-3.5" />
-            <span>Interview Prep</span>
-          </button>
-        </div>
-
-        {/* the facts a row cannot hold */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 border-y border-line py-4">
-          <Fact icon={Icon.Pin} label="Location">
-            {job.location || (job.remote ? 'Remote' : null)}
-          </Fact>
-          <Fact icon={Icon.Coin} label="Salary">{salary}</Fact>
-          <Fact icon={Icon.Steps} label="Level">
-            {job.seniority ? job.seniority[0].toUpperCase() + job.seniority.slice(1) : null}
-          </Fact>
-          <Fact icon={Icon.Home} label="Arrangement">
-            {AR_LABEL[job.work_arrangement]}
-          </Fact>
-          <Fact icon={Icon.Clock} label="Type">{job.employment_type}</Fact>
-          <Fact icon={Icon.Calendar} label="Closes">{deadlineWhen(job.deadline)}</Fact>
-        </div>
-
-        {/* the skills the posting named — what a tailored resume is aimed at */}
-        {skills.length ? (
-          <div>
-            <p className="pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
-              Skills &amp; technologies
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {skills.map((s) => (
-                <span
-                  key={s}
-                  className="rounded-full bg-hue-violet px-2.5 py-1 text-micro font-medium text-hue-violet-fg"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* the resume for this role, if one is built */}
-        {job.has_resume ? (
-          <div className="flex items-center gap-2 rounded-md border border-line bg-raised px-3 py-2">
-            <Icon.File className="size-4 text-n-400" />
-            <span className="flex-1 text-tiny text-n-300">Tailored resume ready</span>
-            <a
-              href={api.agentResumeUrl(job.id, 'pdf')}
-              target="_blank"
-              rel="noreferrer"
-              className="press text-tiny text-blue-500 hover:underline"
-            >
-              view
-            </a>
-            {job.resume_approved === 0 ? (
-              <button onClick={() => onReview?.(job.id)} className="press text-tiny text-warn-400">
-                review
-              </button>
+    <>
+      <SidePanel
+        open={!!job}
+        onClose={onClose}
+        title={job.title}
+        subtitle={job.company_name || undefined}
+        badge={
+          <div className="flex flex-wrap items-center gap-2">
+            <CategoryChip slug={job.role_category} />
+            {job.source ? <span className="text-micro text-n-500">{job.source}</span> : null}
+            {job.deadline ? (
+              <Status tone="warn" dot={false}>
+                closes {deadlineWhen(job.deadline)}
+              </Status>
             ) : null}
           </div>
-        ) : !blocked ? (
-          <Button size="sm" disabled={busy} onClick={() => onGenerate?.([job.id])}>
-            Generate a tailored resume
-          </Button>
-        ) : null}
-
-        {/* the description, last, for when the parsed facts are not enough */}
-        {job.description ? (
-          <div>
-            <p className="pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
-              Description
-            </p>
-            <p className="text-tiny leading-relaxed whitespace-pre-line text-n-300">
-              {plainText(job.description).slice(0, 4000)}
-              {plainText(job.description).length > 4000 ? '…' : ''}
-            </p>
+        }
+        footer={
+          <div className="flex flex-wrap items-center gap-2">
+            {!blocked ? (
+              <Button variant="primary" disabled={busy} onClick={() => onApply?.([job.id])}>
+                Apply
+              </Button>
+            ) : (
+              <Status tone={job.status === 'applied' ? 'ok' : 'neutral'}>{job.status}</Status>
+            )}
+            <Button variant="ghost" disabled={busy} onClick={() => onSave?.(job)}>
+              <Icon.Bookmark filled={job.saved} className="size-3.5" />
+              {job.saved ? 'Saved' : 'Save'}
+            </Button>
+            {!blocked ? (
+              <Button variant="ghost" disabled={busy} onClick={() => onPass?.(job)}>
+                Pass
+              </Button>
+            ) : null}
+            <a
+              href={job.url}
+              target="_blank"
+              rel="noreferrer"
+              className="press ml-auto inline-flex items-center gap-1.5 text-tiny text-blue-500 hover:underline"
+            >
+              <Icon.Doc className="size-3.5" />
+              Original posting
+            </a>
           </div>
-        ) : null}
-      </div>
-    </SidePanel>
+        }
+      >
+        <div className="space-y-5">
+          {/* the score, large, because it is the first question */}
+          {job.fit_score ? (
+            <div className="flex items-center gap-3">
+              <ScoreRing value={job.fit_score} size={52} stroke={4} />
+              <p className="text-tiny leading-relaxed text-n-500">{job.fit_reason}</p>
+            </div>
+          ) : null}
+
+          {/* Action Toolbar for AI & Outreach Intelligence */}
+          <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-lg bg-surface-sunken border border-line">
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenOutreach) onOpenOutreach(job)
+                else setOutreachOpen(true)
+              }}
+              className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Icon.Send className="size-3.5" />
+              <span>Outreach</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenAtsAudit) onOpenAtsAudit(job)
+                else setAtsAuditOpen(true)
+              }}
+              className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-ok-400 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Icon.Check className="size-3.5" />
+              <span>ATS Audit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenInterviewPrep) onOpenInterviewPrep(job)
+                else setInterviewPrepOpen(true)
+              }}
+              className="press flex-1 min-w-[100px] py-1.5 px-2 rounded-md bg-surface border border-line hover:border-n-600 text-tiny font-medium text-purple-400 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Icon.Sparkles className="size-3.5" />
+              <span>Interview Prep</span>
+            </button>
+          </div>
+
+          {/* the facts a row cannot hold */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 border-y border-line py-4">
+            <Fact icon={Icon.Pin} label="Location">
+              {job.location || (job.remote ? 'Remote' : null)}
+            </Fact>
+            <Fact icon={Icon.Coin} label="Salary">{salary}</Fact>
+            <Fact icon={Icon.Steps} label="Level">
+              {job.seniority ? job.seniority[0].toUpperCase() + job.seniority.slice(1) : null}
+            </Fact>
+            <Fact icon={Icon.Home} label="Arrangement">
+              {AR_LABEL[job.work_arrangement]}
+            </Fact>
+            <Fact icon={Icon.Clock} label="Type">{job.employment_type}</Fact>
+            <Fact icon={Icon.Calendar} label="Closes">{deadlineWhen(job.deadline)}</Fact>
+          </div>
+
+          {/* the skills the posting named — what a tailored resume is aimed at */}
+          {skills.length ? (
+            <div>
+              <p className="pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
+                Skills &amp; technologies
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {skills.map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full bg-hue-violet px-2.5 py-1 text-micro font-medium text-hue-violet-fg"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* the resume for this role, if one is built */}
+          {job.has_resume ? (
+            <div className="flex items-center gap-2 rounded-md border border-line bg-raised px-3 py-2">
+              <Icon.File className="size-4 text-n-400" />
+              <span className="flex-1 text-tiny text-n-300">Tailored resume ready</span>
+              <a
+                href={api.agentResumeUrl(job.id, 'pdf')}
+                target="_blank"
+                rel="noreferrer"
+                className="press text-tiny text-blue-500 hover:underline"
+              >
+                view
+              </a>
+              {job.resume_approved === 0 ? (
+                <button onClick={() => onReview?.(job.id)} className="press text-tiny text-warn-400">
+                  review
+                </button>
+              ) : null}
+            </div>
+          ) : !blocked ? (
+            <Button size="sm" disabled={busy} onClick={() => onGenerate?.([job.id])}>
+              Generate a tailored resume
+            </Button>
+          ) : null}
+
+          {/* the description, last, for when the parsed facts are not enough */}
+          {job.description ? (
+            <div>
+              <p className="pb-2 text-micro font-medium tracking-wide text-n-500 uppercase">
+                Description
+              </p>
+              <p className="text-tiny leading-relaxed whitespace-pre-line text-n-300">
+                {plainText(job.description).slice(0, 4000)}
+                {plainText(job.description).length > 4000 ? '…' : ''}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </SidePanel>
+
+      {/* Intelligence Modals */}
+      {outreachOpen && (
+        <OutreachModal job={job} onClose={() => setOutreachOpen(false)} />
+      )}
+      {atsAuditOpen && (
+        <AtsAuditModal job={job} onClose={() => setAtsAuditOpen(false)} />
+      )}
+      {interviewPrepOpen && (
+        <InterviewPrepModal job={job} onClose={() => setInterviewPrepOpen(false)} />
+      )}
+    </>
   )
 }
