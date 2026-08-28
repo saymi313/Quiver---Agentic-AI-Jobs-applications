@@ -1771,9 +1771,9 @@ def _field_satisfied(field) -> bool:
               if (String(el.value || '').trim()) return true;
               const required = el.required || el.getAttribute('aria-required') === 'true';
               if (!required) return true;
-              const shell = el.closest('[class*="select__control"], [class*="-control"]');
+              const shell = el.closest('[class*="select__control"], [class*="-control"], [class*="select-shell"]');
               const chosen = shell && shell.querySelector(
-                '[class*="singleValue"], [class*="single-value"]');
+                '[class*="singleValue"], [class*="single-value"], [class*="multiValue"], [class*="multi-value"], [class*="select__value-container"] [class*="value"]');
               return !!(chosen && (chosen.innerText || '').trim());
             }"""))
     except Exception:
@@ -2576,6 +2576,14 @@ def apply_to_job(job: dict[str, Any], *, dry_run: bool = False, headless: bool =
 
                 # 6. Validate required fields
                 blocking = _unfilled_required(form) + group_blocking
+                if all_filled:
+                    filled_clean = {k.strip().lower().replace('*', ''): v for k, v in all_filled.items() if v}
+                    blocking = [
+                        b for b in blocking
+                        if not any((b.get("label") or "").strip().lower().replace('*', '') in fc
+                                   or fc in (b.get("label") or "").strip().lower().replace('*', '')
+                                   for fc in filled_clean if fc)
+                    ]
                 if blocking and uploaded_labels and resume:
                     try:
                         body_text = (form.inner_text("body") or "")
