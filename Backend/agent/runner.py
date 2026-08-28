@@ -673,7 +673,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-people", action="store_true", help="skip founder/email discovery")
     ap.add_argument("--no-ats", action="store_true", help="skip career-portal scanning")
     ap.add_argument("--no-attach", action="store_true", help="do not attach the resume")
-    ap.add_argument("--headed", action="store_true", help="show the browser while applying")
+    ap.add_argument("--headless", action="store_true", help="run the browser hidden in background")
+    ap.add_argument("--headed", action="store_true", default=True, help="show the browser while applying")
     ap.add_argument("--no-review", action="store_true",
                     help="submit without the review-before-submit pause (what Approve does)")
     ap.add_argument("--workers", type=int, default=1,
@@ -746,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 _log(_rule("Applying to the selected jobs"))
                 stats["apply"] = applier.apply_to_ids(
-                    job_ids, dry_run=args.dry_run, headless=not args.headed,
+                    job_ids, dry_run=args.dry_run, headless=bool(args.headless),
                     workers=args.workers, review=False if args.no_review else None)
 
         if args.mode == "tasks":
