@@ -166,7 +166,14 @@ export default function TopMatches({ refreshKey, busy, onApply, onGenerate }) {
                     variant="primary"
                     disabled={busy}
                     className="ml-auto"
-                    onClick={() => onApply([r.id])}
+                    onClick={() => {
+                      if (r.url || r.apply_url) {
+                        const base = r.apply_url || r.url
+                        const target = base.includes('#') ? `${base}&jobenzy-apply=1` : `${base}#jobenzy-apply=1`
+                        window.open(target, '_blank')
+                      }
+                      onApply([r.id])
+                    }}
                   >
                     Apply
                   </Button>

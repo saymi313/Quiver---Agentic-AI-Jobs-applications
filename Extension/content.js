@@ -1,12 +1,16 @@
 /*
-  Jobenzy In-Page Content Script (Manifest v3)
-  Extracts active job metadata straight from the live DOM and injects 1-click tracking.
+  Jobenzy In-Page Content Script & Autonomous Auto-Applier (Manifest v3)
+  Extracts job metadata from DOM & autonomously autofills application forms in-tab.
 */
 
 const BACKEND_HOSTS = ['http://127.0.0.1:8000', 'http://localhost:8000']
 
+// --------------------------------------------------------------------------
+// 1. Job Metadata Extraction
+// --------------------------------------------------------------------------
+
 function extractJobDetails() {
-  const url = window.location.href
+  const url = window.location.href.split('#')[0]
   const host = window.location.hostname.toLowerCase()
 
   let title = ''
@@ -55,19 +59,6 @@ function extractJobDetails() {
       '#jobDescriptionText, .jobsearch-jobDescriptionText'
     )?.innerText?.trim() || ''
 
-  } else if (host.includes('glassdoor.com')) {
-    source = 'glassdoor'
-    title = document.querySelector('[data-test="job-title"], .JobDetails_jobTitle__rw_s8, h1')?.innerText?.trim() || ''
-    company = document.querySelector('[data-test="employer-name"], .JobDetails_companyName__x69fv')?.innerText?.trim() || ''
-    location = document.querySelector('[data-test="location"], .JobDetails_location__mSg5h')?.innerText?.trim() || ''
-    description = document.querySelector('.JobDetails_jobDescription__uW_fK, [data-test="job-description"]')?.innerText?.trim() || ''
-
-  } else if (host.includes('wellfound.com')) {
-    source = 'wellfound'
-    title = document.querySelector('h1')?.innerText?.trim() || ''
-    company = document.querySelector('h2, [class*="companyName"]')?.innerText?.trim() || ''
-    description = document.querySelector('[class*="jobDescription"], main')?.innerText?.trim() || ''
-
   } else if (host.includes('greenhouse.io') || host.includes('gh_jid')) {
     source = 'greenhouse'
     title = document.querySelector('.app-title, h1.heading, h1')?.innerText?.trim() || ''
@@ -89,7 +80,6 @@ function extractJobDetails() {
     description = document.querySelector('.ashby-job-posting-description, main')?.innerText?.trim() || ''
 
   } else {
-    // Generic fallback for custom career pages / Workday
     title = document.querySelector('h1, meta[property="og:title"]')?.innerText || document.title || ''
     description = document.querySelector('main, article, #job-description, .job-description')?.innerText || document.body.innerText.slice(0, 8000)
     company = document.querySelector('meta[property="og:site_name"]')?.content || window.location.hostname.replace('www.', '').split('.')[0]
@@ -106,14 +96,24 @@ function extractJobDetails() {
   }
 }
 
-// Listen for requests from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getJobDetails') {
-    sendResponse(extractJobDetails())
-  }
-})
+// --------------------------------------------------------------------------
+// 2. Local Backend Communication
+// --------------------------------------------------------------------------
 
-// Send extracted job directly to local backend
+async function fetchFromJobenzy(path, options = {}) {
+  for (const host of BACKEND_HOSTS) {
+    try {
+      const res = await fetch(`${host}${path}`, options)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
 async function sendToJobenzy(data) {
   for (const host of BACKEND_HOSTS) {
     try {
@@ -131,6 +131,149 @@ async function sendToJobenzy(data) {
   return { ok: false, status: 0, error: 'Jobenzy is not running locally.' }
 }
 
+// --------------------------------------------------------------------------
+// 3. Autonomous In-Tab Autofill Engine
+// --------------------------------------------------------------------------
+
+function simulateInput(el, value) {
+  if (!el || value === undefined || value === null) return
+  el.focus()
+  el.value = value
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  el.dispatchEvent(new Event('blur', { bubbles: true }))
+  el.style.borderColor = '#26a37f'
+  el.style.backgroundColor = 'rgba(38, 163, 127, 0.06)'
+}
+
+function fieldMatches(el, keywords) {
+  const text = [
+    el.name || '',
+    el.id || '',
+    el.getAttribute('placeholder') || '',
+    el.getAttribute('aria-label') || '',
+    el.getAttribute('autocomplete') || '',
+    el.closest('label')?.innerText || '',
+    el.closest('.field, .form-group, [class*="field"], [class*="input"], [class*="form-row"]')?.innerText || '',
+  ].join(' ').toLowerCase()
+
+  return keywords.some((kw) => text.includes(kw.toLowerCase()))
+}
+
+async function runAutonomousAutofill() {
+  showToast('Connecting to Jobenzy autonomous engine…')
+
+  const profile = await fetchFromJobenzy('/api/agent/profile')
+  if (!profile) {
+    showToast('Jobenzy backend is not running on localhost:8000')
+    return
+  }
+
+  const nameParts = (profile.full_name || profile.name || '').split(' ')
+  const firstName = profile.first_name || nameParts[0] || ''
+  const lastName = profile.last_name || nameParts.slice(1).join(' ') || ''
+  const fullName = profile.full_name || `${firstName} ${lastName}`.trim()
+  const email = profile.email || ''
+  const phone = profile.phone || ''
+  const linkedin = profile.linkedin || ''
+  const github = profile.github || ''
+  const portfolio = profile.portfolio || profile.website || ''
+  const location = profile.location || profile.city || 'Islamabad, Pakistan'
+
+  let filledCount = 0
+
+  const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select'))
+
+  for (const el of inputs) {
+    // Already filled
+    if (el.value && el.value.trim() !== '') continue
+
+    // First Name
+    if (fieldMatches(el, ['first name', 'firstname', 'given-name', 'fname'])) {
+      simulateInput(el, firstName)
+      filledCount++
+    }
+    // Last Name
+    else if (fieldMatches(el, ['last name', 'lastname', 'family-name', 'lname', 'surname'])) {
+      simulateInput(el, lastName)
+      filledCount++
+    }
+    // Full Name
+    else if (fieldMatches(el, ['full name', 'fullname', 'name']) && !fieldMatches(el, ['company', 'file', 'user'])) {
+      simulateInput(el, fullName)
+      filledCount++
+    }
+    // Email
+    else if (el.type === 'email' || fieldMatches(el, ['email', 'e-mail'])) {
+      simulateInput(el, email)
+      filledCount++
+    }
+    // Phone
+    else if (el.type === 'tel' || fieldMatches(el, ['phone', 'mobile', 'telephone', 'contact number'])) {
+      simulateInput(el, phone)
+      filledCount++
+    }
+    // LinkedIn
+    else if (fieldMatches(el, ['linkedin', 'urls[linkedin]', 'linkedin profile'])) {
+      simulateInput(el, linkedin)
+      filledCount++
+    }
+    // GitHub
+    else if (fieldMatches(el, ['github', 'urls[github]', 'github profile'])) {
+      simulateInput(el, github)
+      filledCount++
+    }
+    // Portfolio / Website
+    else if (fieldMatches(el, ['portfolio', 'website', 'personal site', 'urls[portfolio]'])) {
+      simulateInput(el, portfolio)
+      filledCount++
+    }
+    // Location / City
+    else if (fieldMatches(el, ['location', 'city', 'address', 'current city'])) {
+      simulateInput(el, location)
+      filledCount++
+    }
+    // Experience years
+    else if (fieldMatches(el, ['years of experience', 'years experience', 'total experience'])) {
+      simulateInput(el, String(profile.years_experience || '3'))
+      filledCount++
+    }
+    // Notice period
+    else if (fieldMatches(el, ['notice period', 'how soon can you start', 'availability'])) {
+      simulateInput(el, 'Immediately / 2 weeks')
+      filledCount++
+    }
+    // Work authorization / Sponsorship
+    else if (el.tagName === 'SELECT') {
+      if (fieldMatches(el, ['sponsorship', 'visa', 'require sponsorship'])) {
+        for (const opt of el.options) {
+          if (opt.text.toLowerCase().includes('no') || opt.value.toLowerCase().includes('no')) {
+            el.value = opt.value
+            simulateInput(el, opt.value)
+            filledCount++
+            break
+          }
+        }
+      } else if (fieldMatches(el, ['authorized to work', 'legally authorized'])) {
+        for (const opt of el.options) {
+          if (opt.text.toLowerCase().includes('yes') || opt.value.toLowerCase().includes('yes')) {
+            el.value = opt.value
+            simulateInput(el, opt.value)
+            filledCount++
+            break
+          }
+        }
+      }
+    }
+  }
+
+  showToast(`Autofilled ${filledCount} field${filledCount === 1 ? '' : 's'} with Jobenzy AI`)
+}
+
+// --------------------------------------------------------------------------
+// 4. UI Overlay & Floating Actions
+// --------------------------------------------------------------------------
+
 function showToast(msg) {
   const existing = document.querySelector('.jobenzy-toast')
   if (existing) existing.remove()
@@ -138,78 +281,85 @@ function showToast(msg) {
   toast.className = 'jobenzy-toast'
   toast.textContent = msg
   document.body.appendChild(toast)
-  setTimeout(() => toast.remove(), 4500)
+  setTimeout(() => toast.remove(), 5000)
 }
 
-// Inject floating action button if on a recognized job page
-function injectFloatingButton() {
-  if (document.getElementById('jobenzy-floating-btn')) return
+function injectFloatingWidget() {
+  if (document.getElementById('jobenzy-floating-container')) return
 
-  const isJobPage =
-    window.location.href.includes('/jobs/') ||
-    window.location.href.includes('/job/') ||
-    window.location.href.includes('/viewjob') ||
-    window.location.href.includes('greenhouse.io') ||
-    window.location.href.includes('lever.co') ||
-    window.location.href.includes('ashbyhq.com') ||
-    window.location.href.includes('myworkdayjobs.com')
+  const container = document.createElement('div')
+  container.id = 'jobenzy-floating-container'
+  container.innerHTML = `
+    <div id="jobenzy-floating-btn" title="Track in Jobenzy">
+      <span class="jobenzy-icon">J</span>
+      <span>Track</span>
+    </div>
+    <div id="jobenzy-apply-btn" title="Autofill and Apply on this page">
+      <span class="jobenzy-icon">⚡</span>
+      <span>Auto-Apply</span>
+    </div>
+  `
 
-  if (!isJobPage) return
+  const trackBtn = container.querySelector('#jobenzy-floating-btn')
+  const applyBtn = container.querySelector('#jobenzy-apply-btn')
 
-  const btn = document.createElement('div')
-  btn.id = 'jobenzy-floating-btn'
-  btn.innerHTML = `<span class="jobenzy-icon">⚡</span> <span>Track in Jobenzy</span>`
-
-  btn.addEventListener('click', async (e) => {
+  trackBtn.addEventListener('click', async (e) => {
     e.stopPropagation()
     const job = extractJobDetails()
     if (!job.title && !job.description) {
       showToast('Could not find job details on this page.')
       return
     }
-
-    btn.className = 'loading'
-    btn.innerHTML = `<span class="jobenzy-icon">⏳</span> <span>Tracking…</span>`
+    trackBtn.className = 'loading'
+    trackBtn.innerHTML = `<span class="jobenzy-icon">…</span> <span>Tracking…</span>`
 
     const res = await sendToJobenzy(job)
-
     if (res.ok && res.data.created) {
-      btn.className = 'success'
-      const scoreText = res.data.fitScore ? ` (Score: ${Math.round(res.data.fitScore)})` : ''
-      btn.innerHTML = `<span class="jobenzy-icon">✓</span> <span>Tracked${scoreText}</span>`
-      showToast(`Tracked: ${res.data.title || 'Job'} at ${res.data.company || 'Company'}${scoreText}`)
+      trackBtn.className = 'success'
+      const scoreText = res.data.fitScore ? ` (${Math.round(res.data.fitScore)}% match)` : ''
+      trackBtn.innerHTML = `<span class="jobenzy-icon">✓</span> <span>Tracked</span>`
+      showToast(`Tracked: ${res.data.title || 'Job'}${scoreText}`)
     } else if (res.ok) {
-      btn.className = 'already'
-      btn.innerHTML = `<span class="jobenzy-icon">ℹ</span> <span>Already Tracked</span>`
-      showToast(`Already tracked: ${res.data.title || 'Job'}`)
+      trackBtn.className = 'already'
+      trackBtn.innerHTML = `<span class="jobenzy-icon">✓</span> <span>Tracked</span>`
+      showToast(`Already tracked in Jobenzy`)
     } else {
-      btn.className = 'error'
-      btn.innerHTML = `<span class="jobenzy-icon">✕</span> <span>Not Tracked</span>`
-      showToast(res.data?.detail || res.error || 'Failed to send to Jobenzy')
+      trackBtn.className = 'error'
+      trackBtn.innerHTML = `<span class="jobenzy-icon">✕</span> <span>Error</span>`
+      showToast(res.data?.detail || res.error || 'Failed to connect to Jobenzy')
     }
 
     setTimeout(() => {
-      btn.className = ''
-      btn.innerHTML = `<span class="jobenzy-icon">⚡</span> <span>Track in Jobenzy</span>`
-    }, 4000)
+      trackBtn.className = ''
+      trackBtn.innerHTML = `<span class="jobenzy-icon">J</span> <span>Track</span>`
+    }, 3500)
   })
 
-  document.body.appendChild(btn)
+  applyBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    runAutonomousAutofill()
+  })
+
+  document.body.appendChild(container)
+
+  // Check if auto-apply was requested via URL hash
+  if (window.location.hash.includes('jobenzy-apply')) {
+    setTimeout(runAutonomousAutofill, 1200)
+  }
 }
 
-// Run injection when DOM is ready
+// Initialize on DOM ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injectFloatingButton)
+  document.addEventListener('DOMContentLoaded', injectFloatingWidget)
 } else {
-  injectFloatingButton()
+  injectFloatingWidget()
 }
 
-// Re-check on URL changes (SPA navigation on LinkedIn/Indeed)
+// Re-check on URL changes (SPA navigation)
 let lastUrl = location.href
 new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href
-    setTimeout(injectFloatingButton, 1000)
+    setTimeout(injectFloatingWidget, 1000)
   }
 }).observe(document, { subtree: true, childList: true })
-

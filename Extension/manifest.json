@@ -8,14 +8,7 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.linkedin.com/*",
-        "*://*.indeed.com/*",
-        "*://*.glassdoor.com/*",
-        "*://*.wellfound.com/*",
-        "*://*.greenhouse.io/*",
-        "*://*.lever.co/*",
-        "*://*.ashbyhq.com/*",
-        "*://*.myworkdayjobs.com/*"
+        "<all_urls>"
       ],
       "js": ["content.js"],
       "css": ["content.css"],

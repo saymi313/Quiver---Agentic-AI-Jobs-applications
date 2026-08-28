@@ -481,7 +481,14 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       ) : null}
 
                       {blocked ? null : (
-                        <Button size="sm" variant="primary" disabled={busy} onClick={() => onApply([r.id])}>
+                        <Button size="sm" variant="primary" disabled={busy} onClick={() => {
+                          if (r.url || r.apply_url) {
+                            const base = r.apply_url || r.url
+                            const target = base.includes('#') ? `${base}&jobenzy-apply=1` : `${base}#jobenzy-apply=1`
+                            window.open(target, '_blank')
+                          }
+                          onApply([r.id])
+                        }}>
                           Apply
                         </Button>
                       )}
@@ -666,7 +673,14 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       <Icon.File className="size-3.5" />
                     </button>
                     {blocked ? null : (
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onApply([r.id])}>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+                        if (r.url || r.apply_url) {
+                          const base = r.apply_url || r.url
+                          const target = base.includes('#') ? `${base}&jobenzy-apply=1` : `${base}#jobenzy-apply=1`
+                          window.open(target, '_blank')
+                        }
+                        onApply([r.id])
+                      }}>
                         Apply
                       </Button>
                     )}
