@@ -828,3 +828,22 @@ def latest_verification_code(within_seconds: int = 300, *,
             log(f"[inbox] read a verification code from a message sent by {m.get('from_addr')}")
             return code
     return None
+
+
+def poll_for_otp_code(domain_or_company: str = "", timeout_s: int = 35, *,
+                      log: Callable[[str], None] = print) -> str | None:
+    """
+    Polls the mailbox every 3 seconds up to timeout_s for an incoming OTP / verification code.
+    Enables autonomous session continuation across Workday/iCIMS verification walls.
+    """
+    import time
+    log(f"[inbox] waiting for verification email ({timeout_s}s timeout)...")
+    start = time.time()
+    while time.time() - start < timeout_s:
+        code = latest_verification_code(within_seconds=240, log=log)
+        if code:
+            log(f"[inbox] successfully extracted OTP code: {code}")
+            return code
+        time.sleep(3.0)
+    log("[inbox] OTP polling timed out.")
+    return None
