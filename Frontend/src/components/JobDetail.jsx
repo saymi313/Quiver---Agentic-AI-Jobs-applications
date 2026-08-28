@@ -5,6 +5,7 @@ import { Button, Icon, Status } from './ui'
 import { OutreachModal } from './OutreachModal'
 import { AtsAuditModal } from './AtsAuditModal'
 import { InterviewPrepModal } from './InterviewPrepModal'
+import { ResumeDiffModal } from './ResumeDiffModal'
 
 /*
   One role, opened out.
@@ -112,6 +113,7 @@ export default function JobDetail({
   const [outreachOpen, setOutreachOpen] = useState(false)
   const [atsAuditOpen, setAtsAuditOpen] = useState(false)
   const [interviewPrepOpen, setInterviewPrepOpen] = useState(false)
+  const [diffOpen, setDiffOpen] = useState(false)
 
   if (!job) return null
 
@@ -273,6 +275,13 @@ export default function JobDetail({
               >
                 view
               </a>
+              <button
+                onClick={() => setDiffOpen(true)}
+                className="press text-tiny text-emerald-400 font-medium hover:underline flex items-center gap-1"
+                title="Visual Resume Diff & ATS Analysis"
+              >
+                diff
+              </button>
               {job.resume_approved === 0 ? (
                 <button onClick={() => onReview?.(job.id)} className="press text-tiny text-warn-400">
                   review
@@ -309,6 +318,9 @@ export default function JobDetail({
       )}
       {interviewPrepOpen && (
         <InterviewPrepModal job={job} onClose={() => setInterviewPrepOpen(false)} />
+      )}
+      {diffOpen && (
+        <ResumeDiffModal job={job} onClose={() => setDiffOpen(false)} onApply={(ids) => onApply?.(ids)} />
       )}
     </>
   )

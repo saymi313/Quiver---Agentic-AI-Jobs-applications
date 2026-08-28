@@ -352,5 +352,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data || {}),
     }).then(handle),
+
+  agentTailorDiff: (jobId) => fetch(`${BASE}/api/agent/tailor/diff?job_id=${jobId}`).then(handle),
+  agentRescueResume: (jobId) =>
+    fetch(`${BASE}/api/agent/rescue/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId }),
+    }).then(handle),
+  agentInboxSync: () => fetch(`${BASE}/api/agent/inbox/sync`, { method: 'POST' }).then(handle),
 }
 

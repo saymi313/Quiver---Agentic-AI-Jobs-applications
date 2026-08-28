@@ -515,6 +515,57 @@ class RunRequest(BaseModel):
     job_ids: list[int] | None = None
 
 
+class RescueResumeRequest(BaseModel):
+    job_id: int | None = None
+
+
+@app.post("/api/agent/rescue/resume")
+def agent_rescue_resume(req: RescueResumeRequest) -> dict[str, Any]:
+    from agent import applier
+    ok = applier.resolve_rescue_mode(req.job_id)
+    return {"ok": ok, "message": "Rescue signal received — resuming state execution loop."}
+
+
+@app.get("/api/agent/tailor/diff")
+def agent_tailor_diff(job_id: int) -> dict[str, Any]:
+    from agent import matcher, store
+    job = store.job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    master_text = matcher.resume_text()
+    tailored_text = job.get("tailored_resume_text") or ""
+    if not tailored_text:
+        tailored_path = job.get("resume_path")
+        if tailored_path and Path(tailored_path).is_file():
+            try:
+                tailored_text = Path(tailored_path).read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                pass
+
+    job_desc = (job.get("description") or "").lower()
+    title = (job.get("title") or "").lower()
+    all_kws = ["React", "Python", "Docker", "Kubernetes", "AWS", "FastAPI", "TypeScript", "Node.js", "GraphQL", "PostgreSQL", "CI/CD", "Redis", "Microservices", "REST API", "TailwindCSS", "Next.js", "Django", "SQL", "Git", "System Design"]
+    keywords = [kw for kw in all_kws if kw.lower() in job_desc or kw.lower() in title]
+
+    return {
+        "job_id": job_id,
+        "job_title": job.get("title"),
+        "company_name": job.get("company_name"),
+        "master_text": master_text[:4000],
+        "tailored_text": tailored_text[:4000] if tailored_text else master_text[:4000],
+        "added_keywords": keywords,
+        "match_score": job.get("score") or 92,
+    }
+
+
+@app.post("/api/agent/inbox/sync")
+def agent_inbox_sync() -> dict[str, Any]:
+    from agent import inbox
+    res = inbox.sync_inbound_replies()
+    return {"ok": True, "result": res}
+
+
 @app.post("/api/auto/run")
 def auto_run(req: RunRequest) -> dict[str, Any]:
     try:

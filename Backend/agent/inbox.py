@@ -847,3 +847,17 @@ def poll_for_otp_code(domain_or_company: str = "", timeout_s: int = 35, *,
         time.sleep(3.0)
     log("[inbox] OTP polling timed out.")
     return None
+
+
+def sync_inbound_replies(days: int = 30, limit: int = 200, *,
+                         log: Callable[[str], None] = print) -> dict[str, Any]:
+    """
+    Automated Inbound Recruiter Email Status Routing.
+    Scans candidate inbox, classifies recruiter sentiment (Interview Offered,
+    Rejected, Action Needed, Offer), links to tracked applications, and
+    advances tracker stages in store.
+    """
+    log("[inbox] starting inbound recruiter email synchronization...")
+    counts = sync(days=days, limit=limit, use_llm=True, log=log)
+    log(f"[inbox] inbound sync complete: {counts.get('linked', 0)} linked, {counts.get('advanced', 0)} stages advanced")
+    return counts

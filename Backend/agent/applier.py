@@ -1157,6 +1157,163 @@ def validate_form_pre_submit(page: Any, log: Callable[[str], None] = print) -> t
 
 
 
+
+# --------------------------------------------------------------------------
+# Commercial-Grade Transparency: Submission Receipts
+# --------------------------------------------------------------------------
+RECEIPTS_DIR = DASHBOARD_OUT / "receipts"
+RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def write_submission_receipt(job: dict[str, Any], result: dict[str, Any], profile: dict[str, Any],
+                             cover_letter_text: str, resume_path: Path | None) -> Path | None:
+    """
+    Writes a comprehensive audit receipt capturing full submission telemetry:
+    timestamp, URL, fields filled, resume version hash, and cover letter text.
+    """
+    try:
+        import datetime
+        job_id = job.get("id") or 0
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+        receipt_file = RECEIPTS_DIR / f"receipt_job{job_id}_{ts}.json"
+        
+        receipt_data = {
+            "receipt_id": f"rcpt_{job_id}_{ts}",
+            "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "job": {
+                "id": job_id,
+                "title": job.get("title"),
+                "company": job.get("company_name"),
+                "location": job.get("location"),
+                "url": job.get("url"),
+                "apply_url": job.get("apply_url") or job.get("url"),
+            },
+            "candidate": {
+                "name": profile.get("full_name") or f"{profile.get('_first_name', '')} {profile.get('_last_name', '')}".strip(),
+                "email": profile.get("email"),
+                "phone": profile.get("phone"),
+            },
+            "submission": {
+                "status": result.get("status"),
+                "dry_run": result.get("dry_run", False),
+                "resume_file": resume_path.name if resume_path else None,
+                "resume_version": job.get("resume_version") or "master",
+                "cover_letter_included": bool(cover_letter_text),
+                "cover_letter_snippet": cover_letter_text[:300] if cover_letter_text else "",
+                "fields_filled_count": len(result.get("fields_filled") or {}),
+                "fields_filled": result.get("fields_filled") or {},
+                "screenshot": result.get("screenshot"),
+            }
+        }
+        receipt_file.write_text(json.dumps(receipt_data, indent=2), encoding="utf-8")
+        return receipt_file
+    except Exception:
+        return None
+
+
+# --------------------------------------------------------------------------
+# Interactive Human-in-the-Loop "Rescue Mode"
+# --------------------------------------------------------------------------
+_RESCUE_LOCK = threading.Lock()
+_ACTIVE_RESCUES: dict[int, threading.Event] = {}
+
+
+def trigger_rescue_mode(job_id: int, company: str, blocker_type: str, page: Any,
+                        timeout_s: int = 120, log: Callable[[str], None] = print) -> bool:
+    """
+    Pauses automated execution for up to 120s when a CAPTCHA or unresolvable question blocks the run,
+    allowing the human user to solve the blocker in their active browser tab before resuming.
+    """
+    log(f"[rescue] RESCUE REQUIRED: Job #{job_id} on {company} ({blocker_type})")
+    log(f"[rescue] Pausing automated run for {timeout_s}s — solve the prompt in your browser and click 'Resume Auto-Apply'")
+
+    event = threading.Event()
+    with _RESCUE_LOCK:
+        _ACTIVE_RESCUES[job_id] = event
+
+    try:
+        # Take snapshot of blocker for UI
+        shot = SHOT_DIR / f"job{job_id}_rescue.png"
+        page.screenshot(path=str(shot), full_page=False)
+    except Exception:
+        pass
+
+    # Wait for human resume signal or timeout
+    unblocked = event.wait(timeout=timeout_s)
+
+    with _RESCUE_LOCK:
+        _ACTIVE_RESCUES.pop(job_id, None)
+
+    if unblocked:
+        log(f"[rescue] Human rescue signal received! Resuming autonomous state machine loop...")
+        page.wait_for_timeout(1500)
+        return True
+    else:
+        log(f"[rescue] Rescue timeout ({timeout_s}s) elapsed without human intervention.")
+        return False
+
+
+def resolve_rescue_mode(job_id: int | None = None) -> bool:
+    """Signals an active rescue session to unblock and resume auto-apply."""
+    with _RESCUE_LOCK:
+        if job_id and job_id in _ACTIVE_RESCUES:
+            _ACTIVE_RESCUES[job_id].set()
+            return True
+        elif not job_id and _ACTIVE_RESCUES:
+            for ev in _ACTIVE_RESCUES.values():
+                ev.set()
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------
+# Multi-File & Custom Dropzone Interception
+# --------------------------------------------------------------------------
+def handle_document_uploads(page: Any, resume_path: Path | None, cover_letter_path: Path | None = None,
+                            *, log: Callable[[str], None] = print) -> dict[str, str]:
+    """
+    Directly targets native and hidden <input type="file"> elements across custom React/Vue dropzones
+    and uploads documents via Playwright set_input_files without triggering OS file picker dialogues.
+    """
+    uploaded: dict[str, str] = {}
+    if not page:
+        return uploaded
+
+    try:
+        file_inputs = page.locator("input[type='file']")
+        count = file_inputs.count()
+        if count == 0:
+            return uploaded
+
+        for i in range(count):
+            inp = file_inputs.nth(i)
+            # Determine if this file input is for Resume vs Cover Letter
+            label = ""
+            try:
+                label = (inp.evaluate("""(el) => {
+                    const l = el.closest('label') || document.querySelector(`label[for="${CSS.escape(el.id || '')}"]`) || el.closest('[class*="upload"], [class*="drop"], [class*="file"], [class*="zone"], div');
+                    return l ? l.innerText : '';
+                }""") or "").lower()
+            except Exception:
+                label = ""
+
+            if "cover" in label or "letter" in label:
+                if cover_letter_path and cover_letter_path.is_file():
+                    inp.set_input_files(str(cover_letter_path))
+                    uploaded["cover_letter"] = cover_letter_path.name
+                    log(f"[upload] attached cover letter -> {cover_letter_path.name}")
+            else:
+                if resume_path and resume_path.is_file():
+                    inp.set_input_files(str(resume_path))
+                    uploaded["resume"] = resume_path.name
+                    log(f"[upload] attached resume -> {resume_path.name}")
+    except Exception as exc:
+        log(f"[upload] dropzone interception fallback ({exc})")
+
+    return uploaded
+
+
+
 def _reveal_form(page, log: Callable[[str], None]) -> None:
     """
     Get an application form onto the page: dismiss a cookie wall, then click any

@@ -9,6 +9,7 @@ import JobDetail from './JobDetail'
 import { OutreachModal } from './OutreachModal'
 import { AtsAuditModal } from './AtsAuditModal'
 import { InterviewPrepModal } from './InterviewPrepModal'
+import { ResumeDiffModal } from './ResumeDiffModal'
 import ClearData from './ClearData'
 import { Button, Empty, Icon, Section, Status, Table, Tag, Td, Tr } from './ui'
 
@@ -119,6 +120,7 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   const [outreachJob, setOutreachJob] = useState(null)
   const [atsAuditJob, setAtsAuditJob] = useState(null)
   const [interviewPrepJob, setInterviewPrepJob] = useState(null)
+  const [diffJob, setDiffJob] = useState(null)
 
   const handleSetViewMode = (mode) => {
     setViewMode(mode)
@@ -643,6 +645,13 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       >
                         view
                       </a>
+                      <button
+                        onClick={() => setDiffJob(r)}
+                        className="press text-xs font-medium text-emerald-400 hover:underline"
+                        title="Visual Resume Diff & ATS Analysis"
+                      >
+                        diff
+                      </button>
                       {r.resume_approved === 0 ? (
                         <button
                           onClick={() => setReviewing(r.id)}
@@ -719,6 +728,10 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
 
       {interviewPrepJob && (
         <InterviewPrepModal job={interviewPrepJob} onClose={() => setInterviewPrepJob(null)} />
+      )}
+
+      {diffJob && (
+        <ResumeDiffModal job={diffJob} onClose={() => setDiffJob(null)} onApply={onApply} />
       )}
 
       {reviewing && (
