@@ -42,24 +42,42 @@ def _resume_text(path_str: str) -> str:
         return ""
 
 
-def resume_path() -> Path | None:
+def resume_path(role_category: str | None = None) -> Path | None:
     """
-    The résumé the agent uploads to application forms.
+    The résumé the agent uploads to application forms or uses for matching.
 
-    Order: the profile's `default_resume` (resolved against Backend/ or cv_data/),
-    then the newest generated resume in cv_data/, then anything at Backend root.
-    cv_data/ comes first because `tools/build_resumes.py` writes the current
-    master resumes there.
+    Order:
+      1. Role-specific master in cv_data/ if role_category is provided (e.g. Design vs Engineering vs AI)
+      2. The profile's `default_resume` (resolved against Backend/ or cv_data/)
+      3. Newest generated resume in cv_data/
+      4. Anything at Backend root.
     """
+    cv_dir = BASE_DIR / "cv_data"
+
+    if role_category:
+        cat = str(role_category).lower()
+        if cat in ("product_design", "ui_ux", "ui_design", "ux_design"):
+            for candidate in (cv_dir / "Usairam_Saeed_UIUX_Resume.pdf", cv_dir / "design.pdf"):
+                if candidate.is_file():
+                    return candidate
+        elif cat in ("ai_engineer", "ai_software_engineer"):
+            candidate = cv_dir / "Usairam_Saeed_AI_Engineer_Resume.pdf"
+            if candidate.is_file():
+                return candidate
+        elif cat in ("backend", "fullstack", "software_engineer", "frontend"):
+            candidate = cv_dir / "Usairam_Saeed_Resume.pdf"
+            if candidate.is_file():
+                return candidate
+
     profile = store.get_setting("profile", {}) or {}
     configured = (profile.get("default_resume") or "").strip()
     if configured:
-        for base in (Path(configured), BASE_DIR / configured, BASE_DIR / "cv_data" / configured):
+        for base in (Path(configured), BASE_DIR / configured, cv_dir / configured):
             if base.is_file():
                 return base
 
     pool: list[Path] = []
-    for folder in (BASE_DIR / "cv_data", BASE_DIR):
+    for folder in (cv_dir, BASE_DIR):
         pool += list(folder.glob("*.pdf")) + list(folder.glob("*.docx"))
         if pool:
             break
@@ -69,8 +87,8 @@ def resume_path() -> Path | None:
     return max(pool, key=lambda p: p.stat().st_mtime)
 
 
-def resume_text() -> str:
-    path = resume_path()
+def resume_text(role_category: str | None = None) -> str:
+    path = resume_path(role_category)
     return _resume_text(str(path)) if path else ""
 
 

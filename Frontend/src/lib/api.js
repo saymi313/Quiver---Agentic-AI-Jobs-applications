@@ -332,4 +332,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile, font, font_size: fontSize, margins }),
     }).then(handle),
+
+  // ---- advanced features ----
+  agentJobOutreach: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/outreach`).then(handle),
+  agentJobAtsAudit: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/ats-audit`).then(handle),
+  agentJobInterviewPrep: (jobId) => fetch(`${BASE}/api/agent/jobs/${jobId}/interview-prep`).then(handle),
 }
+

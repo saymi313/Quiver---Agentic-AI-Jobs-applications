@@ -476,6 +476,8 @@ def upsert_job(data: dict[str, Any], *, company_name: str = "") -> int | None:
 
     payload = {k: data.get(k) for k in JOB_FIELDS}
     payload["remote"] = 1 if payload.get("remote") else 0
+    if isinstance(payload.get("skills"), (list, dict)):
+        payload["skills"] = json.dumps(payload["skills"])
 
     if payload.get("posted_ts") is None:
         payload["posted_ts"] = sources.parse_posted_at(payload.get("posted_at"))

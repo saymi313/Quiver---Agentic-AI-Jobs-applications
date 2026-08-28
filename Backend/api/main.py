@@ -813,6 +813,201 @@ def agent_resume(job_id: int, fmt: str = "pdf", download: bool = False):
         headers={} if download else {"Content-Disposition": f'inline; filename="{path.name}"'})
 
 
+@app.get("/api/agent/jobs/{job_id}/outreach")
+def agent_job_outreach(job_id: int) -> dict[str, Any]:
+    """Generate 3 warm alumni & recruiter outreach notes for this job."""
+    from agent import alumni_outreach, store as agent_store
+
+    agent_store.init()
+    job = agent_store.job(job_id)
+    if not job:
+        raise HTTPException(404, f"No job with id {job_id}.")
+
+    profile = agent_store.get_setting("profile", {}) or {}
+    candidate_name = profile.get("full_name") or "Usairam Saeed"
+    company = job.get("company_name") or "the company"
+    title = job.get("title") or "the role"
+    category = job.get("role_category") or "fullstack"
+    
+    # Handle skills string or list
+    raw_skills = job.get("skills") or []
+    if isinstance(raw_skills, str):
+        try:
+            raw_skills = json.loads(raw_skills)
+        except Exception:
+            raw_skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
+
+    skills = ", ".join(raw_skills[:3]) if raw_skills else "Full Stack & AI Development"
+    alma_mater = profile.get("university") or "FAST-NUCES"
+
+    res = alumni_outreach.generate_warm_referral_messages(
+        candidate_name=candidate_name,
+        target_company=company,
+        role_title=title,
+        contact_name="there",
+        alma_mater=alma_mater,
+        skills_highlight=skills,
+    )
+    pitches = dict(res.get("variants", {}))
+    if "alumni" in pitches:
+        pitches["alumni_pitch"] = pitches["alumni"]
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "company": company,
+        "title": title,
+        "candidate": candidate_name,
+        "pitches": pitches,
+    }
+
+
+@app.get("/api/agent/jobs/{job_id}/ats-audit")
+def agent_job_ats_audit(job_id: int) -> dict[str, Any]:
+    """Compute detailed ATS keyword penetration, matched skills, and density recommendations."""
+    import re
+    from agent import matcher, store as agent_store
+    from api.ats import analyze_jd, match_keywords
+
+    agent_store.init()
+    job = agent_store.job(job_id)
+    if not job:
+        raise HTTPException(404, f"No job with id {job_id}.")
+
+    jd_text = (job.get("description") or "")
+    if not jd_text:
+        jd_text = f"{job.get('title')} at {job.get('company_name')} in {job.get('location')}."
+
+    category = job.get("role_category")
+    resume_str = matcher.resume_text(category)
+
+    jd_analysis = analyze_jd(jd_text)
+    match_result = match_keywords(resume_str, jd_analysis) if resume_str else {}
+
+    matched_keywords = match_result.get("matched", [])
+    missing_keywords = match_result.get("missing", [])
+    coverage_score = match_result.get("coverage", 0.0)
+
+    # Compute frequency counts in JD and Resume
+    skills_density = []
+    for item in matched_keywords[:15]:
+        term = item.get("term") if isinstance(item, dict) else str(item)
+        count = item.get("resumeCount", 1) if isinstance(item, dict) else 1
+        skills_density.append({"term": term, "resume_count": count, "status": "matched"})
+
+    for item in missing_keywords[:10]:
+        term = item.get("term") if isinstance(item, dict) else str(item)
+        skills_density.append({"term": term, "resume_count": 0, "status": "missing"})
+
+    # Action verbs in resume
+    resume_lower = resume_str.lower()
+    verbs = re.findall(
+        r"\b(designed|architected|built|developed|scaled|engineered|optimized|deployed|spearheaded|implemented|automated|delivered|integrated)\b",
+        resume_lower,
+        re.I,
+    )
+    verb_counts = list(set([v.capitalize() for v in verbs]))
+
+    raw_skills = job.get("skills") or []
+    if isinstance(raw_skills, str):
+        try:
+            raw_skills = json.loads(raw_skills)
+        except Exception:
+            raw_skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "company": job.get("company_name"),
+        "title": job.get("title"),
+        "score": round(coverage_score * 100, 1) if coverage_score <= 1.0 else round(coverage_score, 1),
+        "fit_score": round(job.get("fit_score") or 0.0, 1),
+        "fit_reason": job.get("fit_reason") or "",
+        "matched_count": len(matched_keywords),
+        "missing_count": len(missing_keywords),
+        "skills_density": skills_density,
+        "action_verbs": verb_counts[:8],
+        "hard_skills": raw_skills,
+        "recommendations": [
+            f"Add high-priority keyword '{item.get('term') if isinstance(item, dict) else item}' to project bullets"
+            for item in missing_keywords[:4]
+        ],
+    }
+
+
+@app.get("/api/agent/jobs/{job_id}/interview-prep")
+def agent_job_interview_prep(job_id: int) -> dict[str, Any]:
+    """Generate a structured 1-page technical & behavioral interview prep guide for this role."""
+    from agent import llm as agent_llm, matcher, store as agent_store
+
+    agent_store.init()
+    job = agent_store.job(job_id)
+    if not job:
+        raise HTTPException(404, f"No job with id {job_id}.")
+
+    company = job.get("company_name") or "the company"
+    title = job.get("title") or "the role"
+    category = job.get("role_category") or "software_engineer"
+    jd_snippet = (job.get("description") or "")[:2500]
+    resume_snippet = matcher.resume_text(category)[:3000]
+
+    prompt = (
+        f"You are an executive engineering hiring coach. Create an interview prep guide for this candidate applying to:\n"
+        f"ROLE: {title} at {company}\n"
+        f"JOB DESCRIPTION SNIPPET:\n{jd_snippet}\n\n"
+        f"CANDIDATE RESUME SNIPPET:\n{resume_snippet}\n\n"
+        f"Return a clean JSON object with these exact keys:\n"
+        f"1. 'company_context': Brief 2-sentence summary of what {company} builds and their engineering focus.\n"
+        f"2. 'behavioral_questions': List of 3 STAR interview questions with a suggested talking point mapped to the candidate's real experience.\n"
+        f"   Each item has 'question' and 'star_tip'.\n"
+        f"3. 'technical_questions': List of 3 technical or system design challenges likely to be asked for this exact stack.\n"
+        f"   Each item has 'topic', 'question', 'key_concept'.\n"
+        f"4. 'questions_to_ask_interviewer': List of 3 smart, high-impact questions candidate can ask the interviewer.\n"
+        f"Return ONLY valid JSON."
+    )
+
+    try:
+        reply = agent_llm.complete(prompt, purpose="interview_prep")
+        match = re.search(r"\{.*\}", reply, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+        else:
+            data = json.loads(reply)
+    except Exception:
+        data = {
+            "company_context": f"{company} is hiring a {title} to build scalable services and high-impact product features.",
+            "behavioral_questions": [
+                {
+                    "question": "Tell me about a complex technical challenge you solved under a tight deadline.",
+                    "star_tip": "Focus on your recent production architecture project, detailing the trade-offs and latency gains.",
+                },
+                {
+                    "question": "How do you handle disagreement over technical architecture with peers?",
+                    "star_tip": "Highlight data-driven benchmarking and collaborative RFC reviews.",
+                },
+            ],
+            "technical_questions": [
+                {
+                    "topic": "System Design & Scalability",
+                    "question": f"How would you design a resilient architecture for {company}'s core services?",
+                    "key_concept": "Caching, database indexing, asynchronous message queues, and horizontal scaling.",
+                },
+            ],
+            "questions_to_ask_interviewer": [
+                "What does the engineering roadmap look like for this team over the next 6-12 months?",
+                "How does the team approach technical debt vs shipping new features?",
+            ],
+        }
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "company": company,
+        "title": title,
+        "guide": data,
+    }
+
+
 class SettingsPatch(BaseModel):
     profile: dict[str, Any] | None = None
     targeting: dict[str, Any] | None = None

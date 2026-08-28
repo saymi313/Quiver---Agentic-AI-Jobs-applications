@@ -6,6 +6,9 @@ import ResumeReview from './ResumeReview'
 import { CategoryChip, ScoreRing, SelectionBar } from './apple'
 import JobFilters, { NO_FILTERS, toQuery } from './JobFilters'
 import JobDetail from './JobDetail'
+import { OutreachModal } from './OutreachModal'
+import { AtsAuditModal } from './AtsAuditModal'
+import { InterviewPrepModal } from './InterviewPrepModal'
 import ClearData from './ClearData'
 import { Button, Empty, Icon, Section, Status, Table, Tag, Td, Tr } from './ui'
 
@@ -71,14 +74,18 @@ function fitScoreTone(score) {
   return 'bad'
 }
 
-function FitScoreBadge({ score, reason }) {
+function FitScoreBadge({ score, reason, onClick }) {
   if (score == null || isNaN(score) || score === 0) {
     return <span className="text-micro font-medium text-n-600">—</span>
   }
   const s = Math.round(score)
   const tone = fitScoreTone(s)
   return (
-    <div className="inline-flex items-center gap-1" title={reason || `Fit score: ${s}%`}>
+    <div
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 ${onClick ? 'cursor-pointer hover:opacity-85' : ''}`}
+      title={reason || `Fit score: ${s}% (Click for ATS Keyword Audit)`}
+    >
       <span
         className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-micro font-semibold tabular-nums tracking-wide ${
           tone === 'ok'
@@ -108,6 +115,10 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
   const [reviewing, setReviewing] = useState(null)
   // Which job's detail panel is open, if any.
   const [viewing, setViewing] = useState(null)
+  // AI & Outreach Intelligence Modals
+  const [outreachJob, setOutreachJob] = useState(null)
+  const [atsAuditJob, setAtsAuditJob] = useState(null)
+  const [interviewPrepJob, setInterviewPrepJob] = useState(null)
 
   const handleSetViewMode = (mode) => {
     setViewMode(mode)
@@ -392,14 +403,35 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                       </p>
                     ) : null}
 
-                    {/* Preview JD Button */}
-                    <div className="pt-1">
+                    {/* Preview JD & Intelligence Action Buttons */}
+                    <div className="pt-1 flex flex-wrap items-center gap-1.5">
                       <button
                         onClick={() => setViewing(r)}
-                        className="press inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 hover:underline"
+                        className="press inline-flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300 hover:underline"
                       >
                         <Icon.File className="size-3.5" />
-                        <span>Preview Job Description & Details →</span>
+                        <span>Details →</span>
+                      </button>
+                      <button
+                        onClick={() => setOutreachJob(r)}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20"
+                        title="Generate Alumni & Recruiter Outreach Notes"
+                      >
+                        🎓 Outreach
+                      </button>
+                      <button
+                        onClick={() => setAtsAuditJob(r)}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                        title="Audit ATS Keyword Penetration"
+                      >
+                        📊 ATS Audit
+                      </button>
+                      <button
+                        onClick={() => setInterviewPrepJob(r)}
+                        className="press inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20"
+                        title="Generate 1-Page Interview Prep Cheat Sheet"
+                      >
+                        🧠 Prep
                       </button>
                     </div>
                   </div>
@@ -579,7 +611,11 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                   <CategoryChip slug={r.role_category} />
                 </Td>
                 <Td className="whitespace-nowrap">
-                  <FitScoreBadge score={r.fit_score} reason={r.fit_reason} />
+                  <FitScoreBadge
+                    score={r.fit_score}
+                    reason={r.fit_reason}
+                    onClick={() => setAtsAuditJob(r)}
+                  />
                 </Td>
                 <Td className="text-n-500">{r.source || '—'}</Td>
 
@@ -624,14 +660,63 @@ export default function TrackedJobs({ refreshKey, busy, onApply, onGenerate, too
                 </Td>
 
                 <Td className="text-right whitespace-nowrap">
-                  {blocked ? null : (
-                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => onApply([r.id])}>
-                      Apply
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => setViewing(r)}
+                      className="press p-1 text-n-400 hover:text-blue-400 rounded hover:bg-surface"
+                      title="View full details"
+                    >
+                      <Icon.File className="size-3.5" />
+                    </button>
+                    {blocked ? null : (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onApply([r.id])}>
+                        Apply
+                      </Button>
+                    )}
+                  </div>
                 </Td>
               </Tr>
             )
+          }}
+        />
+      )}
+
+      {/* ------------------------------------------------------------ Intelligence & Detail Modals */}
+      {viewing && (
+        <JobDetail
+          job={viewing}
+          busy={busy}
+          onClose={() => setViewing(null)}
+          onApply={onApply}
+          onGenerate={onGenerate}
+          onReview={(id) => setReviewing(id)}
+          onSave={saveJob}
+          onPass={passJob}
+          onOpenOutreach={(j) => setOutreachJob(j)}
+          onOpenAtsAudit={(j) => setAtsAuditJob(j)}
+          onOpenInterviewPrep={(j) => setInterviewPrepJob(j)}
+        />
+      )}
+
+      {outreachJob && (
+        <OutreachModal job={outreachJob} onClose={() => setOutreachJob(null)} />
+      )}
+
+      {atsAuditJob && (
+        <AtsAuditModal job={atsAuditJob} onClose={() => setAtsAuditJob(null)} />
+      )}
+
+      {interviewPrepJob && (
+        <InterviewPrepModal job={interviewPrepJob} onClose={() => setInterviewPrepJob(null)} />
+      )}
+
+      {reviewing && (
+        <ResumeReview
+          jobId={reviewing}
+          onClose={() => setReviewing(null)}
+          onApproved={() => {
+            setReviewing(null)
+            load()
           }}
         />
       )}

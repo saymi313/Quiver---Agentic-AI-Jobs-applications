@@ -81,7 +81,19 @@ function deadlineWhen(iso) {
   return date
 }
 
-export default function JobDetail({ job, busy, onClose, onApply, onGenerate, onReview, onSave, onPass }) {
+export default function JobDetail({
+  job,
+  busy,
+  onClose,
+  onApply,
+  onGenerate,
+  onReview,
+  onSave,
+  onPass,
+  onOpenOutreach,
+  onOpenAtsAudit,
+  onOpenInterviewPrep,
+}) {
   if (!job) return null
 
   const salary = formatSalary(job)
@@ -127,8 +139,7 @@ export default function JobDetail({ job, busy, onClose, onApply, onGenerate, onR
             href={job.url}
             target="_blank"
             rel="noreferrer"
-            className="press ml-auto inline-flex items-center gap-1.5 text-tiny text-blue-500
-              hover:underline"
+            className="press ml-auto inline-flex items-center gap-1.5 text-tiny text-blue-500 hover:underline"
           >
             <Icon.Doc className="size-3.5" />
             Original posting
@@ -144,6 +155,28 @@ export default function JobDetail({ job, busy, onClose, onApply, onGenerate, onR
             <p className="text-tiny leading-relaxed text-n-500">{job.fit_reason}</p>
           </div>
         ) : null}
+
+        {/* Action Toolbar for AI & Outreach Intelligence */}
+        <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl bg-surface-sunken border border-line">
+          <button
+            onClick={() => onOpenOutreach?.(job)}
+            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-blue-400 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>🎓 Alumni Outreach</span>
+          </button>
+          <button
+            onClick={() => onOpenAtsAudit?.(job)}
+            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-emerald-400 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>📊 ATS Keyword Audit</span>
+          </button>
+          <button
+            onClick={() => onOpenInterviewPrep?.(job)}
+            className="press flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg bg-surface border border-line hover:border-n-600 text-xs font-medium text-purple-400 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>🧠 Interview Prep</span>
+          </button>
+        </div>
 
         {/* the facts a row cannot hold */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 border-y border-line py-4">
@@ -171,8 +204,7 @@ export default function JobDetail({ job, busy, onClose, onApply, onGenerate, onR
               {skills.map((s) => (
                 <span
                   key={s}
-                  className="rounded-full bg-hue-violet px-2.5 py-1 text-micro font-medium
-                    text-hue-violet-fg"
+                  className="rounded-full bg-hue-violet px-2.5 py-1 text-micro font-medium text-hue-violet-fg"
                 >
                   {s}
                 </span>
